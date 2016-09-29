@@ -403,6 +403,42 @@ Win32CreateWindow(HINSTANCE ProcessHandle,
   return Result;
 }
 
+struct win32_clock
+{
+  LARGE_INTEGER Frequency;
+};
+
+internal
+win32_clock
+Win32CreateClock()
+{
+  win32_clock Result;
+  QueryPerformanceFrequency(&Result.Frequency);
+  return Result;
+}
+
+struct win32_timestamp
+{
+  LARGE_INTEGER Timestamp;
+};
+
+internal
+win32_timestamp
+Win32Timestamp()
+{
+  win32_timestamp Result;
+  QueryPerformanceCounter(&Result.Timestamp);
+  return Result;
+}
+
+internal
+f64
+Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
+{
+  f64 Result = (f64)(End->Timestamp.QuadPart - Start->Timestamp.QuadPart) / (f64)Clock->Frequency.QuadPart;
+  return Result;
+}
+
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
@@ -449,6 +485,10 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       BackBuffer.Pitch = (int)Win32BackBuffer.Pitch;
       BackBuffer.BytesPerPixel = (int)Win32BackBuffer.BytesPerPixel;
 
+      win32_clock Clock = Win32CreateClock();
+      win32_timestamp LastUpdateTime = Win32Timestamp();
+      win32_timestamp CurrentTime = Win32Timestamp();
+
       while(true)
       {
         Win32MessagePump(&Window);
@@ -477,6 +517,14 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
               BackBuffer.Memory[Index] = {};
             }
           }
+        }
+
+        win32_timestamp CurrentTime = Win32Timestamp();
+        f64 DeltaTime = Win32DeltaTime(&Clock, &CurrentTime, &LastUpdateTime);
+        if(DeltaTime > 1)
+        {
+          OutputDebugStringA("One second has passed.\n");
+          LastUpdateTime = CurrentTime;
         }
 
         Win32Present(Window.Handle, &Win32BackBuffer);
