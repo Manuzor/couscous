@@ -74,7 +74,7 @@ auto
 
   DrawSprite(M, 8 * Test, 0, GetCharacterSprite(M, '0' + Test));
 
-  if(Test < 3)
+  if(Test < 7)
     ++Test;
   else
     Test = 0;

@@ -541,7 +541,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
       while(true)
       {
-        f64 const TickDuration = 1.0 /*/ 60.0*/;
+        // f64 const TickDuration = 1.0 / 60.0;
+        f64 const TickDuration = 1.0 / 10.0;
 
         f64 DeltaTime{};
         win32_timestamp CurrentTime;
