@@ -129,19 +129,16 @@ Win32SwapBuffers(screen* Screen, win32_front_buffer* Front)
   size_t const Width = Screen->Width;
   size_t const Height = Screen->Height;
   colorRGB8* FrontPixel = Front->Pixels;
-  u8* ScreenPixel = Screen->Pixels;
+  bool32* ScreenPixel = Screen->Pixels;
 
   for(size_t Y = 0; Y < Height; ++Y)
   {
-    for(size_t X = 0; X < Width / 8; ++X, ++ScreenPixel)
+    for(size_t X = 0; X < Width; ++X, ++ScreenPixel, ++FrontPixel)
     {
-      for(size_t Bits = 8; Bits > 0; --Bits, ++FrontPixel)
-      {
-        size_t PixelIndex = Bits - 1;
-        bool32 Pixel = IsBitSet(*ScreenPixel, PixelIndex);
-        if(Pixel) *FrontPixel = Front->PixelColorOn;
-        else      *FrontPixel = Front->PixelColorOff;
-      }
+      colorRGB8 NewColor;
+      if(*ScreenPixel) NewColor = Front->PixelColorOn;
+      else             NewColor = Front->PixelColorOff;
+      *FrontPixel = NewColor;
     }
   }
 }
@@ -468,6 +465,12 @@ Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
   return Result;
 }
 
+#define USE_TEST_PROGRAM 1
+
+#if USE_TEST_PROGRAM
+  #include "testprogram.cpp"
+#endif
+
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
@@ -491,8 +494,14 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
   auto M = (machine*)PushStruct(&UtilStack, machine);
   MemConstruct(1, M);
 
-  // Insert ROM data into the machine.
-  DWORD RomLength = LoadRom(FileName, Length(M->Memory) - PROGRAM_START_ADDRESS, M->Memory + PROGRAM_START_ADDRESS);
+  #if USE_TEST_PROGRAM
+    DWORD RomLength = (DWORD)sizeof(GlobalTestProgram);
+    MemCopy(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
+  #else
+    // Insert ROM data into the machine.
+    DWORD RomLength = LoadRom(FileName, Length(M->Memory) - PROGRAM_START_ADDRESS, M->Memory + PROGRAM_START_ADDRESS);
+  #endif
+
   if(RomLength)
   {
     const int ScreenWidth = 64;
@@ -530,8 +539,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       Screen->Pixels = (decltype(Screen->Pixels))PushBytes(&UtilStack, Screen->Width * Screen->Height);
 
       // Init clear and swap to ensure properly cleared buffers.
-      size_t const ScreenPixelsLength = (Screen->Width * Screen->Height) / 8;
-      MemSet(ScreenPixelsLength, Screen->Pixels, (u8)0);
+      ClearScreen(M);
       Win32SwapBuffers(Screen, &Win32FrontBuffer);
 
       // Associate the back buffer with the window for presenting.
@@ -547,8 +555,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
       while(true)
       {
-        // f64 const TickDuration = 1.0 / 60.0;
-        f64 const TickDuration = 1.0 / 10.0;
+        f64 const TickDuration = 1.0 / 60.0;
 
         f64 DeltaTime{};
         win32_timestamp CurrentTime;
@@ -563,7 +570,10 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         }
         LastTickTime = CurrentTime;
 
-        Tick(M);
+        if(!Tick(M))
+        {
+          PostQuitMessage(0);
+        }
 
         Win32SwapBuffers(Screen, &Win32FrontBuffer);
         Win32Present(Window.Handle, &Win32FrontBuffer);

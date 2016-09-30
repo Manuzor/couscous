@@ -15,9 +15,8 @@ enum
 
 struct screen
 {
-  u8* Pixels;
+  bool32* Pixels;
 
-  // Describe the number of pixels in bits, not bytes!
   int Width;
   int Height;
 };
@@ -106,5 +105,6 @@ GetCharacterSprite(machine* M, char Character);
 void
 DrawSprite(machine* M, int X, int Y, sprite Sprite);
 
-void
+// `true` means continue ticking.
+bool
 Tick(machine* M);

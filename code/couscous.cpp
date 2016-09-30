@@ -17,8 +17,8 @@ auto
 ::ClearScreen(machine* M)
   -> void
 {
-  size_t const ScreenPixelsLength = (M->Screen.Width * M->Screen.Height) / 8;
-  MemSet(ScreenPixelsLength, M->Screen.Pixels, (u8)0);
+  size_t const ScreenPixelsLength = M->Screen.Width * M->Screen.Height;
+  MemSet(ScreenPixelsLength, M->Screen.Pixels, 0);
 }
 
 internal
@@ -60,24 +60,37 @@ auto
 {
   MTB_DebugAssert(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
 
-  int Pitch = M->Screen.Width / 8;
-  int X = StartX / 8;
-  for(int Y = StartY; Y < Sprite.Length; ++Y)
+  bool32 HasCollision{};
+  for(int Y = 0; Y < Sprite.Length; ++Y)
   {
-    int DestOffset = (Y * Pitch) + X;
-    u8* DestPixel = M->Screen.Pixels + DestOffset;
-    u8* SourcePixel = Sprite.Pixels + Y;
+    u8* SpritePixel = Sprite.Pixels + Y;
 
-    // Check for pixel collision.
-    *M->VF = !!(*DestPixel & *SourcePixel);
-    *DestPixel = *DestPixel ^ *SourcePixel;
+    int ScreenY = StartY + Y;
+    while(ScreenY > M->Screen.Height)
+      ScreenY -= M->Screen.Height;
+
+    int ScreenPitch = ScreenY * M->Screen.Width;
+    for(int X = 0; X < 8; ++X)
+    {
+      int ScreenX = StartX + X;
+      while(ScreenY > M->Screen.Height)
+        ScreenY -= M->Screen.Height;
+
+      int ScreenOffset = ScreenPitch + ScreenX;
+      bool32* ScreenPixel = M->Screen.Pixels + ScreenOffset;
+      bool32 SpriteValue = IsBitSet((u32)*SpritePixel, X);
+      *ScreenPixel = SpriteValue;
+      HasCollision |= *ScreenPixel && SpriteValue;
+    }
   }
+
+  *M->VF = !!HasCollision;
 }
 
 internal
 auto
 ::Tick(machine* M)
-  -> void
+  -> bool
 {
   // static int Test{};
 
@@ -108,6 +121,13 @@ auto
   }
 
   u8* InstructionLocation = M->Memory + M->ProgramCounter;
+  M->ProgramCounter += 2;
+  if(M->ProgramCounter >= Length(M->Memory))
+  {
+    // This should be an error case.
+    return false;
+  }
+
   instruction Instruction;
   Instruction.Data = *(u16*)InstructionLocation;
   switch(Instruction.Group)
@@ -120,7 +140,7 @@ auto
       }
       else if(Instruction.Nibble2 == 0xE && Instruction.Nibble3 == 0xE)
       {
-        M->ProgramCounter = M->Stack[M->StackPointer--];
+        M->ProgramCounter = M->Stack[--M->StackPointer];
       }
       else goto UnknownInstruction;
     } break;
@@ -131,7 +151,7 @@ auto
     case 0x2:
     {
       M->Stack[M->StackPointer++] = M->ProgramCounter;
-      M->ProgramCounter = Instruction.Data;
+      M->ProgramCounter = Instruction.Args;
     } break;
     case 0x3:
     {
@@ -357,17 +377,17 @@ auto
     default: goto UnknownInstruction;
   }
 
-  M->ProgramCounter += 2;
-
-  return;
+  return true;
 
   UnknownInstruction:
     if(Instruction.Data == 0xFFFF || Instruction.Data == 0x0000)
     {
-      // Ignore these instructions.
+      // Treat these as terminators.
     }
     else
     {
       MTB_ReportError("Unknown instruction.");
     }
+
+    return false;
 }
