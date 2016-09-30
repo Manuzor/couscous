@@ -80,6 +80,12 @@ LoadRom(char const* FileName, DWORD MaxRomLength, u8* Dest)
           &Result,    // _Out_opt_   LPDWORD      lpNumberOfBytesRead
           nullptr))   // _Inout_opt_ LPOVERLAPPED lpOverlapped
       {
+        // Enforce big endian byte-order.
+        for(DWORD Index = 0; Index < RomLength - 1; Index += 2)
+        {
+          Swap(Dest[Index], Dest[Index + 1]);
+        }
+
         CloseHandle(FileHandle);
       }
       else
@@ -486,7 +492,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
   MemConstruct(1, M);
 
   // Insert ROM data into the machine.
-  DWORD RomLength = LoadRom(FileName, Length(M->Memory), M->Memory);
+  DWORD RomLength = LoadRom(FileName, Length(M->Memory) - PROGRAM_START_ADDRESS, M->Memory + PROGRAM_START_ADDRESS);
   if(RomLength)
   {
     const int ScreenWidth = 64;

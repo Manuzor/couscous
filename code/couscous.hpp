@@ -25,7 +25,7 @@ struct screen
 struct sprite
 {
   int Length;
-  u8* Bytes;
+  u8* Pixels;
 };
 
 struct machine
@@ -50,22 +50,55 @@ struct machine
 
   u16 I;
 
+  u8 DT;
+  u8 ST;
+
   // RAM
   u8 Memory[MEMORY_LENGTH];
 
-  int StackPointer;
+  u8 StackPointer;
   u16 Stack[STACK_LENGTH];
 
-  int ProgramCounter;
+  u16 ProgramCounter;
 
   bool Input[16];
 
   screen Screen;
 };
 
+union instruction
+{
+  u16 Data;
+
+  struct
+  {
+    u16 Args  : 12;
+    u16 Group : 4;
+  };
+
+  struct
+  {
+    u16 Nibble3 : 4;
+    u16 Nibble2 : 4;
+    u16 Nibble1 : 4;
+    u16 Nibble0 : 4;
+  };
+
+  struct
+  {
+    u16 Byte1 : 8;
+    u16 Byte0 : 8;
+  };
+};
+
+static_assert(sizeof(instruction) == sizeof(u16), "Invalid size for `instruction`.");
+
 // TODO: Should the machine load the rom?
 void
 InitMachine(machine* M);
+
+void
+ClearScreen(machine* M);
 
 sprite
 GetCharacterSprite(machine* M, char Character);
