@@ -10,35 +10,27 @@ enum
   PROGRAM_START_ADDRESS = 0x200,
   MAX_ROM_LENGTH = MEMORY_LENGTH - PROGRAM_START_ADDRESS,
   STACK_LENGTH = 16,
-};
-
-struct colorRGB8
-{
-  union
-  {
-    struct
-    {
-      u8 R;
-      u8 G;
-      u8 B;
-    };
-
-    u8 Data[3];
-  };
+  CHAR_MEMORY_OFFSET = 0,
 };
 
 struct back_buffer
 {
-  colorRGB8* Memory{};
+  u8* Pixels;
+
+  // Describe the number of pixels in bits, not bytes!
   int Width;
   int Height;
-  int Pitch;
-  int BytesPerPixel;
+};
+
+struct sprite
+{
+  int Length;
+  u8* Bytes;
 };
 
 struct machine
 {
-  u8 GPR[16]{};
+  u8 GPR[16];
   u8* V0 = GPR + 0x0;
   u8* V1 = GPR + 0x1;
   u8* V2 = GPR + 0x2;
@@ -56,21 +48,30 @@ struct machine
   u8* VE = GPR + 0xE;
   u8* VF = GPR + 0xF;
 
-  u16 I{};
+  u16 I;
 
   // RAM
-  u8 Memory[MEMORY_LENGTH]{};
+  u8 Memory[MEMORY_LENGTH];
 
-  u16 Stack[STACK_LENGTH]{};
+  int StackPointer;
+  u16 Stack[STACK_LENGTH];
 
-  bool Input[16]{};
+  int ProgramCounter;
+
+  bool Input[16];
 
   back_buffer Screen;
 };
 
-// NOTE: Implemented in the platform layer.
+// TODO: Should the machine load the rom?
 void
-ClearBackBuffer(back_buffer* BackBuffer, colorRGB8 Color);
+InitMachine(machine* M);
+
+sprite
+GetCharacterSprite(char Character);
+
+void
+DrawSprite(machine* M, int X, int Y, sprite Sprite);
 
 void
 Tick(machine* M);

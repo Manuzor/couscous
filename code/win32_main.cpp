@@ -6,15 +6,20 @@
 
 #include <Windows.h>
 
-
-internal
-void
-ClearBackBuffer(back_buffer* BackBuffer, colorRGB8 Color)
+struct colorRGB8
 {
-  size_t const NumPixels = BackBuffer->Width * BackBuffer->Height;
-  colorRGB8 Swizzled{ Color.B, Color.G, Color.R };
-  MemSet(NumPixels, BackBuffer->Memory, Swizzled);
-}
+  union
+  {
+    struct
+    {
+      u8 R;
+      u8 G;
+      u8 B;
+    };
+
+    u8 Data[3];
+  };
+};
 
 struct mem_stack
 {
@@ -97,37 +102,42 @@ LoadRom(char const* FileName, DWORD MaxRomLength, u8* Dest)
   return Result;
 }
 
-struct win32_back_buffer
+struct win32_front_buffer
 {
   BITMAPINFO BitmapInfo;
-  void* Memory;
+
+  colorRGB8* Pixels;
   DWORD Width;
   DWORD Height;
   DWORD Pitch;
   DWORD BytesPerPixel;
+
+  colorRGB8 PixelColorOn;
+  colorRGB8 PixelColorOff;
 };
 
 internal
-win32_back_buffer
-Win32CreateBackBuffer(mem_stack* Stack, DWORD Width, DWORD Height)
+void
+Win32SwapBuffers(back_buffer* Back, win32_front_buffer* Front)
 {
-  win32_back_buffer Result{};
+  size_t const Width = Back->Width;
+  size_t const Height = Back->Height;
+  colorRGB8* FrontPixel = Front->Pixels;
+  u8* BackPixel = Back->Pixels;
 
-  Result.BitmapInfo.bmiHeader.biSize = sizeof(Result.BitmapInfo.bmiHeader);
-  Result.BytesPerPixel = 24;
-  Result.Width = Width;
-  Result.Height = Height;
-  Result.Pitch = Result.Width * Result.BytesPerPixel;
-  Result.BitmapInfo.bmiHeader.biWidth = (LONG)Result.Width;
-  Result.BitmapInfo.bmiHeader.biHeight = -(LONG)Result.Height;
-  Result.BitmapInfo.bmiHeader.biPlanes = 1;
-  Result.BitmapInfo.bmiHeader.biBitCount = Result.BytesPerPixel;
-  Result.BitmapInfo.bmiHeader.biCompression = BI_RGB;
-
-  size_t const NumBytesNeeded = (size_t)Width * Height * Result.BytesPerPixel;
-  Result.Memory = (decltype(Result.Memory))PushBytes(Stack, NumBytesNeeded);
-
-  return Result;
+  for(size_t Y = 0; Y < Height; ++Y)
+  {
+    for(size_t X = 0; X < Width / 8; ++X, ++BackPixel)
+    {
+      for(size_t Bits = 8; Bits > 0; --Bits, ++FrontPixel)
+      {
+        size_t PixelIndex = Bits - 1;
+        bool32 Pixel = IsBitSet(*BackPixel, PixelIndex);
+        if(Pixel) *FrontPixel = Front->PixelColorOn;
+        else      *FrontPixel = Front->PixelColorOff;
+      }
+    }
+  }
 }
 
 internal
@@ -148,19 +158,28 @@ struct rect_i32
 
 internal
 void
-Win32Present(HWND WindowHandle, win32_back_buffer* BackBuffer)
+Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
 {
   HDC DC = GetDC(WindowHandle);
+  colorRGB8* Pixels = FrontBuffer->Pixels;
 
   // TODO: Keep aspect ratio of back buffer.
   rect_i32 SourceRect{};
-  SourceRect.Width = (int)BackBuffer->Width;
-  SourceRect.Height = (int)BackBuffer->Height;
+  SourceRect.Width = (int)FrontBuffer->Width;
+  SourceRect.Height = (int)FrontBuffer->Height;
 
   float Aspect = (float)SourceRect.Width / (float)SourceRect.Height;
 
   rect_i32 DestRect{};
   Win32GetWindowClientArea(WindowHandle, &DestRect.Width, &DestRect.Height);
+
+  // Add some margin to possibly catch errors.
+  #if MTB_IsOn(MTB_Internal)
+    DestRect.X += 64;
+    DestRect.Y += 64;
+    DestRect.Width -= DestRect.X + 64;
+    DestRect.Height -= DestRect.Y + 64;
+  #endif
 
   MTB_DebugCode(int Result =) StretchDIBits(
     DC,                       // _In_       HDC        hdc
@@ -172,12 +191,12 @@ Win32Present(HWND WindowHandle, win32_back_buffer* BackBuffer)
     SourceRect.Y,             // _In_       int        YSrc
     SourceRect.Width,         // _In_       int        nSrcWidth
     SourceRect.Height,        // _In_       int        nSrcHeight
-    BackBuffer->Memory,       // _In_ const VOID       *lpBits
-    &BackBuffer->BitmapInfo,  // _In_ const BITMAPINFO *lpBitsInfo
+    Pixels,                   // _In_ const VOID       *lpBits
+    &FrontBuffer->BitmapInfo, // _In_ const BITMAPINFO *lpBitsInfo
     DIB_RGB_COLORS,           // _In_       UINT       iUsage
     SRCCOPY);                 // _In_       DWORD      dwRop
 
-  // TODO: Clear regions to black that aren't covered by the code above.
+  // TODO: Clear regions to black that aren't covered by the code above?
 
   ReleaseDC(WindowHandle, DC);
 }
@@ -222,7 +241,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
 {
   LRESULT Result = 0;
 
-  auto Win32BackBuffer = Reinterpret<win32_back_buffer*>(GetWindowLongPtr(WindowHandle, GWLP_USERDATA));
+  auto FrontBuffer = Reinterpret<win32_front_buffer*>(GetWindowLongPtr(WindowHandle, GWLP_USERDATA));
 
   if(Message == WM_CLOSE || Message == WM_DESTROY)
   {
@@ -282,8 +301,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
     if(MustBeginAndEndPaint)
       BeginPaint(WindowHandle, &Paint);
 
-    // TODO: Blit here.
-    Win32Present(WindowHandle, Win32BackBuffer);
+    Win32Present(WindowHandle, FrontBuffer);
 
     if(MustBeginAndEndPaint)
       EndPaint(WindowHandle, &Paint);
@@ -435,7 +453,12 @@ internal
 f64
 Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
 {
-  f64 Result = (f64)(End->Timestamp.QuadPart - Start->Timestamp.QuadPart) / (f64)Clock->Frequency.QuadPart;
+  LONGLONG EndInt = End->Timestamp.QuadPart;
+  LONGLONG StartInt = Start->Timestamp.QuadPart;
+  LONGLONG FrequencyInt = Clock->Frequency.QuadPart;
+
+  LONGLONG Delta = EndInt - StartInt;
+  f64 Result = (f64)Delta / (f64)FrequencyInt;
   return Result;
 }
 
@@ -468,66 +491,75 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
   {
     const int ScreenWidth = 64;
     const int ScreenHeight = 32;
-    const int PixelScale = 16;
+    const int SizeOfPixelInWindow = 16;
     win32_window Window = Win32CreateWindow(ProcessHandle, "Couscous - CHIP-8",
-                                            ScreenWidth * PixelScale,
-                                            ScreenHeight * PixelScale);
+                                            ScreenWidth * SizeOfPixelInWindow,
+                                            ScreenHeight * SizeOfPixelInWindow);
     if(Window.Handle)
     {
-      win32_back_buffer Win32BackBuffer = Win32CreateBackBuffer(&UtilStack, ScreenWidth, ScreenHeight);
+      //
+      // Create front buffer.
+      //
+      win32_front_buffer Win32FrontBuffer{};
+      Win32FrontBuffer.BytesPerPixel = 3;
+      Win32FrontBuffer.Width = ScreenWidth;
+      Win32FrontBuffer.Height = ScreenHeight;
+      Win32FrontBuffer.Pitch = Win32FrontBuffer.Width * Win32FrontBuffer.BytesPerPixel;
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biSize = sizeof(Win32FrontBuffer.BitmapInfo.bmiHeader);
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biWidth = (LONG)Win32FrontBuffer.Width;
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biHeight = -(LONG)Win32FrontBuffer.Height;
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biPlanes = 1;
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biBitCount = Win32FrontBuffer.BytesPerPixel * 8;
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biCompression = BI_RGB;
+      Win32FrontBuffer.Pixels = (decltype(Win32FrontBuffer.Pixels))PushBytes(&UtilStack, Win32FrontBuffer.Width * Win32FrontBuffer.Height * Win32FrontBuffer.BytesPerPixel);
+      Win32FrontBuffer.PixelColorOff = { 16, 64, 16 };
+      Win32FrontBuffer.PixelColorOn =  {  8, 16,  8 };
 
-      SetWindowLongPtr(Window.Handle, GWLP_USERDATA, Reinterpret<LONG_PTR>(&Win32BackBuffer));
+      //
+      // Create back buffer data.
+      //
+      back_buffer* BackBuffer = &M->Screen;
+      BackBuffer->Width = (int)Win32FrontBuffer.Width;
+      BackBuffer->Height = (int)Win32FrontBuffer.Height;
+      BackBuffer->Pixels = (decltype(BackBuffer->Pixels))PushBytes(&UtilStack, BackBuffer->Width * BackBuffer->Height);
 
-      back_buffer BackBuffer{};
-      BackBuffer.Memory = (colorRGB8*)Win32BackBuffer.Memory;
-      BackBuffer.Width = (int)Win32BackBuffer.Width;
-      BackBuffer.Height = (int)Win32BackBuffer.Height;
-      BackBuffer.Pitch = (int)Win32BackBuffer.Pitch;
-      BackBuffer.BytesPerPixel = (int)Win32BackBuffer.BytesPerPixel;
+      // Init clear and swap to ensure properly cleared buffers.
+      size_t const BackBufferLength = (BackBuffer->Width * BackBuffer->Height) / 8;
+      MemSet(BackBufferLength, BackBuffer->Pixels, (u8)0);
+      Win32SwapBuffers(BackBuffer, &Win32FrontBuffer);
 
+      // Associate the back buffer with the window for presenting.
+      SetWindowLongPtr(Window.Handle, GWLP_USERDATA, Reinterpret<LONG_PTR>(&Win32FrontBuffer));
+
+      InitMachine(M);
+
+      //
+      // Clock setup.
+      //
       win32_clock Clock = Win32CreateClock();
-      win32_timestamp LastUpdateTime = Win32Timestamp();
-      win32_timestamp CurrentTime = Win32Timestamp();
+      win32_timestamp LastTickTime = Win32Timestamp();
 
       while(true)
       {
-        Win32MessagePump(&Window);
+        f64 const TickDuration = 1.0 /*/ 60.0*/;
 
-        ClearBackBuffer(&BackBuffer, { 16, 64, 16 });
-
-        int const _ = 0;
-        int Hello[5][26]
+        f64 DeltaTime{};
+        win32_timestamp CurrentTime;
+        while(true)
         {
-          { 1, _, _, 1, _, 1, 1, 1, 1, _, 1, _, _, _, _, 1, _, _, _, _, _, 1, 1, _, _, 1, },
-          { 1, _, _, 1, _, 1, _, _, _, _, 1, _, _, _, _, 1, _, _, _, _, 1, _, _, 1, _, 1, },
-          { 1, 1, 1, 1, _, 1, 1, 1, 1, _, 1, _, _, _, _, 1, _, _, _, _, 1, _, _, 1, _, 1, },
-          { 1, _, _, 1, _, 1, _, _, _, _, 1, _, _, _, _, 1, _, _, _, _, 1, _, _, 1, _, _, },
-          { 1, _, _, 1, _, 1, 1, 1, 1, _, 1, 1, 1, 1, _, 1, 1, 1, 1, _, _, 1, 1, _, _, 1, },
-        };
+          Win32MessagePump(&Window);
+          CurrentTime = Win32Timestamp();
+          DeltaTime = Win32DeltaTime(&Clock, &CurrentTime, &LastTickTime);
 
-        int HelloOffsetX = 19;
-        int HelloOffsetY = 13;
-        for(size_t Y = 0; Y < Length(Hello); ++Y)
-        {
-          for(size_t X = 0; X < Length(Hello[0]); ++X)
-          {
-            if(Hello[Y][X])
-            {
-              size_t Index = (Y + HelloOffsetY) * ScreenWidth + (X + HelloOffsetX);
-              BackBuffer.Memory[Index] = {};
-            }
-          }
+          if(DeltaTime >= TickDuration)
+            break;
         }
+        LastTickTime = CurrentTime;
 
-        win32_timestamp CurrentTime = Win32Timestamp();
-        f64 DeltaTime = Win32DeltaTime(&Clock, &CurrentTime, &LastUpdateTime);
-        if(DeltaTime > 1)
-        {
-          OutputDebugStringA("One second has passed.\n");
-          LastUpdateTime = CurrentTime;
-        }
+        Tick(M);
 
-        Win32Present(Window.Handle, &Win32BackBuffer);
+        Win32SwapBuffers(BackBuffer, &Win32FrontBuffer);
+        Win32Present(Window.Handle, &Win32FrontBuffer);
       }
     }
     else
