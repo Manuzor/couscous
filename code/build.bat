@@ -10,5 +10,5 @@ pushd "%BuildDir%"
   set CFlags=/nologo /MTd /Zi /DEBUG
   set LFlags=/INCREMENTAL:NO
   set Libs=User32.lib Gdi32.lib
-  cl %CFlags% "%SourceDir%/win32_main.cpp" /Fe"main.exe" /link %LFlags% %Libs%
+  cl %CFlags% "%SourceDir%/win32_main.cpp" /Fe"couscous.exe" /link %LFlags% %Libs%
 popd
