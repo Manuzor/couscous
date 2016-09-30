@@ -118,21 +118,21 @@ struct win32_front_buffer
 
 internal
 void
-Win32SwapBuffers(back_buffer* Back, win32_front_buffer* Front)
+Win32SwapBuffers(screen* Screen, win32_front_buffer* Front)
 {
-  size_t const Width = Back->Width;
-  size_t const Height = Back->Height;
+  size_t const Width = Screen->Width;
+  size_t const Height = Screen->Height;
   colorRGB8* FrontPixel = Front->Pixels;
-  u8* BackPixel = Back->Pixels;
+  u8* ScreenPixel = Screen->Pixels;
 
   for(size_t Y = 0; Y < Height; ++Y)
   {
-    for(size_t X = 0; X < Width / 8; ++X, ++BackPixel)
+    for(size_t X = 0; X < Width / 8; ++X, ++ScreenPixel)
     {
       for(size_t Bits = 8; Bits > 0; --Bits, ++FrontPixel)
       {
         size_t PixelIndex = Bits - 1;
-        bool32 Pixel = IsBitSet(*BackPixel, PixelIndex);
+        bool32 Pixel = IsBitSet(*ScreenPixel, PixelIndex);
         if(Pixel) *FrontPixel = Front->PixelColorOn;
         else      *FrontPixel = Front->PixelColorOff;
       }
@@ -163,7 +163,7 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
   HDC DC = GetDC(WindowHandle);
   colorRGB8* Pixels = FrontBuffer->Pixels;
 
-  // TODO: Keep aspect ratio of back buffer.
+  // TODO: Keep aspect ratio of screen.
   rect_i32 SourceRect{};
   SourceRect.Width = (int)FrontBuffer->Width;
   SourceRect.Height = (int)FrontBuffer->Height;
@@ -518,15 +518,15 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       //
       // Create back buffer data.
       //
-      back_buffer* BackBuffer = &M->Screen;
-      BackBuffer->Width = (int)Win32FrontBuffer.Width;
-      BackBuffer->Height = (int)Win32FrontBuffer.Height;
-      BackBuffer->Pixels = (decltype(BackBuffer->Pixels))PushBytes(&UtilStack, BackBuffer->Width * BackBuffer->Height);
+      screen* Screen = &M->Screen;
+      Screen->Width = (int)Win32FrontBuffer.Width;
+      Screen->Height = (int)Win32FrontBuffer.Height;
+      Screen->Pixels = (decltype(Screen->Pixels))PushBytes(&UtilStack, Screen->Width * Screen->Height);
 
       // Init clear and swap to ensure properly cleared buffers.
-      size_t const BackBufferLength = (BackBuffer->Width * BackBuffer->Height) / 8;
-      MemSet(BackBufferLength, BackBuffer->Pixels, (u8)0);
-      Win32SwapBuffers(BackBuffer, &Win32FrontBuffer);
+      size_t const ScreenPixelsLength = (Screen->Width * Screen->Height) / 8;
+      MemSet(ScreenPixelsLength, Screen->Pixels, (u8)0);
+      Win32SwapBuffers(Screen, &Win32FrontBuffer);
 
       // Associate the back buffer with the window for presenting.
       SetWindowLongPtr(Window.Handle, GWLP_USERDATA, Reinterpret<LONG_PTR>(&Win32FrontBuffer));
@@ -558,7 +558,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
         Tick(M);
 
-        Win32SwapBuffers(BackBuffer, &Win32FrontBuffer);
+        Win32SwapBuffers(Screen, &Win32FrontBuffer);
         Win32Present(Window.Handle, &Win32FrontBuffer);
       }
     }

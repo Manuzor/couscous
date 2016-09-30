@@ -1,8 +1,9 @@
 #include "charmap.cpp"
 
 internal
-void
-InitMachine(machine* M)
+auto
+::InitMachine(machine* M)
+  -> void
 {
   // TODO: Ensure charmap size is ok.
   u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
@@ -10,8 +11,9 @@ InitMachine(machine* M)
 }
 
 internal
-sprite
-GetCharacterSprite(machine* M, char Character)
+auto
+::GetCharacterSprite(machine* M, char Character)
+  -> sprite
 {
   sprite Result{};
   Result.Length = 5;
@@ -40,8 +42,10 @@ GetCharacterSprite(machine* M, char Character)
   return Result;
 }
 
-void
-DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
+internal
+auto
+::DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
+  -> void
 {
   MTB_DebugAssert(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
 
@@ -62,8 +66,9 @@ DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
 }
 
 internal
-void
-Tick(machine* M)
+auto
+::Tick(machine* M)
+  -> void
 {
   static int Test{};
 

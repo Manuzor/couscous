@@ -13,7 +13,7 @@ enum
   CHAR_MEMORY_OFFSET = 0,
 };
 
-struct back_buffer
+struct screen
 {
   u8* Pixels;
 
@@ -60,7 +60,7 @@ struct machine
 
   bool Input[16];
 
-  back_buffer Screen;
+  screen Screen;
 };
 
 // TODO: Should the machine load the rom?
@@ -68,7 +68,7 @@ void
 InitMachine(machine* M);
 
 sprite
-GetCharacterSprite(char Character);
+GetCharacterSprite(machine* M, char Character);
 
 void
 DrawSprite(machine* M, int X, int Y, sprite Sprite);
