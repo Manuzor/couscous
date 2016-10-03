@@ -492,11 +492,11 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                     PAGE_READWRITE);
 
   auto M = (machine*)PushStruct(&UtilStack, machine);
-  MemConstruct(1, M);
+  ConstructElements(1, M);
 
   #if USE_TEST_PROGRAM
     DWORD RomLength = (DWORD)sizeof(GlobalTestProgram);
-    MemCopy(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
+    CopyBytes(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
   #else
     // Insert ROM data into the machine.
     DWORD RomLength = LoadRom(FileName, Length(M->Memory) - PROGRAM_START_ADDRESS, M->Memory + PROGRAM_START_ADDRESS);

@@ -7,7 +7,7 @@ auto
 {
   // TODO: Ensure charmap size is ok.
   u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
-  MemCopy(sizeof(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
+  CopyBytes(ByteLengthOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
 
   M->ProgramCounter = PROGRAM_START_ADDRESS;
 }
@@ -18,7 +18,7 @@ auto
   -> void
 {
   size_t const ScreenPixelsLength = M->Screen.Width * M->Screen.Height;
-  MemSet(ScreenPixelsLength, M->Screen.Pixels, 0);
+  SetBytes(ScreenPixelsLength, M->Screen.Pixels, 0);
 }
 
 internal
@@ -122,7 +122,7 @@ auto
 
   u8* InstructionLocation = M->Memory + M->ProgramCounter;
   M->ProgramCounter += 2;
-  if(M->ProgramCounter >= Length(M->Memory))
+  if(M->ProgramCounter >= LengthOf(M->Memory))
   {
     // This should be an error case.
     return false;
@@ -356,7 +356,7 @@ auto
             u8* Source = Register;
             u8* Dest = M->Memory + M->I;
             u8 Num = Instruction.Nibble1 + 1;
-            MemCopy(Num, Dest, Source);
+            CopyBytes(Num, Dest, Source);
           }
           else goto UnknownInstruction;
         } break;
@@ -367,7 +367,7 @@ auto
             u8* Source = M->Memory + M->I;
             u8* Dest = Register;
             u8 Num = Instruction.Nibble1 + 1;
-            MemCopy(Num, Dest, Source);
+            CopyBytes(Num, Dest, Source);
           }
           else goto UnknownInstruction;
         } break;
