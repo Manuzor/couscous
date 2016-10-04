@@ -23,6 +23,15 @@ auto
 
 internal
 auto
+::GetDigitSpriteAddress(machine* M, u8 Digit)
+  -> u16
+{
+  u16 Result = (u16)CHAR_MEMORY_OFFSET + (u16)Digit;
+  return Result;
+}
+
+internal
+auto
 ::GetCharacterSprite(machine* M, char Character)
   -> sprite
 {
@@ -60,27 +69,26 @@ auto
 {
   MTB_DebugAssert(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
 
+  int const SpriteWidth = 8; // Always 1 byte.
+  int const SpriteHeight = Sprite.Length;
+
   bool32 HasCollision{};
-  for(int Y = 0; Y < Sprite.Length; ++Y)
+  for (int SpriteY = 0; SpriteY < SpriteHeight; ++SpriteY)
   {
-    u8* SpritePixel = Sprite.Pixels + Y;
+    u8* SpritePixel = Sprite.Pixels + SpriteY;
 
-    int ScreenY = StartY + Y;
-    while(ScreenY > M->Screen.Height)
-      ScreenY -= M->Screen.Height;
-
-    int ScreenPitch = ScreenY * M->Screen.Width;
-    for(int X = 0; X < 8; ++X)
+    int ScreenY = StartY + SpriteY;
+    while(ScreenY > M->Screen.Height) ScreenY -= M->Screen.Height;
+    for (int SpriteX = 0; SpriteX < SpriteWidth; ++SpriteX)
     {
-      int ScreenX = StartX + X;
-      while(ScreenY > M->Screen.Height)
-        ScreenY -= M->Screen.Height;
-
-      int ScreenOffset = ScreenPitch + ScreenX;
+      int ScreenX = StartX + SpriteX;
+      while(ScreenX > M->Screen.Width) ScreenX -= M->Screen.Width;
+      int const ScreenOffset = (ScreenY * M->Screen.Width) + ScreenX;
       bool32* ScreenPixel = M->Screen.Pixels + ScreenOffset;
-      bool32 SpriteValue = IsBitSet((u32)*SpritePixel, X);
-      *ScreenPixel = SpriteValue;
-      HasCollision |= *ScreenPixel && SpriteValue;
+
+      bool32 SpriteColor = IsBitSet((u32)*SpritePixel, 7 - SpriteX);
+      HasCollision |= *ScreenPixel & SpriteColor;
+      *ScreenPixel ^= SpriteColor;
     }
   }
 
@@ -89,27 +97,171 @@ auto
 
 internal
 auto
+::ReadByte(machine* M, u16 Address)
+  -> u8
+{
+  u8* Ptr = M->Memory + Address;
+  u8 Result = *Ptr;
+  return Result;
+}
+
+internal
+auto
+::ReadWord(machine* M, u16 Address)
+  -> u16
+{
+  u8* Ptr = M->Memory + Address;
+  u16 Result = *(u16*)Ptr;
+  #if MTB_IsOn(MTB_LittleEndian)
+    Result = (u16)((Result << 8) | (Result >> 8));
+  #endif
+  return Result;
+}
+
+internal
+auto
+::WriteByte(machine* M, u16 Address, u8 Byte)
+  -> void
+{
+  u8* Ptr = M->Memory + Address;
+  *Ptr = Byte;
+}
+
+internal
+auto
+::WriteWord(machine* M, u16 Address, u16 Word)
+  -> void
+{
+  u8* Ptr = M->Memory + Address;
+  #if MTB_IsOn(MTB_LittleEndian)
+    Word = (u16)((Word << 8) | (Word >> 8));
+  #endif
+    *(u16*)Ptr = Word;
+}
+
+internal
+void
+PrintInstruction(instruction Instruction)
+{
+  switch(Instruction.Type)
+  {
+    case instruction_type::CLS:  Print("CLS");  break;
+    case instruction_type::RET:  Print("RET");  break;
+    case instruction_type::SYS:  Print("SYS");  break;
+    case instruction_type::JP:   Print("JP");   break;
+    case instruction_type::CALL: Print("CALL"); break;
+    case instruction_type::SE:   Print("SE");   break;
+    case instruction_type::SNE:  Print("SNE");  break;
+    case instruction_type::LD:   Print("LD");   break;
+    case instruction_type::ADD:  Print("ADD");  break;
+    case instruction_type::OR:   Print("OR");   break;
+    case instruction_type::AND:  Print("AND");  break;
+    case instruction_type::XOR:  Print("XOR");  break;
+    case instruction_type::SUB:  Print("SUB");  break;
+    case instruction_type::SHR:  Print("SHR");  break;
+    case instruction_type::SUBN: Print("SUBN"); break;
+    case instruction_type::SHL:  Print("SHL");  break;
+    case instruction_type::RND:  Print("RND");  break;
+    case instruction_type::DRW:  Print("DRW");  break;
+    case instruction_type::SKP:  Print("SKP");  break;
+    case instruction_type::SKNP: Print("SKNP"); break;
+    default:
+      Print("<INVALID INSTRUCTION TYPE>");
+      return;
+  }
+
+  char const* Prefix = " ";
+  for(auto Arg : Instruction.Args)
+  {
+    if(Arg.Type == argument_type::NONE)
+      break;
+
+    Print(Prefix);
+    char ConversionBuffer[8]{};
+    switch(Arg.Type)
+    {
+      case argument_type::V:
+      {
+        Print("V");
+        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
+        Print(ConversionBuffer);
+        break;
+      }
+      case argument_type::I:
+      {
+        Print("I");
+        break;
+      }
+      case argument_type::DT:
+      {
+        Print("DT");
+        break;
+      }
+      case argument_type::ST:
+      {
+        Print("ST");
+        break;
+      }
+      case argument_type::K:
+      {
+        Print("K");
+        break;
+      }
+      case argument_type::F:
+      {
+        Print("F");
+        break;
+      }
+      case argument_type::B:
+      {
+        Print("B");
+        break;
+      }
+      case argument_type::ATI:
+      {
+        Print("[I]");
+        break;
+      }
+      case argument_type::ADDRESS:
+      {
+        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
+        Print(ConversionBuffer);
+        break;
+      }
+      case argument_type::BYTE:
+      {
+        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
+        Print(ConversionBuffer);
+        break;
+      }
+      case argument_type::NIBBLE:
+      {
+        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
+        Print(ConversionBuffer);
+        break;
+      }
+    }
+
+    Prefix = ", ";
+  }
+
+  Print("\n");
+}
+
+internal
+auto
 ::Tick(machine* M)
   -> bool
 {
-  // static int Test{};
+  // Fetch new instruction.
+  u16 EncodedInstruction = ReadWord(M, M->ProgramCounter);
+  instruction Instruction = DecodeInstruction(EncodedInstruction);
 
-  // DrawSprite(M, 8 * Test, 0, GetCharacterSprite(M, '0' + Test));
-
-  // if(Test < 7)
-  //   ++Test;
-  // else
-  //   Test = 0;
-
-  if(M->DT)
-  {
+  // Update the timer slots.
+  if(M->DT > 0)
     --M->DT;
-  }
-
-  if(M->ST)
-  {
+  if(M->ST > 0)
     --M->ST;
-  }
 
   if(M->ST)
   {
@@ -120,274 +272,624 @@ auto
     // TODO: Stop the noise...
   }
 
-  u8* InstructionLocation = M->Memory + M->ProgramCounter;
-  M->ProgramCounter += 2;
-  if(M->ProgramCounter >= LengthOf(M->Memory))
-  {
-    // This should be an error case.
-    return false;
-  }
+  PrintInstruction(Instruction);
 
-  instruction Instruction;
-  Instruction.Data = *(u16*)InstructionLocation;
-  switch(Instruction.Group)
+  if(Instruction.Type == instruction_type::INVALID)
+    return false;
+
+  // Execute the fetched instruction.
+  ExecuteInstruction(M, Instruction);
+
+  // Advance the program counter.
+  M->ProgramCounter += 2;
+
+  return true;
+}
+
+internal
+auto
+::DecodeInstruction(u16 OpCode)
+  -> instruction
+{
+  using inst = instruction_type;
+  using arg = argument_type;
+
+  instruction_decoder Decoder{ OpCode };
+  instruction Result{};
+  switch(Decoder.Group)
   {
     case 0x0:
     {
-      if(Instruction.Nibble2 == 0xE && Instruction.Nibble3 == 0x0)
+      switch(OpCode)
       {
-        ClearScreen(M);
+        case 0x00E0: // 00E0 - CLS
+          Result.Type = inst::CLS;
+          break;
+        case 0x00EE: // 00EE - RET
+          Result.Type = inst::RET;
+          break;
+        default: // 0nnn - SYS addr
+          Result.Type = inst::SYS;
+          Result.Args[0].Type = arg::ADDRESS;
+          Result.Args[0].Value = Decoder.Address;
+          break;
       }
-      else if(Instruction.Nibble2 == 0xE && Instruction.Nibble3 == 0xE)
-      {
-        M->ProgramCounter = M->Stack[--M->StackPointer];
-      }
-      else goto UnknownInstruction;
-    } break;
-    case 0x1:
+      break;
+    }
+    case 0x1: // 1nnn - JP addr
     {
-      M->ProgramCounter = (u16)Instruction.Args;
-    } break;
-    case 0x2:
+      Result.Type = inst::JP;
+      Result.Args[0].Type = arg::ADDRESS;
+      Result.Args[0].Value = Decoder.Address;
+      break;
+    }
+    case 0x2: // 2nnn - CALL addr
     {
-      M->Stack[M->StackPointer++] = M->ProgramCounter;
-      M->ProgramCounter = Instruction.Args;
-    } break;
-    case 0x3:
+      Result.Type = inst::CALL;
+      Result.Args[0].Type = arg::ADDRESS;
+      Result.Args[0].Value = Decoder.Address;
+      break;
+    }
+    case 0x3: // 3xkk - SE Vx, byte
     {
-      u8* Register = M->GPR + Instruction.Nibble1;
-      u8 Value = Instruction.Byte1;
-      if(*Register == Value)
-        M->ProgramCounter += 2;
-    } break;
-    case 0x4:
+      Result.Type = inst::SE;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Value = Decoder.LSB;
+      break;
+    }
+    case 0x4: // 4xkk - SNE Vx, byte
     {
-      u8* Register = M->GPR + Instruction.Nibble1;
-      u8 Value = Instruction.Byte1;
-      if(*Register != Value)
-        M->ProgramCounter += 2;
-    } break;
-    case 0x5:
+      Result.Type = inst::SNE;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Value = Decoder.LSB;
+      break;
+    }
+    case 0x5: // 5xy0 - SE Vx, Vy
     {
-      u8* RegisterA = M->GPR + Instruction.Nibble1;
-      u8* RegisterB = M->GPR + Instruction.Nibble2;
-      if(*RegisterA == *RegisterB)
-        M->ProgramCounter += 2;
-    } break;
-    case 0x6:
+      Result.Type = inst::SE;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::V;
+      Result.Args[1].Value = Decoder.Y;
+      break;
+    }
+    case 0x6: // 6xkk - LD Vx, byte
     {
-      u8* Register = M->GPR + Instruction.Nibble1;
-      u8 Value = Instruction.Byte1;
-      *Register = Value;
-    } break;
-    case 0x7:
+      Result.Type = inst::LD;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Value = Decoder.LSB;
+      break;
+    }
+    case 0x7: // 7xkk - ADD Vx, byte
     {
-      u8* Register = M->GPR + Instruction.Nibble1;
-      u8 Value = Instruction.Byte1;
-      *Register += Value;
-    } break;
+      Result.Type = inst::ADD;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Value = Decoder.LSB;
+      break;
+    }
     case 0x8:
     {
-      u8* RegisterA = M->GPR + Instruction.Nibble1;
-      u8* RegisterB = M->GPR + Instruction.Nibble2;
-      switch(Instruction.Nibble3)
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::V;
+      Result.Args[1].Value = Decoder.Y;
+      switch(Decoder.LSN)
       {
-        case 0x0:
-        {
-          *RegisterA = *RegisterB;
-        } break;
-        case 0x1:
-        {
-          *RegisterA |= *RegisterB;
-        } break;
-        case 0x2:
-        {
-          *RegisterA &= *RegisterB;
-        } break;
-        case 0x3:
-        {
-          *RegisterA ^= *RegisterB;
-        } break;
-        case 0x4:
-        {
-          int Result = (int)*RegisterA + (int)*RegisterB;
-          *M->VF = !!(Result > 255);
-          *RegisterA = (u8)Result;
-        } break;
-        case 0x5:
-        {
-          *M->VF = !!(*RegisterA > *RegisterB);
-          *RegisterA -= *RegisterB;
-        } break;
-        case 0x6:
-        {
-          *M->VF = !!(*RegisterA & 1);
-          *RegisterA /= 2;
-        } break;
-        case 0x7:
-        {
-          *M->VF = !!(*RegisterB > *RegisterA);
-          *RegisterA = *RegisterB - *RegisterA;
-        } break;
-        case 0xE:
-        {
-          *M->VF = !!(*RegisterA & 0b1000'0000);
-          *RegisterA *= 2;
-        } break;
-        default: goto UnknownInstruction;
+        case 0x0: Result.Type = inst::LD; break;   // 8xy0 - LD   Vx, Vy
+        case 0x1: Result.Type = inst::OR; break;   // 8xy1 - OR   Vx, Vy
+        case 0x2: Result.Type = inst::AND; break;  // 8xy2 - AND  Vx, Vy
+        case 0x3: Result.Type = inst::XOR; break;  // 8xy3 - XOR  Vx, Vy
+        case 0x4: Result.Type = inst::ADD; break;  // 8xy4 - ADD  Vx, Vy
+        case 0x5: Result.Type = inst::SUB; break;  // 8xy5 - SUB  Vx, Vy
+        case 0x6: Result.Type = inst::SHR; break;  // 8xy6 - SHR  Vx {, Vy}
+        case 0x7: Result.Type = inst::SUBN; break; // 8xy7 - SUBN Vx, Vy
+        case 0xE: Result.Type = inst::SHL; break;  // 8xyE - SHL  Vx {, Vy}
       }
-    } break;
-    case 0x9:
+      break;
+    }
+    case 0x9: // 9xy0 - SNE Vx, Vy
     {
-      u8* RegisterA = M->GPR + Instruction.Nibble1;
-      u8* RegisterB = M->GPR + Instruction.Nibble2;
-      if(*RegisterA != *RegisterB)
-        M->ProgramCounter += 2;
-    } break;
-    case 0xA:
+      Result.Type = inst::SNE;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::V;
+      Result.Args[1].Value = Decoder.Y;
+      break;
+    }
+    case 0xA: // Annn - LD I, addr
     {
-      M->I = Instruction.Args;
-    } break;
-    case 0xB:
+      Result.Type = inst::LD;
+      Result.Args[0].Type = arg::I;
+      Result.Args[1].Type = arg::ADDRESS;
+      Result.Args[1].Value = Decoder.Address;
+      break;
+    }
+    case 0xB: // Bnnn - JP V0, addr
     {
-      M->ProgramCounter = Instruction.Args + *M->V0;
-    } break;
-    case 0xC:
+      Result.Type = inst::LD;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = 0;
+      Result.Args[1].Type = arg::ADDRESS;
+      Result.Args[1].Value = Decoder.Address;
+      break;
+    }
+    case 0xC: // Cxkk - RND Vx, byte
     {
-      u8* Register = M->GPR + Instruction.Nibble1;
-      // TODO: Random numbers!
-      u8 RandomNumber = 42;
-      *Register = (u8)(RandomNumber & Instruction.Byte1);
-    } break;
-    case 0xD:
+      Result.Type = inst::RND;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Value = Decoder.LSB;
+      break;
+    }
+    case 0xD: // Dxyn - DRW Vx, Vy, nibble
     {
-      int X = (int)Instruction.Nibble1;
-      int Y = (int)Instruction.Nibble2;
-      int Num = (int)Instruction.Nibble3;
-      u8* Pixels = M->Memory + M->I;
-      sprite Sprite{ Num, Pixels };
-      DrawSprite(M, X, Y, Sprite);
-    } break;
+      Result.Type = inst::DRW;
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      Result.Args[1].Type = arg::V;
+      Result.Args[1].Value = Decoder.Y;
+      Result.Args[2].Type = arg::NIBBLE;
+      Result.Args[2].Value = Decoder.LSN;
+      break;
+    }
     case 0xE:
     {
-      u8* Register = M->GPR + Instruction.Nibble1;
-      if(Instruction.Nibble2 == 0x9 && Instruction.Nibble3 == 0xE)
+      Result.Args[0].Type = arg::V;
+      Result.Args[0].Value = Decoder.X;
+      switch(Decoder.LSB)
       {
-        u8 KeyIndex = *Register;
-        if(M->Input[KeyIndex])
-          M->ProgramCounter += 2;
+        case 0x9E: Result.Type = inst::SKP;  break; // Ex9E - SKP Vx
+        case 0xA1: Result.Type = inst::SKNP; break; // ExA1 - SKNP Vx
       }
-      else if(Instruction.Nibble2 == 0xA && Instruction.Nibble3 == 0x1)
-      {
-        u8 KeyIndex = *Register;
-        if(!M->Input[KeyIndex])
-          M->ProgramCounter += 2;
-      }
-      else goto UnknownInstruction;
-    } break;
+      break;
+    }
     case 0xF:
     {
-      u8* Register = M->GPR + Instruction.Nibble1;
-      switch(Instruction.Nibble2)
+      switch(Decoder.LSB)
       {
-        case 0x0:
+        case 0x07: // Fx07 - LD Vx, DT
         {
-          if(Instruction.Nibble3 == 0x7)
-          {
-            *Register = M->DT;
-          }
-          else if(Instruction.Nibble3 == 0xA)
-          {
-            // TODO: All execution stops until a key is pressed, then the
-            // value of that key is stored in `*Register`.
-          }
-          else goto UnknownInstruction;
-        } break;
-        case 0x1:
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::V;
+          Result.Args[0].Value = Decoder.X;
+          Result.Args[1].Type = arg::DT;
+          break;
+        }
+        case 0x0A: // Fx0A - LD Vx, K
         {
-          switch(Instruction.Nibble3)
-          {
-            case 0x5:
-            {
-              M->DT = *Register;
-            } break;
-            case 0x8:
-            {
-              M->ST = *Register;
-            } break;
-            case 0xE:
-            {
-              M->I += *Register;
-            } break;
-            default: goto UnknownInstruction;
-          }
-        } break;
-        case 0x2:
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::V;
+          Result.Args[0].Value = Decoder.X;
+          Result.Args[1].Type = arg::K;
+          break;
+        }
+        case 0x15: // Fx15 - LD DT, Vx
         {
-          if(Instruction.Nibble3 == 0x9)
-          {
-            // TODO
-          }
-          else goto UnknownInstruction;
-        } break;
-        case 0x3:
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::DT;
+          Result.Args[1].Type = arg::V;
+          Result.Args[1].Value = Decoder.X;
+          break;
+        }
+        case 0x18: // Fx18 - LD ST, Vx
         {
-          if(Instruction.Nibble3 == 0x3)
-          {
-            u8 Value = *Register;
-            u8 Digit100 = Value / 100;
-            u8 Digit010 = Value / 10 - Digit100;
-            u8 Digit001 = Value / 1  - Digit100 - Digit010;
-
-            u8* Location0 = M->Memory + M->I + 0;
-            u8* Location1 = M->Memory + M->I + 1;
-            u8* Location2 = M->Memory + M->I + 2;
-
-            *Location0 = Digit100;
-            *Location1 = Digit010;
-            *Location2 = Digit001;
-          }
-          else goto UnknownInstruction;
-        } break;
-        case 0x5:
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::ST;
+          Result.Args[1].Type = arg::V;
+          Result.Args[1].Value = Decoder.X;
+          break;
+        }
+        case 0x1E: // Fx1E - ADD I, Vx
         {
-          if(Instruction.Nibble3 == 0x5)
-          {
-            u8* Source = Register;
-            u8* Dest = M->Memory + M->I;
-            u8 Num = Instruction.Nibble1 + 1;
-            CopyBytes(Num, Dest, Source);
-          }
-          else goto UnknownInstruction;
-        } break;
-        case 0x6:
+          Result.Type = inst::ADD;
+          Result.Args[0].Type = arg::I;
+          Result.Args[1].Type = arg::V;
+          Result.Args[1].Value = Decoder.X;
+          break;
+        }
+        case 0x29: // Fx29 - LD F, Vx
         {
-          if(Instruction.Nibble3 == 0x5)
-          {
-            u8* Source = M->Memory + M->I;
-            u8* Dest = Register;
-            u8 Num = Instruction.Nibble1 + 1;
-            CopyBytes(Num, Dest, Source);
-          }
-          else goto UnknownInstruction;
-        } break;
-        default: goto UnknownInstruction;
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::F;
+          Result.Args[1].Type = arg::V;
+          Result.Args[1].Value = Decoder.X;
+          break;
+        }
+        case 0x33: // Fx33 - LD B, Vx
+        {
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::B;
+          Result.Args[1].Type = arg::V;
+          Result.Args[1].Value = Decoder.X;
+          break;
+        }
+        case 0x55: // Fx55 - LD [I], Vx
+        {
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::ATI;
+          Result.Args[1].Type = arg::V;
+          Result.Args[1].Value = Decoder.X;
+          break;
+        }
+        case 0x65: // Fx65 - LD Vx, [I]
+        {
+          Result.Type = inst::LD;
+          Result.Args[0].Type = arg::V;
+          Result.Args[0].Value = Decoder.X;
+          Result.Args[1].Type = arg::ATI;
+          break;
+        }
       }
-    } break;
-    default: goto UnknownInstruction;
+    }
   }
 
-  return true;
+  return Result;
+}
 
-  UnknownInstruction:
-    if(Instruction.Data == 0xFFFF || Instruction.Data == 0x0000)
+internal
+auto
+::ExecuteInstruction(machine* M, instruction Instruction)
+  -> void
+{
+  switch(Instruction.Type)
+  {
+    case instruction_type::CLS:
     {
-      // Treat these as terminators.
+      ClearScreen(M);
+      return;
     }
-    else
+    case instruction_type::RET:
     {
-      MTB_ReportError("Unknown instruction.");
+      M->ProgramCounter = M->Stack[--M->StackPointer];
+      return;
     }
+    case instruction_type::SYS:
+    {
+      MTB_ReportError("Not implemented.");
+      return;
+    }
+    case instruction_type::JP:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          u8* Reg = M->GPR + Instruction.Args[0].Value;
+          M->ProgramCounter = Instruction.Args[1].Value + *Reg;
+          return;
+        }
+        case argument_type::ADDRESS:
+        {
+          M->ProgramCounter = Instruction.Args[0].Value;
+          return;
+        }
+      }
+      break;
+    }
+    case instruction_type::CALL:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::ADDRESS:
+        {
+          M->Stack[M->StackPointer++] = M->ProgramCounter;
+          M->ProgramCounter = Instruction.Args[0].Value;
+          return;
+        }
+      }
+      break;
+    }
+    case instruction_type::SE:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          u8 Lhs = M->GPR[Instruction.Args[0].Value];
+          u8 Rhs = M->GPR[Instruction.Args[1].Value];
+          if(Lhs == Rhs)
+            M->ProgramCounter += 2;
+          return;
+        }
+        case argument_type::BYTE:
+        {
+          u8 Lhs = M->GPR[Instruction.Args[0].Value];
+          u8 Rhs = (u8)Instruction.Args[1].Value;
+          if(Lhs == Rhs)
+            M->ProgramCounter += 2;
+          return;
+        }
+      }
+      break;
+    }
+    case instruction_type::SNE:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          u8 Lhs = M->GPR[Instruction.Args[0].Value];
+          u8 Rhs = M->GPR[Instruction.Args[1].Value];
+          if(Lhs != Rhs)
+            M->ProgramCounter += 2;
+          return;
+        }
+        case argument_type::BYTE:
+        {
+          u8 Lhs = M->GPR[Instruction.Args[0].Value];
+          u8 Rhs = (u8)Instruction.Args[1].Value;
+          if(Lhs != Rhs)
+            M->ProgramCounter += 2;
+          return;
+        }
+      }
+      break;
+    }
+    case instruction_type::LD:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::ATI:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8 Num = (u8)Instruction.Args[1].Value;
+              u8* Dest = M->Memory + M->I;
+              u8* Source = M->GPR;
+              CopyBytes(Num, Dest, Source);
+              return;
+            }
+          }
+          break;
+        }
+        case argument_type::B:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              u8* DDD = M->Memory + (M->I + 0);
+              u8* DD  = M->Memory + (M->I + 1);
+              u8* D   = M->Memory + (M->I + 2);
 
-    return false;
+              *DDD = *Reg / 100;
+              *DD  = *Reg / 10 - *DDD;
+              *DD  = *Reg / 1  - *DDD - *DD;
+              // TODO: Test this instruction!
+              return;
+            }
+          }
+          break;
+        }
+        case argument_type::DT:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              M->DT = *Reg;
+              return;
+            }
+          }
+          break;
+        }
+        case argument_type::F:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              M->I = GetDigitSpriteAddress(M, *Reg);
+              return;
+            }
+          }
+          break;
+        }
+        case argument_type::I:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::ADDRESS:
+            {
+              M->I = Instruction.Args[1].Value;
+              return;
+            }
+          }
+          break;
+        }
+        case argument_type::ST:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              M->ST = *Reg;
+              return;
+            }
+          }
+          break;
+        }
+        case argument_type::V:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::ATI:
+            {
+              u8 Num = (u8)Instruction.Args[0].Value;
+              u8* Dest = M->GPR;
+              u8* Source = M->Memory + M->I;
+              CopyBytes(Num, Dest, Source);
+              return;
+            }
+            case argument_type::BYTE:
+            {
+              u8* Reg = M->GPR + Instruction.Args[0].Value;
+              *Reg = (u8)Instruction.Args[1].Value;
+              return;
+            }
+            case argument_type::DT:
+            {
+              u8* Reg = M->GPR + Instruction.Args[0].Value;
+              *Reg = M->DT;
+              return;
+            }
+            case argument_type::K:
+            {
+              u8* Reg = M->GPR + Instruction.Args[0].Value;
+              // TODO: All execution stops until a key is pressed, then the
+              // value of that key is stored in Vx.
+              return;
+            }
+            case argument_type::V:
+            {
+              u8* RegA = M->GPR + Instruction.Args[0].Value;
+              u8* RegB = M->GPR + Instruction.Args[1].Value;
+              *RegA = *RegB;
+              return;
+            }
+          }
+          break;
+        }
+      }
+      break;
+    }
+    case instruction_type::ADD:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::I:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type:: V:
+            {
+              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              M->I += *Reg;
+              return;
+            }
+          }
+          break;
+        }
+        case argument_type::V:
+        {
+          u8* Reg = M->GPR + Instruction.Args[0].Value;
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type:: BYTE:
+            {
+              *Reg += (u8)Instruction.Args[1].Value;
+              return;
+            }
+            case argument_type:: V:
+            {
+              u8* OtherReg = M->GPR + Instruction.Args[1].Value;
+              u16 Result = (u16)*Reg + (u16)*OtherReg;
+              *Reg += *OtherReg;
+              *M->VF = (u8)(Result > 255);
+              *Reg = (u8)(Result & 0xFF);
+              return;
+            }
+          }
+          break;
+        }
+      }
+      break;
+    }
+    case instruction_type::OR:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::AND:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::XOR:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SUB:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SHR:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SUBN:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SHL:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::RND:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::DRW:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              switch(Instruction.Args[2].Type)
+              {
+                case argument_type::NIBBLE:
+                {
+                  u8* RegA = M->GPR + Instruction.Args[0].Value;
+                  u8* RegB = M->GPR + Instruction.Args[1].Value;
+                  sprite Sprite;
+                  Sprite.Length = (int)Instruction.Args[2].Value;
+                  Sprite.Pixels = (u8*)(M->Memory + M->I);
+                  DrawSprite(M, *RegA, *RegB, Sprite);
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+      break;
+    }
+    case instruction_type::SKP:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SKNP:
+    {
+      // TODO
+      break;
+    }
+    default: break;
+  }
+  Print("Invalid instruction to execute.");
 }

@@ -93,15 +93,21 @@
   #error "Unknown architecture."
 #endif
 
-#define MTB_Is32BitArch MTB_Off
-#define MTB_Is64BitArch MTB_Off
+#define MTB_32BitArch MTB_IsOff
+#define MTB_64BitArch MTB_IsOff
+#define MTB_LittleEndian MTB_IsOff
+#define MTB_BigEndian MTB_IsOff
 
 #if MTB_IsArch(x86_64)
-  #undef  MTB_Is64BitArch
-  #define MTB_Is64BitArch MTB_On
+  #undef  MTB_64BitArch
+  #define MTB_64BitArch MTB_On
+  #undef  MTB_LittleEndian
+  #define MTB_LittleEndian MTB_On
 #elif MTB_IsArch(x86)
-  #undef  MTB_Is32BitArch
-  #define MTB_Is32BitArch MTB_On
+  #undef  MTB_32BitArch
+  #define MTB_32BitArch MTB_On
+  #undef  MTB_LittleEndian
+  #define MTB_LittleEndian MTB_On
 #else
   #error "Undefined architecture."
 #endif

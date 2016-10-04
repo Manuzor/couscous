@@ -65,32 +65,89 @@ struct machine
   screen Screen;
 };
 
-union instruction
+enum struct argument_type
+{
+  NONE,
+
+  V,
+  I,
+  DT,
+  ST,
+
+  K,
+  F,
+  B,
+  ATI, // [I], "at I"
+
+  ADDRESS,
+  BYTE,
+  NIBBLE,
+};
+
+struct argument
+{
+  argument_type Type;
+  u16 Value; // Interpretation depends on Type.
+};
+
+enum struct instruction_type
+{
+  INVALID,
+
+  CLS,
+  RET,
+  SYS,
+  JP,
+  CALL,
+  SE,
+  SNE,
+  LD,
+  ADD,
+  OR,
+  AND,
+  XOR,
+  SUB,
+  SHR,
+  SUBN,
+  SHL,
+  RND,
+  DRW,
+  SKP,
+  SKNP,
+};
+
+struct instruction
+{
+  instruction_type Type;
+  argument Args[3];
+};
+
+union instruction_decoder
 {
   u16 Data;
 
   struct
   {
-    u16 Args  : 12;
-    u16 Group : 4;
+    u16 Address : 12;
+    u16 Group   : 4;
   };
 
   struct
   {
-    u16 Nibble3 : 4;
-    u16 Nibble2 : 4;
-    u16 Nibble1 : 4;
-    u16 Nibble0 : 4;
+    u16 LSN : 4; // Least significant nibble
+    u16 Y   : 4;
+    u16 X   : 4;
+    u16 MSN : 4; // Most significant nibble
   };
 
   struct
   {
-    u16 Byte1 : 8;
-    u16 Byte0 : 8;
+    u16 LSB : 8; // Least significant byte
+    u16 MSB : 8; // Most significant byte
   };
 };
 
-static_assert(sizeof(instruction) == sizeof(u16), "Invalid size for `instruction`.");
+static_assert(sizeof(instruction_decoder) == sizeof(u16), "Invalid size for `instruction`.");
 
 // TODO: Should the machine load the rom?
 void
@@ -99,12 +156,40 @@ InitMachine(machine* M);
 void
 ClearScreen(machine* M);
 
+u16
+GetDigitSpriteAddress(machine* M, u8 Digit);
+
 sprite
 GetCharacterSprite(machine* M, char Character);
 
 void
 DrawSprite(machine* M, int X, int Y, sprite Sprite);
 
-// `true` means continue ticking.
+u8
+ReadByte(machine* M, u16 Address);
+
+u16
+ReadWord(machine* M, u16 Address);
+
+void
+WriteByte(machine* M, u16 Address, u8 Byte);
+
+void
+WriteWord(machine* M, u16 Address, u16 Word);
+
+// Return value of `true` means continue ticking.
 bool
 Tick(machine* M);
+
+// NOTE: Provided by the platform layer.
+void
+Print(char const* String);
+
+u16
+FetchInstruction(machine* M);
+
+instruction
+DecodeInstruction(u16 OpCode);
+
+void
+ExecuteInstruction(machine* M, instruction Instruction);

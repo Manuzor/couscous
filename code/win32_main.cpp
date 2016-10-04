@@ -6,6 +6,12 @@
 
 #include <Windows.h>
 
+void
+Print(char const* String)
+{
+  OutputDebugStringA(String);
+}
+
 struct colorRGB8
 {
   union
@@ -80,12 +86,6 @@ LoadRom(char const* FileName, DWORD MaxRomLength, u8* Dest)
           &Result,    // _Out_opt_   LPDWORD      lpNumberOfBytesRead
           nullptr))   // _Inout_opt_ LPOVERLAPPED lpOverlapped
       {
-        // Enforce big endian byte-order.
-        for(DWORD Index = 0; Index < RomLength - 1; Index += 2)
-        {
-          Swap(Dest[Index], Dest[Index + 1]);
-        }
-
         CloseHandle(FileHandle);
       }
       else
@@ -465,7 +465,7 @@ Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
   return Result;
 }
 
-#define USE_TEST_PROGRAM 1
+#define USE_TEST_PROGRAM 0
 
 #if USE_TEST_PROGRAM
   #include "testprogram.cpp"
@@ -499,7 +499,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     CopyBytes(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
   #else
     // Insert ROM data into the machine.
-    DWORD RomLength = LoadRom(FileName, Length(M->Memory) - PROGRAM_START_ADDRESS, M->Memory + PROGRAM_START_ADDRESS);
+    DWORD RomLength = LoadRom(FileName, LengthOf(M->Memory) - PROGRAM_START_ADDRESS, M->Memory + PROGRAM_START_ADDRESS);
   #endif
 
   if(RomLength)
@@ -572,11 +572,17 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
         if(!Tick(M))
         {
-          PostQuitMessage(0);
+          break;
         }
 
         Win32SwapBuffers(Screen, &Win32FrontBuffer);
         Win32Present(Window.Handle, &Win32FrontBuffer);
+      }
+
+      // PostQuitMessage(0);
+      while(true)
+      {
+        Win32MessagePump(&Window);
       }
     }
     else
