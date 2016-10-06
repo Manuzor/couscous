@@ -10,6 +10,16 @@
   #define COUSCOUS_TESTS 0
 #endif
 
+#define INSTRUCTION(Word) (u8)((Word) >> 8), (u8)((Word) & 0x00FF)
+
+#if !defined(USE_TEST_PROGRAM)
+  #define USE_TEST_PROGRAM 1
+#endif
+
+#if USE_TEST_PROGRAM
+  #include "testprogram.cpp"
+#endif
+
 void
 Print(char const* String)
 {
@@ -59,12 +69,11 @@ struct loaded_rom
   u8* Ptr;
 };
 
-// TODO: Load directly into RAM.
 internal
-DWORD // The length written.
-LoadRom(char const* FileName, DWORD MaxRomLength, u8* Dest)
+slice<u8>
+Win32LoadRomFromFile(char const* FileName, slice<u8> RomBuffer)
 {
-  DWORD Result{};
+  slice<u8> Result{};
 
   HANDLE FileHandle = CreateFileA(
     FileName,        // _In_     LPCTSTR               lpFileName,
@@ -81,16 +90,22 @@ LoadRom(char const* FileName, DWORD MaxRomLength, u8* Dest)
     GetFileSizeEx(FileHandle, &FileSize);
 
     auto const RomLength = Convert<DWORD>(FileSize.QuadPart);
-    if(RomLength <= MaxRomLength)
+    if(RomLength <= LengthOf(RomBuffer))
     {
+      DWORD NumBytesRead;
       if(ReadFile(
-          FileHandle, // _In_        HANDLE       hFile
-          Dest,       // _Out_       LPVOID       lpBuffer
-          RomLength,  // _In_        DWORD        nNumberOfBytesToRead
-          &Result,    // _Out_opt_   LPDWORD      lpNumberOfBytesRead
-          nullptr))   // _Inout_opt_ LPOVERLAPPED lpOverlapped
+          FileHandle,    // _In_        HANDLE       hFile
+          RomBuffer.Ptr, // _Out_       LPVOID       lpBuffer
+          RomLength,     // _In_        DWORD        nNumberOfBytesToRead
+          &NumBytesRead, // _Out_opt_   LPDWORD      lpNumberOfBytesRead
+          nullptr))      // _Inout_opt_ LPOVERLAPPED lpOverlapped
       {
         CloseHandle(FileHandle);
+
+        if(NumBytesRead == RomLength)
+        {
+          Result = { RomLength, RomBuffer.Ptr };
+        }
       }
       else
       {
@@ -469,14 +484,6 @@ Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
   return Result;
 }
 
-#if !defined(USE_TEST_PROGRAM)
-  #define USE_TEST_PROGRAM 0
-#endif
-
-#if USE_TEST_PROGRAM
-  #include "testprogram.cpp"
-#endif
-
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
@@ -525,15 +532,24 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
   auto M = (machine*)PushStruct(&UtilStack, machine);
   ConstructElements(1, M);
 
-  #if USE_TEST_PROGRAM
-    DWORD RomLength = (DWORD)sizeof(GlobalTestProgram);
-    CopyBytes(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
-  #else
-    // Insert ROM data into the machine.
-    DWORD RomLength = LoadRom(FileName, LengthOf(M->Memory) - PROGRAM_START_ADDRESS, M->Memory + PROGRAM_START_ADDRESS);
-  #endif
+  bool RomLoaded{};
+  {
+    slice<u8> Rom{};
+    #if USE_TEST_PROGRAM
+      Rom = Slice(GlobalTestProgram);
+      // DWORD RomLength = (DWORD)sizeof(GlobalTestProgram);
+      // CopyBytes(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
+    #else
 
-  if(RomLength)
+      u8 RomData[MAX_ROM_LENGTH];
+      Rom = Win32LoadRomFromFile(FileName, Slice(RomData));
+    #endif
+
+    // Insert ROM data into the machine.
+    RomLoaded = LoadRom(M, Rom);
+  }
+
+  if(RomLoaded)
   {
     const int ScreenWidth = 64;
     const int ScreenHeight = 32;

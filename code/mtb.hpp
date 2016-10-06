@@ -1502,11 +1502,6 @@ template<typename T>
 void
 MoveConstructElements(size_t Num, T* Destination, T* Source);
 
-/// Assign the default value of T to all elements in Destination.
-template<typename T>
-void
-SetElementsToDefault(size_t Num, T* Destination);
-
 /// Assign Item to all elements in Destination.
 template<typename T>
 void

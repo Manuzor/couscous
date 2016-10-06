@@ -1,5 +1,3 @@
-#define INSTRUCTION(Word) (u8)((Word) >> 8), (u8)((Word) & 0x00FF)
-
 internal
 u8 GlobalTestProgram[]
 {

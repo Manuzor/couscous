@@ -97,6 +97,25 @@ auto
 
 internal
 auto
+::LoadRom(machine* M, slice<u8> Rom)
+  -> bool
+{
+  bool Result{};
+
+  if(LengthOf(Rom) <= MAX_ROM_LENGTH)
+  {
+    u8* Source = Rom.Ptr;
+    u8* Dest = M->Memory + PROGRAM_START_ADDRESS;
+    CopyBytes(LengthOf(Rom), Dest, Source);
+
+    Result = true;
+  }
+
+  return Result;
+}
+
+internal
+auto
 ::ReadByte(machine* M, u16 Address)
   -> u8
 {

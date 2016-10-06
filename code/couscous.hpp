@@ -169,6 +169,9 @@ GetCharacterSprite(machine* M, char Character);
 void
 DrawSprite(machine* M, int X, int Y, sprite Sprite);
 
+bool
+LoadRom(machine* M, slice<u8> Rom);
+
 u8
 ReadByte(machine* M, u16 Address);
 
