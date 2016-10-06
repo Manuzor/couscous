@@ -20,5 +20,3 @@ u8 GlobalTestProgram[]
   // Padding.
   /* 0x11 */ 0b0000'0000,
 };
-
-#undef INSTRUCTION

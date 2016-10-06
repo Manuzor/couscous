@@ -411,12 +411,12 @@ LengthOf32(T(&)[N]) { return (u32)N; }
 /// Returns the number of elements in this static array.
 template<typename T, size_t N>
 constexpr size_t
-ByteLengthOf(T(&)[N]) { return N * (1 / SizeOf<T>()); }
+ByteLengthOf(T(&)[N]) { return N * SizeOf<T>(); }
 
 /// Same as \c LengthOf but force to 32 bit value.
 template<typename T, size_t N>
 constexpr u32
-ByteLengthOf32(T(&)[N]) { return (u32)N * (1 / SizeOf<T>()); }
+ByteLengthOf32(T(&)[N]) { return (u32)N * SizeOf<T>(); }
 
 /// Reinterpretation of the given pointer in case PointerType is `void`.
 template<typename PointerType>
@@ -1111,44 +1111,51 @@ struct impl_defer
 
 #include <math.h>
 
-float mtb::
+auto mtb::
 Pow(float Base, float Exponent)
+  -> float
 {
   return powf(Base, Exponent);
 }
 
-double mtb::
+auto mtb::
 Pow(double Base, double Exponent)
+  -> double
 {
   return pow(Base, Exponent);
 }
 
-float mtb::
+auto mtb::
 Mod(float Value, float Divisor)
+  -> float
 {
   return fmodf(Value, Divisor);
 }
 
-double mtb::
+auto mtb::
 Mod(double Value, double Divisor)
+  -> double
 {
   return fmod(Value, Divisor);
 }
 
-float mtb::
+auto mtb::
 Sqrt(float Value)
+  -> float
 {
   return sqrtf(Value);
 }
 
-double mtb::
+auto mtb::
 Sqrt(double Value)
+  -> double
 {
   return sqrt(Value);
 }
 
-float mtb::
+auto mtb::
 InvSqrt(float Value)
+  -> float
 {
   union FloatInt
   {
@@ -1170,14 +1177,16 @@ InvSqrt(float Value)
   return Result;
 }
 
-bool mtb::
+auto mtb::
 AreNearlyEqual(double A, double B, double Epsilon)
+  -> bool
 {
   return Abs(A - B) <= Epsilon;
 }
 
-bool mtb::
+auto mtb::
 AreNearlyEqual(float A, float B, float Epsilon)
+  -> bool
 {
   return Abs(A - B) <= Epsilon;
 }
@@ -1304,6 +1313,14 @@ bool OnFailedCheck(
         MTB_DebugBreak; \
       } \
     } while(0)
+#endif
+
+#if !defined(MTB_NotImplemented)
+  #define MTB_NotImplemented MTB_ReportError("Not implemented.")
+#endif
+
+#if !defined(MTB_InvalidCodePath)
+  #define MTB_InvalidCodePath MTB_ReportError("Invalid code path.")
 #endif
 
 

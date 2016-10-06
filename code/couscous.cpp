@@ -18,7 +18,7 @@ auto
   -> void
 {
   size_t const ScreenPixelsLength = M->Screen.Width * M->Screen.Height;
-  SetBytes(ScreenPixelsLength, M->Screen.Pixels, 0);
+  SetElements(ScreenPixelsLength, M->Screen.Pixels);
 }
 
 internal
@@ -893,3 +893,7 @@ auto
   }
   Print("Invalid instruction to execute.");
 }
+
+#if defined(COUSCOUS_TESTS)
+  #include "couscous_tests.cpp"
+#endif

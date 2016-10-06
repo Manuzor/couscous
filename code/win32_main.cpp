@@ -6,6 +6,10 @@
 
 #include <Windows.h>
 
+#if !defined(COUSCOUS_TESTS)
+  #define COUSCOUS_TESTS 0
+#endif
+
 void
 Print(char const* String)
 {
@@ -465,7 +469,9 @@ Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
   return Result;
 }
 
-#define USE_TEST_PROGRAM 0
+#if !defined(USE_TEST_PROGRAM)
+  #define USE_TEST_PROGRAM 0
+#endif
 
 #if USE_TEST_PROGRAM
   #include "testprogram.cpp"
@@ -475,6 +481,31 @@ int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
 {
+  #if COUSCOUS_TESTS
+  {
+    machine TestMachine;
+    int const TestScreenWidth = 8;
+    int const TestScreenHeight = 4;
+    bool32 TestScreen[TestScreenWidth * TestScreenHeight];
+    for(test* Test = GlobalFirstTest;
+        Test;
+        Test = Test->Next)
+    {
+      TestMachine = {};
+      TestMachine.Screen.Width = TestScreenWidth;
+      TestMachine.Screen.Height = TestScreenHeight;
+      TestMachine.Screen.Pixels = TestScreen;
+      SetBytes(ByteLengthOf(TestScreen), TestScreen, 0xcd);
+
+      char const* Name = Test->Name;
+      Print("Test: ");
+      Print(Name);
+      Print("\n");
+      Test->Procedure(&TestMachine);
+    }
+  }
+  #endif
+
   // MTB_Require(ArgsLength == 2, "Invalid number of arguments.");
 
   char const* FileName = CommandLine;

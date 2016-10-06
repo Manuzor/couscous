@@ -119,7 +119,11 @@ enum struct instruction_type
 struct instruction
 {
   instruction_type Type;
-  argument Args[3];
+  union
+  {
+    argument Arg0, Arg1, Arg2;
+    argument Args[3];
+  };
 };
 
 union instruction_decoder
