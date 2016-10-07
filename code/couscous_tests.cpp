@@ -46,37 +46,18 @@ RunTests()
     instruction Inst{ instruction_type::CLS };
     ExecuteInstruction(A, Inst);
     MTB_Require( *A == *B );
-  }
-
-  {
-    *A = {};
-    *B = {};
 
     instruction Inst = INST2(LD, V, 0, BYTE, 42);
     ExecuteInstruction(A, Inst);
     MTB_Require( *A != *B );
     B->V[0x0] = 42;
     MTB_Require( *A == *B );
+
+    Inst = INST2(LD, I,, ADDRESS, 512);
+    ExecuteInstruction(A, Inst);
+    B->I = 512;
+    MTB_Require( *A == *B );
   }
-
-  // {
-  //   u8 ROM[]
-  //   {
-  //     INSTRUCTION(0xF01E),
-  //     INSTRUCTION(0x7142),
-  //   };
-
-  //   instruction Inst{ instruction_type::CLS };
-  //   ExecuteInstruction(A, Inst);
-  //   for (int Y = 0; Y < SCREEN_HEIGHT; ++Y)
-  //   {
-  //     for (int X = 0; X < SCREEN_WIDTH; ++X)
-  //     {
-  //       bool32* Pixel = A->Screen + (Y * SCREEN_WIDTH) + X;
-  //       MTB_Require(*Pixel == false);
-  //     }
-  //   }
-  // }
 }
 
 #undef INST3
