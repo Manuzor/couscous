@@ -6,19 +6,9 @@ using namespace mtb;
 
 enum
 {
-  MEMORY_LENGTH = 4096,
-  PROGRAM_START_ADDRESS = 0x200,
-  MAX_ROM_LENGTH = MEMORY_LENGTH - PROGRAM_START_ADDRESS,
-  STACK_LENGTH = 16,
   CHAR_MEMORY_OFFSET = 0,
-};
-
-struct screen
-{
-  bool32* Pixels;
-
-  int Width;
-  int Height;
+  SCREEN_WIDTH = 64,
+  SCREEN_HEIGHT = 32,
 };
 
 struct sprite
@@ -29,23 +19,7 @@ struct sprite
 
 struct machine
 {
-  u8 GPR[16];
-  u8* V0 = GPR + 0x0;
-  u8* V1 = GPR + 0x1;
-  u8* V2 = GPR + 0x2;
-  u8* V3 = GPR + 0x3;
-  u8* V4 = GPR + 0x4;
-  u8* V5 = GPR + 0x5;
-  u8* V6 = GPR + 0x6;
-  u8* V7 = GPR + 0x7;
-  u8* V8 = GPR + 0x8;
-  u8* V9 = GPR + 0x9;
-  u8* VA = GPR + 0xA;
-  u8* VB = GPR + 0xB;
-  u8* VC = GPR + 0xC;
-  u8* VD = GPR + 0xD;
-  u8* VE = GPR + 0xE;
-  u8* VF = GPR + 0xF;
+  u8 V[16];
 
   u16 I;
 
@@ -53,16 +27,25 @@ struct machine
   u8 ST;
 
   // RAM
-  u8 Memory[MEMORY_LENGTH];
+  union
+  {
+    u8 Memory[4096];
+
+    struct
+    {
+      u8 InterpreterMemory[0x200];
+      u8 ProgramMemory[4096 - 0x200];
+    };
+  };
 
   u8 StackPointer;
-  u16 Stack[STACK_LENGTH];
+  u16 Stack[16];
 
   u16 ProgramCounter;
 
   bool Input[16];
 
-  screen Screen;
+  bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
 };
 
 enum struct argument_type
@@ -121,7 +104,12 @@ struct instruction
   instruction_type Type;
   union
   {
-    argument Arg0, Arg1, Arg2;
+    struct
+    {
+      argument Arg0;
+      argument Arg1;
+      argument Arg2;
+    };
     argument Args[3];
   };
 };

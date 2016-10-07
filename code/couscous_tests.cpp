@@ -1,43 +1,85 @@
 
-using test_proc = void(*)(machine* M);
-
-struct test
+internal
+bool
+operator==(machine const& A, machine const& B)
 {
-  const char* Name;
-  test_proc Procedure;
-  test* Next;
-};
+  return AreBytesEqual(sizeof(machine), &A, &B);
+}
 
-static test* GlobalFirstTest;
-
-struct impl_test_reg
+internal
+bool
+operator!=(machine const& A, machine const& B)
 {
-  impl_test_reg(char const* Name, test_proc NewProc)
-  {
-    auto NewTest = new test{ Name, NewProc };
-    NewTest->Next = Exchange(GlobalFirstTest, NewTest);
-  }
-};
+  return !(A == B);
+}
 
-#define REGISTER_TEST(Name) \
-  void MTB_Concat(TESTPROC_, MTB_Line)(machine* M); \
-  static impl_test_reg MTB_Concat(TESTREG_, MTB_Line){ Name, &MTB_Concat(TESTPROC_, MTB_Line) }; \
-  auto ::MTB_Concat(TESTPROC_, MTB_Line)(machine* M) -> void
 
 //
 // ===============================================
 //
 
-REGISTER_TEST("CLS")
+#define INST0(InstType) instruction{ instruction_type::InstType }
+#define INST1(InstType, Arg1Type, Arg1Val) instruction{ instruction_type::InstType, argument{ argument_type::Arg1Type, Arg1Val } }
+#define INST2(InstType, Arg1Type, Arg1Val, Arg2Type, Arg2Val) instruction{ instruction_type::InstType, argument{ argument_type::Arg1Type, Arg1Val }, argument{ argument_type::Arg2Type, Arg2Val } }
+#define INST3(InstType, Arg1Type, Arg1Val, Arg2Type, Arg2Val, Arg3Type, Arg3Val) instruction{ instruction_type::InstType, argument{ argument_type::Arg1Type, Arg1Val }, argument{ argument_type::Arg2Type, Arg2Val }, argument{ argument_type::Arg3Type, Arg3Val } }
+
+internal
+void
+RunTests()
 {
-  instruction Inst{ instruction_type::CLS };
-  ExecuteInstruction(M, Inst);
-  for (int Y = 0; Y < M->Screen.Height; ++Y)
+  using inst = instruction_type;
+  using arg = argument_type;
+
+  machine MachineA;
+  machine MachineB;
+  machine* A = &MachineA;
+  machine* B = &MachineB;
+
   {
-    for (int X = 0; X < M->Screen.Width; ++X)
-    {
-      bool32* Pixel = M->Screen.Pixels + (Y * M->Screen.Width) + X;
-      MTB_Require(*Pixel == false);
-    }
+    *A = {};
+    *B = {};
+
+    A->Screen[0] = 1;
+
+    MTB_Require( *A != *B );
+
+    instruction Inst{ instruction_type::CLS };
+    ExecuteInstruction(A, Inst);
+    MTB_Require( *A == *B );
   }
+
+  {
+    *A = {};
+    *B = {};
+
+    instruction Inst = INST2(LD, V, 0, BYTE, 42);
+    ExecuteInstruction(A, Inst);
+    MTB_Require( *A != *B );
+    B->V[0x0] = 42;
+    MTB_Require( *A == *B );
+  }
+
+  // {
+  //   u8 ROM[]
+  //   {
+  //     INSTRUCTION(0xF01E),
+  //     INSTRUCTION(0x7142),
+  //   };
+
+  //   instruction Inst{ instruction_type::CLS };
+  //   ExecuteInstruction(A, Inst);
+  //   for (int Y = 0; Y < SCREEN_HEIGHT; ++Y)
+  //   {
+  //     for (int X = 0; X < SCREEN_WIDTH; ++X)
+  //     {
+  //       bool32* Pixel = A->Screen + (Y * SCREEN_WIDTH) + X;
+  //       MTB_Require(*Pixel == false);
+  //     }
+  //   }
+  // }
 }
+
+#undef INST3
+#undef INST2
+#undef INST1
+#undef INST0

@@ -1,6 +1,8 @@
 #define MTB_IMPLEMENTATION
 #include "mtb.hpp"
 
+#define INSTRUCTION(Word) (u8)((Word) >> 8), (u8)((Word) & 0x00FF)
+
 #include "couscous.hpp"
 #include "couscous.cpp"
 
@@ -9,8 +11,6 @@
 #if !defined(COUSCOUS_TESTS)
   #define COUSCOUS_TESTS 0
 #endif
-
-#define INSTRUCTION(Word) (u8)((Word) >> 8), (u8)((Word) & 0x00FF)
 
 #if !defined(USE_TEST_PROGRAM)
   #define USE_TEST_PROGRAM 1
@@ -143,16 +143,14 @@ struct win32_front_buffer
 
 internal
 void
-Win32SwapBuffers(screen* Screen, win32_front_buffer* Front)
+Win32SwapBuffers(bool32* ScreenPixels, win32_front_buffer* Front)
 {
-  size_t const Width = Screen->Width;
-  size_t const Height = Screen->Height;
   colorRGB8* FrontPixel = Front->Pixels;
-  bool32* ScreenPixel = Screen->Pixels;
+  bool32* ScreenPixel = ScreenPixels;
 
-  for(size_t Y = 0; Y < Height; ++Y)
+  for(size_t Y = 0; Y < SCREEN_HEIGHT; ++Y)
   {
-    for(size_t X = 0; X < Width; ++X, ++ScreenPixel, ++FrontPixel)
+    for(size_t X = 0; X < SCREEN_WIDTH; ++X, ++ScreenPixel, ++FrontPixel)
     {
       colorRGB8 NewColor;
       if(*ScreenPixel) NewColor = Front->PixelColorOn;
@@ -489,28 +487,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
 {
   #if COUSCOUS_TESTS
-  {
-    machine TestMachine;
-    int const TestScreenWidth = 8;
-    int const TestScreenHeight = 4;
-    bool32 TestScreen[TestScreenWidth * TestScreenHeight];
-    for(test* Test = GlobalFirstTest;
-        Test;
-        Test = Test->Next)
-    {
-      TestMachine = {};
-      TestMachine.Screen.Width = TestScreenWidth;
-      TestMachine.Screen.Height = TestScreenHeight;
-      TestMachine.Screen.Pixels = TestScreen;
-      SetBytes(ByteLengthOf(TestScreen), TestScreen, 0xcd);
-
-      char const* Name = Test->Name;
-      Print("Test: ");
-      Print(Name);
-      Print("\n");
-      Test->Procedure(&TestMachine);
-    }
-  }
+    RunTests();
   #endif
 
   // MTB_Require(ArgsLength == 2, "Invalid number of arguments.");
@@ -551,8 +528,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
   if(RomLoaded)
   {
-    const int ScreenWidth = 64;
-    const int ScreenHeight = 32;
+    const int ScreenWidth = SCREEN_WIDTH;
+    const int ScreenHeight = SCREEN_HEIGHT;
     const int SizeOfPixelInWindow = 16;
     win32_window Window = Win32CreateWindow(ProcessHandle, "Couscous - CHIP-8",
                                             ScreenWidth * SizeOfPixelInWindow,
@@ -564,30 +541,22 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       //
       win32_front_buffer Win32FrontBuffer{};
       Win32FrontBuffer.BytesPerPixel = 3;
-      Win32FrontBuffer.Width = ScreenWidth;
-      Win32FrontBuffer.Height = ScreenHeight;
+      Win32FrontBuffer.Width = SCREEN_WIDTH;
+      Win32FrontBuffer.Height = SCREEN_HEIGHT;
       Win32FrontBuffer.Pitch = Win32FrontBuffer.Width * Win32FrontBuffer.BytesPerPixel;
       Win32FrontBuffer.BitmapInfo.bmiHeader.biSize = sizeof(Win32FrontBuffer.BitmapInfo.bmiHeader);
       Win32FrontBuffer.BitmapInfo.bmiHeader.biWidth = (LONG)Win32FrontBuffer.Width;
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biHeight = -(LONG)Win32FrontBuffer.Height;
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biHeight = -(LONG)Win32FrontBuffer.Height; // Note: This is negative so pixels go downwards.
       Win32FrontBuffer.BitmapInfo.bmiHeader.biPlanes = 1;
       Win32FrontBuffer.BitmapInfo.bmiHeader.biBitCount = Win32FrontBuffer.BytesPerPixel * 8;
       Win32FrontBuffer.BitmapInfo.bmiHeader.biCompression = BI_RGB;
       Win32FrontBuffer.Pixels = (decltype(Win32FrontBuffer.Pixels))PushBytes(&UtilStack, Win32FrontBuffer.Width * Win32FrontBuffer.Height * Win32FrontBuffer.BytesPerPixel);
       Win32FrontBuffer.PixelColorOff = { 16, 64, 16 };
-      Win32FrontBuffer.PixelColorOn =  {  8, 16,  8 };
-
-      //
-      // Create back buffer data.
-      //
-      screen* Screen = &M->Screen;
-      Screen->Width = (int)Win32FrontBuffer.Width;
-      Screen->Height = (int)Win32FrontBuffer.Height;
-      Screen->Pixels = (decltype(Screen->Pixels))PushBytes(&UtilStack, Screen->Width * Screen->Height);
+      Win32FrontBuffer.PixelColorOn = { 8, 16, 8 };
 
       // Init clear and swap to ensure properly cleared buffers.
       ClearScreen(M);
-      Win32SwapBuffers(Screen, &Win32FrontBuffer);
+      Win32SwapBuffers(M->Screen, &Win32FrontBuffer);
 
       // Associate the back buffer with the window for presenting.
       SetWindowLongPtr(Window.Handle, GWLP_USERDATA, Reinterpret<LONG_PTR>(&Win32FrontBuffer));
@@ -622,7 +591,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
           break;
         }
 
-        Win32SwapBuffers(Screen, &Win32FrontBuffer);
+        Win32SwapBuffers(M->Screen, &Win32FrontBuffer);
         Win32Present(Window.Handle, &Win32FrontBuffer);
       }
 

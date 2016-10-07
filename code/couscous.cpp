@@ -9,7 +9,8 @@ auto
   u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
   CopyBytes(ByteLengthOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
 
-  M->ProgramCounter = PROGRAM_START_ADDRESS;
+  M->ProgramCounter = (size_t)((u8*)M->ProgramMemory - (u8*)M->InterpreterMemory);
+  MTB_DebugAssert(M->ProgramCounter == 0x200);
 }
 
 internal
@@ -17,8 +18,8 @@ auto
 ::ClearScreen(machine* M)
   -> void
 {
-  size_t const ScreenPixelsLength = M->Screen.Width * M->Screen.Height;
-  SetElements(ScreenPixelsLength, M->Screen.Pixels);
+  size_t const ScreenPixelsLength = SCREEN_WIDTH * SCREEN_HEIGHT;
+  SetElements(ScreenPixelsLength, M->Screen);
 }
 
 internal
@@ -27,38 +28,6 @@ auto
   -> u16
 {
   u16 Result = (u16)CHAR_MEMORY_OFFSET + (u16)Digit;
-  return Result;
-}
-
-internal
-auto
-::GetCharacterSprite(machine* M, char Character)
-  -> sprite
-{
-  sprite Result{};
-  Result.Length = 5;
-
-  int Offset{};
-
-  if(Character >= '0' && Character <= '9')
-  {
-    Offset = (int)Character - (int)'0';
-  }
-  else if(Character >= 'A' && Character <= 'Z')
-  {
-    Offset = 9 + (int)Character - (int)'A';
-  }
-  else
-  {
-    MTB_ReportError("Invalid character.");
-  }
-
-  // Every character sprite has a length of 5.
-  Offset *= 5;
-
-  u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
-  Result.Pixels = CharMemory + Offset;
-
   return Result;
 }
 
@@ -78,13 +47,21 @@ auto
     u8* SpritePixel = Sprite.Pixels + SpriteY;
 
     int ScreenY = StartY + SpriteY;
-    while(ScreenY > M->Screen.Height) ScreenY -= M->Screen.Height;
+
+    // TODO: Check for proper wrapping.
+    while(ScreenY > SCREEN_HEIGHT)
+      ScreenY -= SCREEN_HEIGHT;
+
     for (int SpriteX = 0; SpriteX < SpriteWidth; ++SpriteX)
     {
       int ScreenX = StartX + SpriteX;
-      while(ScreenX > M->Screen.Width) ScreenX -= M->Screen.Width;
-      int const ScreenOffset = (ScreenY * M->Screen.Width) + ScreenX;
-      bool32* ScreenPixel = M->Screen.Pixels + ScreenOffset;
+
+      // TODO: Check for proper wrapping.
+      while(ScreenX > SCREEN_WIDTH)
+        ScreenX -= SCREEN_WIDTH;
+
+      int const ScreenOffset = (ScreenY * SCREEN_WIDTH) + ScreenX;
+      bool32* ScreenPixel = M->Screen + ScreenOffset;
 
       bool32 SpriteColor = IsBitSet((u32)*SpritePixel, 7 - SpriteX);
       HasCollision |= *ScreenPixel & SpriteColor;
@@ -92,7 +69,7 @@ auto
     }
   }
 
-  *M->VF = !!HasCollision;
+  M->V[0xF] = !!HasCollision;
 }
 
 internal
@@ -102,10 +79,10 @@ auto
 {
   bool Result{};
 
-  if(LengthOf(Rom) <= MAX_ROM_LENGTH)
+  if(LengthOf(Rom) <= LengthOf(M->ProgramMemory))
   {
     u8* Source = Rom.Ptr;
-    u8* Dest = M->Memory + PROGRAM_START_ADDRESS;
+    u8* Dest = M->ProgramMemory;
     CopyBytes(LengthOf(Rom), Dest, Source);
 
     Result = true;
@@ -582,7 +559,7 @@ auto
       {
         case argument_type::V:
         {
-          u8* Reg = M->GPR + Instruction.Args[0].Value;
+          u8* Reg = M->V + Instruction.Args[0].Value;
           M->ProgramCounter = Instruction.Args[1].Value + *Reg;
           return;
         }
@@ -613,15 +590,15 @@ auto
       {
         case argument_type::V:
         {
-          u8 Lhs = M->GPR[Instruction.Args[0].Value];
-          u8 Rhs = M->GPR[Instruction.Args[1].Value];
+          u8 Lhs = M->V[Instruction.Args[0].Value];
+          u8 Rhs = M->V[Instruction.Args[1].Value];
           if(Lhs == Rhs)
             M->ProgramCounter += 2;
           return;
         }
         case argument_type::BYTE:
         {
-          u8 Lhs = M->GPR[Instruction.Args[0].Value];
+          u8 Lhs = M->V[Instruction.Args[0].Value];
           u8 Rhs = (u8)Instruction.Args[1].Value;
           if(Lhs == Rhs)
             M->ProgramCounter += 2;
@@ -636,15 +613,15 @@ auto
       {
         case argument_type::V:
         {
-          u8 Lhs = M->GPR[Instruction.Args[0].Value];
-          u8 Rhs = M->GPR[Instruction.Args[1].Value];
+          u8 Lhs = M->V[Instruction.Args[0].Value];
+          u8 Rhs = M->V[Instruction.Args[1].Value];
           if(Lhs != Rhs)
             M->ProgramCounter += 2;
           return;
         }
         case argument_type::BYTE:
         {
-          u8 Lhs = M->GPR[Instruction.Args[0].Value];
+          u8 Lhs = M->V[Instruction.Args[0].Value];
           u8 Rhs = (u8)Instruction.Args[1].Value;
           if(Lhs != Rhs)
             M->ProgramCounter += 2;
@@ -665,7 +642,7 @@ auto
             {
               u8 Num = (u8)Instruction.Args[1].Value;
               u8* Dest = M->Memory + M->I;
-              u8* Source = M->GPR;
+              u8* Source = M->V;
               CopyBytes(Num, Dest, Source);
               return;
             }
@@ -678,7 +655,7 @@ auto
           {
             case argument_type::V:
             {
-              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              u8* Reg = M->V + Instruction.Args[1].Value;
               u8* DDD = M->Memory + (M->I + 0);
               u8* DD  = M->Memory + (M->I + 1);
               u8* D   = M->Memory + (M->I + 2);
@@ -698,7 +675,7 @@ auto
           {
             case argument_type::V:
             {
-              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              u8* Reg = M->V + Instruction.Args[1].Value;
               M->DT = *Reg;
               return;
             }
@@ -711,7 +688,7 @@ auto
           {
             case argument_type::V:
             {
-              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              u8* Reg = M->V + Instruction.Args[1].Value;
               M->I = GetDigitSpriteAddress(M, *Reg);
               return;
             }
@@ -736,7 +713,7 @@ auto
           {
             case argument_type::V:
             {
-              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              u8* Reg = M->V + Instruction.Args[1].Value;
               M->ST = *Reg;
               return;
             }
@@ -750,34 +727,34 @@ auto
             case argument_type::ATI:
             {
               u8 Num = (u8)Instruction.Args[0].Value;
-              u8* Dest = M->GPR;
+              u8* Dest = M->V;
               u8* Source = M->Memory + M->I;
               CopyBytes(Num, Dest, Source);
               return;
             }
             case argument_type::BYTE:
             {
-              u8* Reg = M->GPR + Instruction.Args[0].Value;
+              u8* Reg = M->V + Instruction.Args[0].Value;
               *Reg = (u8)Instruction.Args[1].Value;
               return;
             }
             case argument_type::DT:
             {
-              u8* Reg = M->GPR + Instruction.Args[0].Value;
+              u8* Reg = M->V + Instruction.Args[0].Value;
               *Reg = M->DT;
               return;
             }
             case argument_type::K:
             {
-              u8* Reg = M->GPR + Instruction.Args[0].Value;
+              u8* Reg = M->V + Instruction.Args[0].Value;
               // TODO: All execution stops until a key is pressed, then the
               // value of that key is stored in Vx.
               return;
             }
             case argument_type::V:
             {
-              u8* RegA = M->GPR + Instruction.Args[0].Value;
-              u8* RegB = M->GPR + Instruction.Args[1].Value;
+              u8* RegA = M->V + Instruction.Args[0].Value;
+              u8* RegB = M->V + Instruction.Args[1].Value;
               *RegA = *RegB;
               return;
             }
@@ -797,7 +774,7 @@ auto
           {
             case argument_type:: V:
             {
-              u8* Reg = M->GPR + Instruction.Args[1].Value;
+              u8* Reg = M->V + Instruction.Args[1].Value;
               M->I += *Reg;
               return;
             }
@@ -806,7 +783,7 @@ auto
         }
         case argument_type::V:
         {
-          u8* Reg = M->GPR + Instruction.Args[0].Value;
+          u8* Reg = M->V + Instruction.Args[0].Value;
           switch(Instruction.Args[1].Type)
           {
             case argument_type:: BYTE:
@@ -816,10 +793,10 @@ auto
             }
             case argument_type:: V:
             {
-              u8* OtherReg = M->GPR + Instruction.Args[1].Value;
+              u8* OtherReg = M->V + Instruction.Args[1].Value;
               u16 Result = (u16)*Reg + (u16)*OtherReg;
               *Reg += *OtherReg;
-              *M->VF = (u8)(Result > 255);
+              M->V[0xF] = (u8)(Result > 255);
               *Reg = (u8)(Result & 0xFF);
               return;
             }
@@ -883,8 +860,8 @@ auto
               {
                 case argument_type::NIBBLE:
                 {
-                  u8* RegA = M->GPR + Instruction.Args[0].Value;
-                  u8* RegB = M->GPR + Instruction.Args[1].Value;
+                  u8* RegA = M->V + Instruction.Args[0].Value;
+                  u8* RegB = M->V + Instruction.Args[1].Value;
                   sprite Sprite;
                   Sprite.Length = (int)Instruction.Args[2].Value;
                   Sprite.Pixels = (u8*)(M->Memory + M->I);
