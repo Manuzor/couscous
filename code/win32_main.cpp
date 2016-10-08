@@ -1,6 +1,10 @@
 #define MTB_IMPLEMENTATION
 #include "mtb.hpp"
 
+#if MTB_IsOn(MTB_Internal)
+  #include <stdio.h>
+#endif
+
 #define INSTRUCTION(Word) (u8)((Word) >> 8), (u8)((Word) & 0x00FF)
 
 #include "couscous.hpp"
@@ -13,18 +17,12 @@
 #endif
 
 #if !defined(USE_TEST_PROGRAM)
-  #define USE_TEST_PROGRAM 1
+  #define USE_TEST_PROGRAM 0
 #endif
 
 #if USE_TEST_PROGRAM
   #include "testprogram.cpp"
 #endif
-
-void
-Print(char const* String)
-{
-  OutputDebugStringA(String);
-}
 
 struct colorRGB8
 {
@@ -486,6 +484,13 @@ int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
 {
+  #if MTB_IsOn(MTB_Internal)
+    AllocConsole();
+    AttachConsole(GetCurrentProcessId());
+    freopen("CON", "w", stdout);
+    SetConsoleTitleA("Couscous CHIP-8 Debug Console");
+  #endif
+
   #if COUSCOUS_TESTS
     RunTests();
   #endif
@@ -497,11 +502,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
   mem_stack UtilStack{};
   UtilStack.Length = MiB(1);
 
-  #if MTB_IsOn(MTB_Internal)
-    LPVOID BaseAddress = (LPVOID)(size_t)0x2'000'000;
-  #else
-    LPVOID BaseAddress = nullptr;
-  #endif
+  LPVOID BaseAddress = nullptr;
+  MTB_InternalCode( BaseAddress = (LPVOID)(size_t)0x2'000'000 );
   UtilStack.Ptr = (u8*)VirtualAlloc(BaseAddress, UtilStack.Length,
                                     MEM_RESERVE | MEM_COMMIT,
                                     PAGE_READWRITE);
@@ -518,7 +520,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       // CopyBytes(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
     #else
 
-      u8 RomData[MAX_ROM_LENGTH];
+      u8 RomData[SizeOf<decltype(machine::ProgramMemory)>()];
       Rom = Win32LoadRomFromFile(FileName, Slice(RomData));
     #endif
 
@@ -528,12 +530,20 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
   if(RomLoaded)
   {
-    const int ScreenWidth = SCREEN_WIDTH;
-    const int ScreenHeight = SCREEN_HEIGHT;
-    const int SizeOfPixelInWindow = 16;
-    win32_window Window = Win32CreateWindow(ProcessHandle, "Couscous - CHIP-8",
-                                            ScreenWidth * SizeOfPixelInWindow,
-                                            ScreenHeight * SizeOfPixelInWindow);
+    win32_window Window;
+
+    {
+      char WindowTitle[512]{};
+      Concat("Couscous CHIP-8 // "_S, SliceFromString(FileName), Slice(WindowTitle));
+
+      const int ScreenWidth = SCREEN_WIDTH;
+      const int ScreenHeight = SCREEN_HEIGHT;
+      const int SizeOfPixelInWindow = 16;
+      Window = Win32CreateWindow(ProcessHandle, WindowTitle,
+                                 ScreenWidth * SizeOfPixelInWindow,
+                                 ScreenHeight * SizeOfPixelInWindow);
+    }
+
     if(Window.Handle)
     {
       //

@@ -47,7 +47,7 @@ RunTests()
     ExecuteInstruction(A, Inst);
     MTB_Require( *A == *B );
 
-    instruction Inst = INST2(LD, V, 0, BYTE, 42);
+    Inst = INST2(LD, V, 0, BYTE, 42);
     ExecuteInstruction(A, Inst);
     MTB_Require( *A != *B );
     B->V[0x0] = 42;

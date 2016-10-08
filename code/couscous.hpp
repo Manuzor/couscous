@@ -176,15 +176,11 @@ WriteWord(machine* M, u16 Address, u16 Word);
 bool
 Tick(machine* M);
 
-// NOTE: Provided by the platform layer.
-void
-Print(char const* String);
-
 u16
 FetchInstruction(machine* M);
 
 instruction
-DecodeInstruction(u16 OpCode);
+DecodeInstruction(instruction_decoder Decoder);
 
 void
 ExecuteInstruction(machine* M, instruction Instruction);

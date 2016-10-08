@@ -38,29 +38,22 @@ auto
 {
   MTB_DebugAssert(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
 
-  int const SpriteWidth = 8; // Always 1 byte.
-  int const SpriteHeight = Sprite.Length;
+  int SpriteWidth = 8; // Always 1 byte.
+  int SpriteHeight = Sprite.Length;
+
+  if(StartY + SpriteHeight > SCREEN_HEIGHT)
+    SpriteHeight = SCREEN_HEIGHT - StartY;
 
   bool32 HasCollision{};
   for (int SpriteY = 0; SpriteY < SpriteHeight; ++SpriteY)
   {
     u8* SpritePixel = Sprite.Pixels + SpriteY;
-
     int ScreenY = StartY + SpriteY;
-
-    // TODO: Check for proper wrapping.
-    while(ScreenY > SCREEN_HEIGHT)
-      ScreenY -= SCREEN_HEIGHT;
-
     for (int SpriteX = 0; SpriteX < SpriteWidth; ++SpriteX)
     {
       int ScreenX = StartX + SpriteX;
 
-      // TODO: Check for proper wrapping.
-      while(ScreenX > SCREEN_WIDTH)
-        ScreenX -= SCREEN_WIDTH;
-
-      int const ScreenOffset = (ScreenY * SCREEN_WIDTH) + ScreenX;
+      int ScreenOffset = (ScreenY * SCREEN_WIDTH) + ScreenX;
       bool32* ScreenPixel = M->Screen + ScreenOffset;
 
       bool32 SpriteColor = IsBitSet((u32)*SpritePixel, 7 - SpriteX);
@@ -135,114 +128,91 @@ auto
     *(u16*)Ptr = Word;
 }
 
-internal
-void
-PrintInstruction(instruction Instruction)
-{
-  switch(Instruction.Type)
+#if MTB_IsOff(MTB_Internal)
+  #define PrintInstruction(...) MTB_NOP
+#else
+  internal
+  void
+  PrintInstruction(machine* M, u16 InstructionAddress, instruction_decoder Decoder, instruction Instruction)
   {
-    case instruction_type::CLS:  Print("CLS");  break;
-    case instruction_type::RET:  Print("RET");  break;
-    case instruction_type::SYS:  Print("SYS");  break;
-    case instruction_type::JP:   Print("JP");   break;
-    case instruction_type::CALL: Print("CALL"); break;
-    case instruction_type::SE:   Print("SE");   break;
-    case instruction_type::SNE:  Print("SNE");  break;
-    case instruction_type::LD:   Print("LD");   break;
-    case instruction_type::ADD:  Print("ADD");  break;
-    case instruction_type::OR:   Print("OR");   break;
-    case instruction_type::AND:  Print("AND");  break;
-    case instruction_type::XOR:  Print("XOR");  break;
-    case instruction_type::SUB:  Print("SUB");  break;
-    case instruction_type::SHR:  Print("SHR");  break;
-    case instruction_type::SUBN: Print("SUBN"); break;
-    case instruction_type::SHL:  Print("SHL");  break;
-    case instruction_type::RND:  Print("RND");  break;
-    case instruction_type::DRW:  Print("DRW");  break;
-    case instruction_type::SKP:  Print("SKP");  break;
-    case instruction_type::SKNP: Print("SKNP"); break;
-    default:
-      Print("<INVALID INSTRUCTION TYPE>");
-      return;
-  }
+    printf("0x%03X: 0x%04X => ", InstructionAddress, Decoder.Data);
 
-  char const* Prefix = " ";
-  for(auto Arg : Instruction.Args)
-  {
-    if(Arg.Type == argument_type::NONE)
-      break;
-
-    Print(Prefix);
-    char ConversionBuffer[8]{};
-    switch(Arg.Type)
+    switch(Instruction.Type)
     {
-      case argument_type::V:
-      {
-        Print("V");
-        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
-        Print(ConversionBuffer);
-        break;
-      }
-      case argument_type::I:
-      {
-        Print("I");
-        break;
-      }
-      case argument_type::DT:
-      {
-        Print("DT");
-        break;
-      }
-      case argument_type::ST:
-      {
-        Print("ST");
-        break;
-      }
-      case argument_type::K:
-      {
-        Print("K");
-        break;
-      }
-      case argument_type::F:
-      {
-        Print("F");
-        break;
-      }
-      case argument_type::B:
-      {
-        Print("B");
-        break;
-      }
-      case argument_type::ATI:
-      {
-        Print("[I]");
-        break;
-      }
-      case argument_type::ADDRESS:
-      {
-        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
-        Print(ConversionBuffer);
-        break;
-      }
-      case argument_type::BYTE:
-      {
-        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
-        Print(ConversionBuffer);
-        break;
-      }
-      case argument_type::NIBBLE:
-      {
-        Convert<slice<char>>(Arg.Value, Slice(ConversionBuffer));
-        Print(ConversionBuffer);
-        break;
-      }
+      case instruction_type::CLS:  printf("CLS "); break;
+      case instruction_type::RET:  printf("RET "); break;
+      case instruction_type::SYS:  printf("SYS "); break;
+      case instruction_type::JP:   printf("JP  "); break;
+      case instruction_type::CALL: printf("CALL"); break;
+      case instruction_type::SE:   printf("SE  "); break;
+      case instruction_type::SNE:  printf("SNE "); break;
+      case instruction_type::LD:   printf("LD  "); break;
+      case instruction_type::ADD:  printf("ADD "); break;
+      case instruction_type::OR:   printf("OR  "); break;
+      case instruction_type::AND:  printf("AND "); break;
+      case instruction_type::XOR:  printf("XOR "); break;
+      case instruction_type::SUB:  printf("SUB "); break;
+      case instruction_type::SHR:  printf("SHR "); break;
+      case instruction_type::SUBN: printf("SUBN"); break;
+      case instruction_type::SHL:  printf("SHL "); break;
+      case instruction_type::RND:  printf("RND "); break;
+      case instruction_type::DRW:  printf("DRW "); break;
+      case instruction_type::SKP:  printf("SKP "); break;
+      case instruction_type::SKNP: printf("SKNP"); break;
+      default:
+        printf("<INVALID INSTRUCTION TYPE>");
+        return;
     }
 
-    Prefix = ", ";
-  }
 
-  Print("\n");
-}
+    char Spaces[16]{ ' ' };
+    int RemainingMessageLength = 13;
+
+    char const* Prefix = " ";
+    for(argument& Arg : Instruction.Args)
+    {
+      if(Arg.Type == argument_type::NONE)
+        break;
+
+      RemainingMessageLength -= printf(Prefix);
+
+      switch(Arg.Type)
+      {
+        case argument_type::V:       RemainingMessageLength -= printf("V%X", Arg.Value); break;
+        case argument_type::I:       RemainingMessageLength -= printf("I"); break;
+        case argument_type::DT:      RemainingMessageLength -= printf("DT"); break;
+        case argument_type::ST:      RemainingMessageLength -= printf("ST"); break;
+        case argument_type::K:       RemainingMessageLength -= printf("K"); break;
+        case argument_type::F:       RemainingMessageLength -= printf("F"); break;
+        case argument_type::B:       RemainingMessageLength -= printf("B"); break;
+        case argument_type::ATI:     RemainingMessageLength -= printf("[I]"); break;
+        case argument_type::ADDRESS: RemainingMessageLength -= printf("%03X", Arg.Value); break;
+        case argument_type::BYTE:    RemainingMessageLength -= printf("%02X", Arg.Value); break;
+        case argument_type::NIBBLE:  RemainingMessageLength -= printf("%01X", Arg.Value); break;
+      }
+
+      Prefix = ", ";
+    }
+
+    // if(RemainingMessageLength > 0)
+      printf("%*s", RemainingMessageLength, Spaces);
+
+    // if(false)
+    {
+      for(int Index = 0; Index < LengthOf(M->V); ++Index)
+        printf("V%X=%02X|", Index, M->V[Index]);
+
+      printf("I=%03X|DT=%02X|ST=%02X|SP=%02X|PC=%02X",
+             M->I,
+             M->DT,
+             M->ST,
+             M->StackPointer,
+             M->ProgramCounter);
+    }
+
+    printf("\n");
+  }
+#endif // MTB_IsOn(MTB_Internal)
 
 internal
 auto
@@ -250,8 +220,21 @@ auto
   -> bool
 {
   // Fetch new instruction.
-  u16 EncodedInstruction = ReadWord(M, M->ProgramCounter);
-  instruction Instruction = DecodeInstruction(EncodedInstruction);
+  instruction_decoder Decoder;
+  Decoder.Data = ReadWord(M, M->ProgramCounter);
+  instruction Instruction = DecodeInstruction(Decoder);
+
+  if(Instruction.Type == instruction_type::INVALID)
+    return false;
+
+  // For debugging.
+  PrintInstruction(M, M->ProgramCounter, Decoder, Instruction);
+
+  // Advance the program counter.
+  M->ProgramCounter += 2;
+
+  // Execute the fetched instruction.
+  ExecuteInstruction(M, Instruction);
 
   // Update the timer slots.
   if(M->DT > 0)
@@ -268,35 +251,23 @@ auto
     // TODO: Stop the noise...
   }
 
-  PrintInstruction(Instruction);
-
-  if(Instruction.Type == instruction_type::INVALID)
-    return false;
-
-  // Execute the fetched instruction.
-  ExecuteInstruction(M, Instruction);
-
-  // Advance the program counter.
-  M->ProgramCounter += 2;
-
   return true;
 }
 
 internal
 auto
-::DecodeInstruction(u16 OpCode)
+::DecodeInstruction(instruction_decoder Decoder)
   -> instruction
 {
   using inst = instruction_type;
   using arg = argument_type;
 
-  instruction_decoder Decoder{ OpCode };
   instruction Result{};
   switch(Decoder.Group)
   {
     case 0x0:
     {
-      switch(OpCode)
+      switch(Decoder.Data)
       {
         case 0x00E0: // 00E0 - CLS
           Result.Type = inst::CLS;
@@ -887,7 +858,8 @@ auto
     }
     default: break;
   }
-  Print("Invalid instruction to execute.");
+
+  MTB_InternalCode( printf("Invalid instruction to execute."); )
 }
 
 #if defined(COUSCOUS_TESTS)
