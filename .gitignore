@@ -1,2 +1,5 @@
 /build/
 /workspace/
+
+# FASTBuild database
+*.fdb

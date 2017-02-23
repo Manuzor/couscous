@@ -1,0 +1,29 @@
+
+{
+  .MyProjectName = '$MyName$.vcxproj'
+  VCXProject( "$MyProjectName$" )
+  {
+    .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
+
+    .ProjectBuildCommand   = 'cd "^$(SolutionDir)../.." &amp; "$MyFBuildCommand$" ^$(ProjectName)-^$(Configuration) -ide'
+    .ProjectRebuildCommand   = 'cd "^$(SolutionDir)../.." &amp; "$MyFBuildCommand$" ^$(ProjectName)-^$(Configuration) -ide -clean'
+    // TODO(Manuzor): Find a way to clean.
+    // .ProjectCleanCommand   = '$MyFBuildCommand$ -config "$MyRootBff$" ^$(ProjectName)-^$(Configuration) -ide -clean'
+
+    .MyVsBuildId = '^$(Configuration)'
+    .OutputDirectory       = '$RepoRoot$/$MyBuildRoot$/$MyVsBuildId$'
+    .IntermediateDirectory = '$RepoRoot$/$MyBuildRoot$/$MyVsBuildId$/intermediate'
+    .LocalDebuggerWorkingDirectory = '^$(OutDir)'
+  }
+
+  ^SolutionProjects + .MyProjectName
+
+  .MyFolder =
+  [
+    .Path = 'projects'
+    .Projects = { .MyProjectName }
+  ]
+  ^SolutionFolders + .MyFolder
+}
+
+#undef MY_BEGIN_TARGET

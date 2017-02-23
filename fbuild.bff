@@ -1,0 +1,127 @@
+// Get information about the current system, such as the latest
+// Visual Studio version or the latest Windows 10 SDK version.
+#include "workspace/system.bff"
+
+
+//
+// Setup
+//
+.MyBuildRoot = 'build'
+.MyWorkspaceRoot = 'workspace'
+.MyToolsRoot = 'tools'
+.MyMacrosRoot = 'tools/fastbuild_macros'
+
+.MyRootBff = 'fbuild.bff'
+.MyFBuildCommand = 'tools/fastbuild/fbuild.exe'
+.MyVisualStudioRoot = '$MyWorkspaceRoot$/vs$VSVersionMajor$'
+.MySolutionName = 'couscous'
+#include "$MyMacrosRoot$/begin_vs.bff"
+
+.MyAllConfigs = { 'win_msvc_x64_debug', 'win_msvc_x64_release' }
+
+//
+// Define targets
+//
+{
+  #include "$MyMacrosRoot$/begin_target.bff"
+
+  .MyName = 'couscous'
+
+  .MyCodePath = 'code/'
+  .ProjectBasePath = .MyCodePath
+  .ProjectInputPaths + .MyCodePath
+
+  // win_msvc_x64
+  {
+    .MyOutputName = 'couscous'
+    .MyOutputExtension = '.exe'
+
+    .CompilerInputFiles = '$MyCodePath$/win32_main.cpp'
+
+    .MyPlatformId = 'win_msvc_x64'
+
+    .Compiler = '$VSDir$\VC\bin\amd64\cl.exe'
+    .CompilerOptions = ' %1 /Fo"%2" /c'
+                     + ' /nologo'
+                     + ' /DCOUSCOUS_TESTS'
+
+                     //
+                     // Windows specific defines
+                     //
+                     + ' /DNOMINMAX'                // Exclude annoying Windows macros.
+                     + ' /DWIN32_LEAN_AND_MEAN'     // Strip some rarely used Windows stuff.
+                     + ' /D_CRT_SECURE_NO_WARNINGS' // Shut up windows.h's warnings
+
+                     + ' /I"$MyCodePath$"'
+
+                     //
+                     // System Includes
+                     //
+                     + ' /I"$VSDir$\VC\Include"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\ucrt"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\shared"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\um"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\winrt"'
+
+    .Linker = '$VSDir$\VC\bin\amd64\link.exe'
+    .LinkerOptions = ' %1 /OUT:"%2"'
+                   + ' /NOLOGO'
+                   + ' /INCREMENTAL:NO'
+                   + ' /LIBPATH:"$VSDir$\VC\lib\amd64"'
+                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\um\x64"'
+                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\ucrt\x64"'
+                   + ' User32.lib'
+                   + ' Gdi32.lib'
+
+    // win_msvc_x64_debug
+    {
+      .MyConfigId = 'debug'
+      .MyBuildId = '$MyPlatformId$_$MyConfigId$'
+      .MyBuildPath = '$MyBuildRoot$/$MyBuildId$'
+      .MyIntermediatePath = '$MyBuildRoot$/$MyBuildId$/intermediate'
+
+      .CompilerOutputPath = '$MyIntermediatePath$'
+      .LinkerOutputPath = '$MyBuildPath$'
+      .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
+
+      .CompilerOptions + ' /Zi'
+                       + ' /MTd'
+                       + ' /DDEBUG'
+                       + ' /D_DEBUG'
+
+      .LinkerOptions + ' /DEBUG'
+
+      #include "$MyMacrosRoot$/make_target.bff"
+    }
+
+    // win_msvc_x64_release
+    {
+      .MyConfigId = 'release'
+      .MyBuildId = '$MyPlatformId$_$MyConfigId$'
+      .MyBuildPath = '$MyBuildRoot$/$MyBuildId$'
+      .MyIntermediatePath = '$MyBuildRoot$/$MyBuildId$/intermediate'
+
+      .CompilerOutputPath = '$MyIntermediatePath$'
+      .LinkerOutputPath = '$MyBuildPath$'
+      .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
+
+      .CompilerOptions + ' /MT'
+                       + ' /Ox'
+
+      // TODO
+
+      #include "$MyMacrosRoot$/make_target.bff"
+    }
+  }
+
+  #include "$MyMacrosRoot$/end_target.bff"
+}
+
+#include "$MyMacrosRoot$/end_vs.bff"
+
+
+// The canonical alias 'all'
+Alias( 'all' )
+{
+  .Targets = .MyTargetList
+}
