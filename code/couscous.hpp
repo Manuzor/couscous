@@ -172,8 +172,13 @@ WriteByte(machine* M, u16 Address, u8 Byte);
 void
 WriteWord(machine* M, u16 Address, u16 Word);
 
+struct tick_result
+{
+  bool Continue;
+};
+
 // Return value of `true` means continue ticking.
-bool
+tick_result
 Tick(machine* M);
 
 u16

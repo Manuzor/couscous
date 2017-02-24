@@ -217,41 +217,48 @@ auto
 internal
 auto
 ::Tick(machine* M)
-  -> bool
+  -> tick_result
 {
+  tick_result result{};
+  result.Continue = true;
+
   // Fetch new instruction.
   instruction_decoder Decoder;
   Decoder.Data = ReadWord(M, M->ProgramCounter);
   instruction Instruction = DecodeInstruction(Decoder);
 
-  if(Instruction.Type == instruction_type::INVALID)
-    return false;
-
-  // For debugging.
-  PrintInstruction(M, M->ProgramCounter, Decoder, Instruction);
-
-  // Advance the program counter.
-  M->ProgramCounter += 2;
-
-  // Execute the fetched instruction.
-  ExecuteInstruction(M, Instruction);
-
-  // Update the timer slots.
-  if(M->DT > 0)
-    --M->DT;
-  if(M->ST > 0)
-    --M->ST;
-
-  if(M->ST)
+  if(Instruction.Type != instruction_type::INVALID)
   {
-    // TODO: Make some noise!
+    // For debugging.
+    PrintInstruction(M, M->ProgramCounter, Decoder, Instruction);
+
+    // Advance the program counter.
+    M->ProgramCounter += 2;
+
+    // Execute the fetched instruction.
+    ExecuteInstruction(M, Instruction);
+
+    // Update the timer slots.
+    if(M->DT > 0)
+      --M->DT;
+    if(M->ST > 0)
+      --M->ST;
+
+    if(M->ST)
+    {
+      // TODO: Make some noise!
+    }
+    else
+    {
+      // TODO: Stop the noise...
+    }
   }
   else
   {
-    // TODO: Stop the noise...
+    result.Continue = false;
   }
 
-  return true;
+  return result;
 }
 
 internal
