@@ -511,6 +511,128 @@ auto
 
 internal
 auto
+::EncodeInstruction(instruction Instruction)
+  -> u16
+{
+  u16 result = 0x0000;
+
+  switch(Instruction.Type)
+  {
+    case instruction_type::CLS:
+    {
+      result = 0x00E0;
+      break;
+    }
+    case instruction_type::RET:
+    {
+      result = 0x00EE;
+      break;
+    }
+    case instruction_type::SYS:
+    {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::ADDRESS:
+        {
+          result = Instruction.Args[0].Value;
+          break;
+        }
+      }
+      break;
+    }
+    case instruction_type::JP:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::CALL:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SE:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SNE:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::LD:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::ADD:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::OR:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::AND:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::XOR:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SUB:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SHR:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SUBN:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SHL:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::RND:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::DRW:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SKP:
+    {
+      // TODO
+      break;
+    }
+    case instruction_type::SKNP:
+    {
+      // TODO
+      break;
+    }
+  }
+
+  return result;
+}
+
+
+internal
+auto
 ::ExecuteInstruction(machine* M, instruction Instruction)
   -> void
 {
