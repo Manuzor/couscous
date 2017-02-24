@@ -6,13 +6,12 @@
 //
 // Setup
 //
-.MyBuildRoot = 'build'
-.MyWorkspaceRoot = 'workspace'
-.MyToolsRoot = 'tools'
-.MyMacrosRoot = 'tools/fastbuild_macros'
+.MyBuildRoot = '$RepoRoot$/build'
+.MyWorkspaceRoot = '$RepoRoot$/workspace'
+.MyToolsRoot = '$RepoRoot$/tools'
+.MyMacrosRoot = '$RepoRoot$/tools/fastbuild_macros'
 
 .MyRootBff = 'fbuild.bff'
-.MyFBuildCommand = 'tools/fastbuild/fbuild.exe'
 .MyVisualStudioRoot = '$MyWorkspaceRoot$/vs$VSVersionMajor$'
 .MySolutionName = 'couscous'
 #include "$MyMacrosRoot$/begin_vs.bff"
@@ -27,7 +26,7 @@
 
   .MyName = 'couscous'
 
-  .MyCodePath = 'code/'
+  .MyCodePath = '$RepoRoot$/code'
   .ProjectBasePath = .MyCodePath
   .ProjectInputPaths + .MyCodePath
 

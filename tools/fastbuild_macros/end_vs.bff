@@ -20,8 +20,8 @@
       {
         .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
 
-        .ProjectBuildCommand   = 'cd "^$(SolutionDir)../.." &amp; "$MyFBuildCommand$" $MyFBuildConfigToInvoke$ -ide'
-        .ProjectRebuildCommand = 'cd "^$(SolutionDir)../.." &amp; "$MyFBuildCommand$" $MyFBuildConfigToInvoke$ -ide -clean'
+        .ProjectBuildCommand   = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide'
+        .ProjectRebuildCommand = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide -clean'
 
         .ProjectConfigs = {}
         ForEach( .MyConfig in .MyAllConfigs )

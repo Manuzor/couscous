@@ -5,14 +5,14 @@
   {
     .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
 
-    .ProjectBuildCommand   = 'cd "^$(SolutionDir)../.." &amp; "$MyFBuildCommand$" ^$(ProjectName)-^$(Configuration) -ide'
-    .ProjectRebuildCommand   = 'cd "^$(SolutionDir)../.." &amp; "$MyFBuildCommand$" ^$(ProjectName)-^$(Configuration) -ide -clean'
+    .ProjectBuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide'
+    .ProjectRebuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide -clean'
     // TODO(Manuzor): Find a way to clean.
-    // .ProjectCleanCommand   = '$MyFBuildCommand$ -config "$MyRootBff$" ^$(ProjectName)-^$(Configuration) -ide -clean'
+    // .ProjectCleanCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
 
     .MyVsBuildId = '^$(Configuration)'
-    .OutputDirectory       = '$RepoRoot$/$MyBuildRoot$/$MyVsBuildId$'
-    .IntermediateDirectory = '$RepoRoot$/$MyBuildRoot$/$MyVsBuildId$/intermediate'
+    .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
+    .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
     .LocalDebuggerWorkingDirectory = '^$(OutDir)'
   }
 

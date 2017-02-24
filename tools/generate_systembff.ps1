@@ -1,7 +1,7 @@
 <#
 #>
 Param(
-  [string]$DestBFF = Join-Path $PSCommandPath "../../workspace/system.bff"
+  [string]$DestBFF = (Join-Path $PSCommandPath "../../workspace/system.bff")
 )
 
 $RepoRoot = Join-Path -Resolve $PSCommandPath "../.."
@@ -99,7 +99,7 @@ $Content = @"
 $BFFDir = Split-Path -Parent $DestBFF
 if(-not(Test-Path $BFFDir))
 {
-  mkdir $BFFDir
+  mkdir $BFFDir *> $null
 }
 
 Set-Content -Path $DestBFF -Value $Content
