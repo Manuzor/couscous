@@ -102,40 +102,31 @@ enum struct instruction_type
 struct instruction
 {
   instruction_type Type;
-  union
-  {
-    struct
-    {
-      argument Arg0;
-      argument Arg1;
-      argument Arg2;
-    };
-    argument Args[3];
-  };
+  argument Args[3];
 };
 
 union instruction_decoder
 {
-  u16 Data;
+  u16 Data; // xxxx
 
   struct
   {
-    u16 Address : 12;
-    u16 Group   : 4;
+    u16 Address : 12; // 0xxx
+    u16 Group   : 4;  // x000
   };
 
   struct
   {
-    u16 LSN : 4; // Least significant nibble
-    u16 Y   : 4;
-    u16 X   : 4;
-    u16 MSN : 4; // Most significant nibble
+    u16 LSN : 4; // 000x (Least significant nibble)
+    u16 Y   : 4; // 00x0
+    u16 X   : 4; // 0x00
+    u16 MSN : 4; // x000 (Most significant nibble)
   };
 
   struct
   {
-    u16 LSB : 8; // Least significant byte
-    u16 MSB : 8; // Most significant byte
+    u16 LSB : 8; // 00xx (Least significant byte)
+    u16 MSB : 8; // xx00 (Most significant byte)
   };
 };
 
@@ -172,8 +163,13 @@ WriteByte(machine* M, u16 Address, u8 Byte);
 void
 WriteWord(machine* M, u16 Address, u16 Word);
 
+struct tick_result
+{
+  bool Continue;
+};
+
 // Return value of `true` means continue ticking.
-bool
+tick_result
 Tick(machine* M);
 
 u16
@@ -181,6 +177,9 @@ FetchInstruction(machine* M);
 
 instruction
 DecodeInstruction(instruction_decoder Decoder);
+
+u16
+EncodeInstruction(instruction Instruction);
 
 void
 ExecuteInstruction(machine* M, instruction Instruction);

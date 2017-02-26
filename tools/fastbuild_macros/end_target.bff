@@ -1,0 +1,29 @@
+
+{
+  .MyProjectName = '$MyName$.vcxproj'
+  VCXProject( "$MyProjectName$" )
+  {
+    .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
+
+    .ProjectBuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide'
+    .ProjectRebuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide -clean'
+    // TODO(Manuzor): Find a way to clean.
+    // .ProjectCleanCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
+
+    .MyVsBuildId = '^$(Configuration)'
+    .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
+    .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
+    .LocalDebuggerWorkingDirectory = '^$(OutDir)'
+  }
+
+  ^SolutionProjects + .MyProjectName
+
+  .MyFolder =
+  [
+    .Path = 'projects'
+    .Projects = { .MyProjectName }
+  ]
+  ^SolutionFolders + .MyFolder
+}
+
+#undef MY_BEGIN_TARGET

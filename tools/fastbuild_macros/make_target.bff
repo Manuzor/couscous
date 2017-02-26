@@ -1,0 +1,28 @@
+// This file acts as a macro to generate FASTBuild executables.
+// Dependencies:
+//   - .ProjectConfigs (from begin_target)
+
+#if !MY_BEGIN_TARGET
+  Print( 'WARNING: You need to call begin_target.bff first!' )
+#endif
+
+// TODO: How to differentiate between executables and static/dynamic libraries?
+
+{
+  .MyTarget = '$MyName$-$MyBuildId$'
+  ObjectList( '$MyTarget$-obj' ) {}
+  Executable( '$MyTarget$' )
+  {
+    .Libraries = { '$MyTarget$-obj' }
+  }
+  ^MyTargetList + .MyTarget
+
+  .MyProjectConfig =
+  [
+    .Config = '$MyBuildId$'
+    .Platform = 'Win32' // Unused
+    .Target = .MyTarget
+  ]
+  ^ProjectConfigs + .MyProjectConfig
+  ^SolutionConfigs + .MyProjectConfig
+}

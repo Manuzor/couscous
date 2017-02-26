@@ -1,0 +1,61 @@
+{
+  {
+    .MyRegenerateSolutionSpec =
+    [
+      .MyName = 'regen_solution'
+      .MyFBuildConfigToInvoke = 'vs'
+    ]
+    .MyAllSpec =
+    [
+      .MyName = 'all'
+      .MyFBuildConfigToInvoke = 'all'
+    ]
+    .MySpecs = { .MyRegenerateSolutionSpec, .MyAllSpec }
+    ForEach( .MySpec in .MySpecs )
+    {
+      Using( .MySpec )
+
+      .MyProjectName = '$MyName$.vcxproj'
+      VCXProject( "$MyProjectName$" )
+      {
+        .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
+
+        .ProjectBuildCommand   = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide'
+        .ProjectRebuildCommand = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide -clean'
+
+        .ProjectConfigs = {}
+        ForEach( .MyConfig in .MyAllConfigs )
+        {
+          .MyProjectConfig =
+          [
+            .Platform = 'Win32' // Unused
+            .Config = .MyConfig
+          ]
+          ^ProjectConfigs + .MyProjectConfig
+        }
+      }
+      ^SolutionProjects + .MyProjectName
+
+      .MyFolder =
+      [
+        .Path = 'misc'
+        .Projects = { .MyProjectName }
+      ]
+      ^SolutionFolders + .MyFolder
+    }
+  }
+
+  VSSolution( '$MySolutionName$' )
+  {
+    .SolutionOutput = '$MyVisualStudioRoot$/$MySolutionName$.sln'
+    //TODO: .SolutionBuildProject = 'Application-Proj'
+    // Note: Use .ExtraFiles to add a .natvis file, for example.
+  }
+
+  Alias( 'vs' )
+  {
+    .Targets = '$MySolutionName$'
+  }
+}
+
+#undef MY_BEGIN_VS

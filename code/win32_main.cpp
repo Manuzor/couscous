@@ -596,7 +596,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         }
         LastTickTime = CurrentTime;
 
-        if(!Tick(M))
+        tick_result TickResult = Tick(M);
+        if(!TickResult.Continue)
         {
           break;
         }
