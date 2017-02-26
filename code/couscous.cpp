@@ -194,8 +194,7 @@ auto
       Prefix = ", ";
     }
 
-    // if(RemainingMessageLength > 0)
-      printf("%*s", RemainingMessageLength, Spaces);
+    printf("%*s", RemainingMessageLength, "..................");
 
     // if(false)
     {
@@ -611,7 +610,20 @@ auto
           {
             case argument_type::V:
             {
-              u8 Num = (u8)Instruction.Args[1].Value;
+              int Num = (int)Instruction.Args[1].Value;
+              for (int Index = 0; Index < Num; ++Index, ++M->I)
+              {
+                u8* Reg = M->V + Index;
+                *Reg = ReadByte(M, M->I);
+              }
+
+              u16 O = M->I;
+              while(Num > 0)
+              {
+                u8* Reg = M->V + ReadByte(M, M->I);
+                ++M->I;
+                --Num;
+              }
               u8* Dest = M->Memory + M->I;
               u8* Source = M->V;
               CopyBytes(Num, Dest, Source);
@@ -631,10 +643,9 @@ auto
               u8* DD  = M->Memory + (M->I + 1);
               u8* D   = M->Memory + (M->I + 2);
 
-              *DDD = *Reg / 100;
-              *DD  = *Reg / 10 - *DDD;
-              *DD  = *Reg / 1  - *DDD - *DD;
-              // TODO: Test this instruction!
+              *DDD = *Reg / 100; // % 10;
+              *DD  = *Reg /  10 % 10;
+              *D   = *Reg /   1 % 10;
               return;
             }
           }
@@ -766,7 +777,6 @@ auto
             {
               u8* OtherReg = M->V + Instruction.Args[1].Value;
               u16 Result = (u16)*Reg + (u16)*OtherReg;
-              *Reg += *OtherReg;
               M->V[0xF] = (u8)(Result > 255);
               *Reg = (u8)(Result & 0xFF);
               return;
@@ -779,42 +789,42 @@ auto
     }
     case instruction_type::OR:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::AND:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::XOR:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::SUB:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::SHR:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::SUBN:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::SHL:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::RND:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::DRW:
@@ -848,12 +858,12 @@ auto
     }
     case instruction_type::SKP:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     case instruction_type::SKNP:
     {
-      // TODO
+      MTB_ReportError("Not Implemented.");
       break;
     }
     default: break;
