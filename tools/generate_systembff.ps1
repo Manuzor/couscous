@@ -1,7 +1,8 @@
 <#
 #>
 Param(
-  [string]$DestBFF = (Join-Path $PSCommandPath "../../workspace/system.bff")
+  [string]$DestBFF = (Join-Path $PSCommandPath "../../workspace/system.bff"),
+  [switch]$Force = $false
 )
 
 $RepoRoot = Join-Path -Resolve $PSCommandPath "../.."
@@ -24,25 +25,27 @@ foreach($Key in $WindowsSDK_KeyCandidates)
   }
 }
 
-if(-not($InstalledWindowsSDKs))
+if(!($Force) -and !($InstalledWindowsSDKs))
 {
   Throw "Unable to locate ANY Windows SDK."
 }
 
 # Use the latest one.
-$WindowsSDK = ($InstalledWindowsSDKs | sort -Property ProductVersion)[0]
+$_Temp = New-Object System.Version
+$InstalledWindowsSDKsSorted = $InstalledWindowsSDKs | ? { [Version]::TryParse($_.ProductVersion, [ref]$_Temp) } | Sort-Object { [Version]::Parse($_.ProductVersion) } -Descending
+$WindowsSDK = $InstalledWindowsSDKsSorted[0]
 $WindowsSDKVersion = $WindowsSDK.ProductVersion
-$WindowsSDKDir = $WindowsSDK.InstallationFolder
+$WindowsSDKDir = $WindowsSDK.InstallationFolder -replace '[/\\]+$','' # Without trailing slashes
 
 # Require at least the Windows 10 SDK
-if($WindowsSDKVersion -notmatch '[0-9]{1,2}\.[0-9]\.[0-9]{1,5}\.[0-9]')
+if(!($Force) -and $WindowsSDKVersion -notmatch '^10\..*')
 {
-  Throw "Weird format for Windows SDK version: $WindowsSDKVersion"
+  Throw "Require a Windows 10 SDK, the highest we could find is: $($WindowsSDKVersion)"
 }
 
-if($WindowsSDKVersion -notmatch '10\..*')
+if(!($Force) -and $WindowsSDKVersion -notmatch '^[0-9]{2}\.[0-9]\.[0-9]{1,5}(\.[0-9])?$')
 {
-  Throw "Require a Windows 10 SDK, got: $WindowsSDKVersion"
+  Throw "Unable to recognize Windows SDK version string: $($WindowsSDKVersion)"
 }
 
 
@@ -63,22 +66,29 @@ foreach($Key in $KeyCandidates)
   }
 }
 
-if(-not($VisualStudioInfos))
+if(!($Force) -and !($VisualStudioInfos))
 {
   Throw "Unable to locate ANY Visual Studio installation."
 }
 
-# Use the latest one.
-$VisualStudioInfo = ($VisualStudioInfos | sort -Property PSChildName)[0]
+# Use the latest one by sorting visual studio versions (treated as a `double` for comparison) in descending order.
+$VisualStudioInfosSorted = $VisualStudioInfos | Sort-Object { $_.PSChildName -as [double] } -Descending
+$VisualStudioInfo = $VisualStudioInfosSorted[0]
 $VSVersion = $VisualStudioInfo.PSChildName
-$VSDir = $VisualStudioInfo.ShellFolder
+$VSDir = $VisualStudioInfo.ShellFolder -replace '[/\\]+$','' # Without trailing slashes
 
-if($VSVersion -notmatch '[0-9]{1,2}\.[0-9]')
+if(!($Force) -and (($VSVersion -as [double]) -lt 10.0))
+{
+  Throw "Need at least Visual Studio version 10.0 installed. The highest we could find is: $($VSVersion)"
+}
+
+if(!($Force) -and $VSVersion -notmatch '[0-9]{1,2}\.[0-9]')
 {
   Throw "Weird format for Visual Studio version: $VSVersion"
 }
 
 $VSVersionMajor = $VSVersion -replace "\.[0-9]$"
+
 
 #
 # Generate the bff file
@@ -97,7 +107,7 @@ $Content = @"
 
 # Create the directory, if it does not exist.
 $BFFDir = Split-Path -Parent $DestBFF
-if(-not(Test-Path $BFFDir))
+if(!(Test-Path $BFFDir))
 {
   mkdir $BFFDir *> $null
 }

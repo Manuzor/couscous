@@ -1,1 +1,1 @@
-@powershell .\tools\generate_systembff.ps1
+@powershell %~dp0tools\generate_systembff.ps1 %*
