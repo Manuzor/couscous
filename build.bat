@@ -9,15 +9,15 @@
 @echo off
 
 pushd %~dp0
-  if exist workspace (
-    if not exist workspace\fastbuild (
-      mkdir workspace\fastbuild
-    )
-
-    pushd workspace\fastbuild
-      ..\..\tools\FASTBuild\FBuild.exe -config ..\..\fbuild.bff %*
-    popd
-  ) else (
-    echo WARNING: No `workspace` folder found in repo-root. Did you forget to run the `init`-script?
+  if not exist workspace (
+    powershell tools\generate_systembff.ps1 %*
   )
+
+  if not exist workspace\fastbuild (
+    mkdir workspace\fastbuild
+  )
+
+  pushd workspace\fastbuild
+    ..\..\tools\FASTBuild\FBuild.exe -config ..\..\fbuild.bff %*
+  popd
 popd
