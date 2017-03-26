@@ -1,17 +1,13 @@
 // Get information about the current system, such as the latest
 // Visual Studio version or the latest Windows 10 SDK version.
-#include "workspace/system.bff"
+#include "_workspace/system.bff"
 
 
 //
 // Setup
 //
-.MyBuildRoot = '$RepoRoot$/build'
-.MyWorkspaceRoot = '$RepoRoot$/workspace'
-.MyToolsRoot = '$RepoRoot$/tools'
-.MyMacrosRoot = '$RepoRoot$/tools/fastbuild_macros'
+.MyBuildExecutable = 'powershell -ExecutionPolicy Bypass "$RepoRoot$/build.ps1"'
 
-.MyRootBff = 'fbuild.bff'
 .MyVisualStudioRoot = '$MyWorkspaceRoot$/vs$VSVersionMajor$'
 .MySolutionName = 'couscous'
 .MyAllConfigs = { 'win_msvc_x64_debug', 'win_msvc_x64_release' }
@@ -21,8 +17,9 @@
 .SolutionProjects = {}
 .SolutionFolders = {}
 
-// Even though the exact platform toolset is irrelevant for us,
-// we specify it (globally) to shut up warnings in Visual Studio.
+// Even though it is irrelevant whether we tell Visual Studio about the exact
+// platform toolset, we specify it to shut up annoying warnings when loading
+// .vcxproj files in Visual Studio.
 .PlatformToolset = 'v$VSVersionMajor$0'
 
 
@@ -131,8 +128,6 @@
       .CompilerOptions + ' /MT'
                        + ' /Ox'
 
-      // TODO
-
       .MyTarget = '$MyName$-$MyBuildId$'
       ObjectList( '$MyTarget$-obj' ) {}
       Executable( '$MyTarget$' )
@@ -150,32 +145,39 @@
       ^ProjectConfigs + .MyProjectConfig
       ^SolutionConfigs + .MyProjectConfig
     }
+
+    // Generate .vcxproj file
+    {
+      .MyProjectName = '$MyName$.vcxproj'
+      VCXProject( "$MyProjectName$" )
+      {
+        .MyVsBuildId = '^$(Configuration)'
+
+        .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
+
+        .ProjectBuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide'
+        .ProjectRebuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide -clean'
+        // TODO(Manuzor): Find a way to clean.
+        // .ProjectCleanCommand   = '"$RepoRoot$\build.ps1" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
+        .Output = '$MyBuildRoot$/$MyVsBuildId$/$MyOutputName$$MyOutputExtension$'
+
+        .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
+        .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
+        .LocalDebuggerWorkingDirectory = '^$(OutDir)'
+      }
+
+      ^SolutionProjects + .MyProjectName
+
+      .MyFolder =
+      [
+        .Path = 'projects'
+        .Projects = { .MyProjectName }
+      ]
+      ^SolutionFolders + .MyFolder
+    }
   }
 
-  .MyProjectName = '$MyName$.vcxproj'
-  VCXProject( "$MyProjectName$" )
-  {
-    .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
 
-    .ProjectBuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide'
-    .ProjectRebuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide -clean'
-    // TODO(Manuzor): Find a way to clean.
-    // .ProjectCleanCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
-
-    .MyVsBuildId = '^$(Configuration)'
-    .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
-    .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
-    .LocalDebuggerWorkingDirectory = '^$(OutDir)'
-  }
-
-  ^SolutionProjects + .MyProjectName
-
-  .MyFolder =
-  [
-    .Path = 'projects'
-    .Projects = { .MyProjectName }
-  ]
-  ^SolutionFolders + .MyFolder
 }
 
 //
@@ -202,8 +204,8 @@
     {
       .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
 
-      .ProjectBuildCommand   = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide'
-      .ProjectRebuildCommand = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide -clean'
+      .ProjectBuildCommand   = '$MyBuildExecutable$ $MyFBuildConfigToInvoke$ -ide'
+      .ProjectRebuildCommand = '$MyBuildExecutable$ $MyFBuildConfigToInvoke$ -ide -clean'
 
       .ProjectConfigs = {}
       ForEach( .MyConfig in .MyAllConfigs )

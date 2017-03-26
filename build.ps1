@@ -1,10 +1,9 @@
 <#
-  TODO(manuzor): Docs.
-  TODO(manuzor): Fixed $FBuildArgs! './build.ps1 -- foo bar baz' only catches 'foo'
+  TODO(Manuzor): Docs.
+  TODO(Manuzor): Support providing preferences for the used Visual Studio and Windows SDK Versions.
 #>
 param(
-  [string[]]$FBuildArgs,
-  [switch]$Renew,
+  [switch]$RenewSystemBFF,
   [switch]$WhatIf
 )
 
@@ -19,6 +18,8 @@ function Sanitize-PathName([string]$PathName)
 $RepoRoot = Join-Path $PSCommandPath ".." -Resolve
 $RepoName = Split-Path $RepoRoot -Leaf
 $FBuildBFF = Join-Path $RepoRoot "fbuild.bff" -Resolve
+$WorkspaceDir = New-Item (Join-Path $RepoRoot "_workspace") -ItemType Directory -Force
+$BuildDir = New-Item (Join-Path $RepoRoot "_build") -ItemType Directory -Force
 [OperatingSystem]$OS = [Environment]::OSVersion
 
 #
@@ -32,8 +33,7 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
   #>
   function Get-WindowsSDKs
   {
-    $KeyCandidates =
-    @(
+    $KeyCandidates = @(
       'HKLM:\SOFTWARE\Microsoft\Microsoft SDKs\Windows';
       'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows';
     )
@@ -77,8 +77,7 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 {
   function Get-VisualStudioInfos
   {
-    $KeyCandidates =
-    @(
+    $KeyCandidates = @(
       'HKLM:\SOFTWARE\Microsoft\VisualStudio';
       'HKLM:\SOFTWARE\WOW6432Node\Microsoft\VisualStudio';
     )
@@ -118,15 +117,16 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 #
 # Ensure system.bff exists.
 #
-$WorkspaceDir = New-Item (Join-Path $RepoRoot "workspace") -ItemType Directory -Force
 $SystemBFFPath = Join-Path $WorkspaceDir.FullName "system.bff"
-if($Renew -or !(Test-Path $SystemBFFPath))
+if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 {
   $SystemBFFContent = @"
 // Generated at $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss.fffffff')
 #once
 
 .RepoRoot = '$RepoRoot'
+.MyBuildRoot = '$BuildDir'
+.MyWorkspaceRoot = '$WorkspaceDir'
 
 "@
 
@@ -149,9 +149,11 @@ if($Renew -or !(Test-Path $SystemBFFPath))
 #
 # Invoke FASTBuild
 #
-$FBuildExe = if($OS.Platform -eq [PlatformID]::Win32NT)
+$FBuildExe = switch($OS.Platform)
 {
-  Join-Path $RepoRoot "tools/fastbuild/FBuild.exe"
+  ([PlatformID]::Win32NT) { Join-Path $RepoRoot "tools/fastbuild/win32/FBuild.exe" }
+  ([PlatformID]::Unix)    { Join-Path $RepoRoot "tools/fastbuild/linux/fbuild" }
+  ([PlatformID]::MacOSX)  { Join-Path $RepoRoot "tools/fastbuild/osx/FBuild" }
 }
 
 $FBuildOptions = @(
@@ -160,13 +162,13 @@ $FBuildOptions = @(
 
 if($WhatIf)
 {
-  Write-Host "What if: Invoking FASTBuild: $FBuildExe $FBuildOptions $FBuildArgs"
+  Write-Host "What if: Invoking FASTBuild: $FBuildExe $FBuildOptions $Args"
 }
 else
 {
   # Move to an intermediate directory and execute from there.
   $FASTBuildWorkingDir = New-Item (Join-Path $WorkspaceDir "fastbuild") -ItemType Directory -Force
   Push-Location $FASTBuildWorkingDir
-  & $FBuildExe -config (Join-Path $RepoRoot "fbuild.bff") $FBuildArgs
+  & $FBuildExe -config (Join-Path $RepoRoot "fbuild.bff") $Args
   Pop-Location
 }

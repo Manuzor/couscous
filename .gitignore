@@ -1,5 +1,5 @@
-/build/
-/workspace/
+# Directories starting with an underscore are ignored by default.
+_*/
 
 # FASTBuild database
 *.fdb
