@@ -14,15 +14,24 @@
 .MyRootBff = 'fbuild.bff'
 .MyVisualStudioRoot = '$MyWorkspaceRoot$/vs$VSVersionMajor$'
 .MySolutionName = 'couscous'
-#include "$MyMacrosRoot$/begin_vs.bff"
-
 .MyAllConfigs = { 'win_msvc_x64_debug', 'win_msvc_x64_release' }
+
+.MyTargetList = {}
+.SolutionConfigs = {}
+.SolutionProjects = {}
+.SolutionFolders = {}
+
+// Even though the exact platform toolset is irrelevant for us,
+// we specify it (globally) to shut up warnings in Visual Studio.
+.PlatformToolset = 'v$VSVersionMajor$0'
+
 
 //
 // Define targets
 //
 {
-  #include "$MyMacrosRoot$/begin_target.bff"
+  .ProjectConfigs = {}
+  .ProjectInputPaths = {}
 
   .MyName = 'couscous'
 
@@ -90,7 +99,22 @@
 
       .LinkerOptions + ' /DEBUG'
 
-      #include "$MyMacrosRoot$/make_target.bff"
+      .MyTarget = '$MyName$-$MyBuildId$'
+      ObjectList( '$MyTarget$-obj' ) {}
+      Executable( '$MyTarget$' )
+      {
+        .Libraries = { '$MyTarget$-obj' }
+      }
+      ^MyTargetList + .MyTarget
+
+      .MyProjectConfig =
+      [
+        .Config = '$MyBuildId$'
+        .Platform = 'Win32' // Unused
+        .Target = .MyTarget
+      ]
+      ^ProjectConfigs + .MyProjectConfig
+      ^SolutionConfigs + .MyProjectConfig
     }
 
     // win_msvc_x64_release
@@ -109,14 +133,111 @@
 
       // TODO
 
-      #include "$MyMacrosRoot$/make_target.bff"
+      .MyTarget = '$MyName$-$MyBuildId$'
+      ObjectList( '$MyTarget$-obj' ) {}
+      Executable( '$MyTarget$' )
+      {
+        .Libraries = { '$MyTarget$-obj' }
+      }
+      ^MyTargetList + .MyTarget
+
+      .MyProjectConfig =
+      [
+        .Config = '$MyBuildId$'
+        .Platform = 'Win32' // Unused
+        .Target = .MyTarget
+      ]
+      ^ProjectConfigs + .MyProjectConfig
+      ^SolutionConfigs + .MyProjectConfig
     }
   }
 
-  #include "$MyMacrosRoot$/end_target.bff"
+  .MyProjectName = '$MyName$.vcxproj'
+  VCXProject( "$MyProjectName$" )
+  {
+    .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
+
+    .ProjectBuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide'
+    .ProjectRebuildCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration) -ide -clean'
+    // TODO(Manuzor): Find a way to clean.
+    // .ProjectCleanCommand   = '"$RepoRoot$\build.bat" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
+
+    .MyVsBuildId = '^$(Configuration)'
+    .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
+    .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
+    .LocalDebuggerWorkingDirectory = '^$(OutDir)'
+  }
+
+  ^SolutionProjects + .MyProjectName
+
+  .MyFolder =
+  [
+    .Path = 'projects'
+    .Projects = { .MyProjectName }
+  ]
+  ^SolutionFolders + .MyFolder
 }
 
-#include "$MyMacrosRoot$/end_vs.bff"
+//
+// Visual Studio solution (.sln)
+//
+{
+  .MyRegenerateSolutionSpec =
+  [
+    .MyName = 'regen_solution'
+    .MyFBuildConfigToInvoke = 'vs'
+  ]
+  .MyAllSpec =
+  [
+    .MyName = 'all'
+    .MyFBuildConfigToInvoke = 'all'
+  ]
+  .MySpecs = { .MyRegenerateSolutionSpec, .MyAllSpec }
+  ForEach( .MySpec in .MySpecs )
+  {
+    Using( .MySpec )
+
+    .MyProjectName = '$MyName$.vcxproj'
+    VCXProject( "$MyProjectName$" )
+    {
+      .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
+
+      .ProjectBuildCommand   = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide'
+      .ProjectRebuildCommand = '"$RepoRoot$\build.bat" $MyFBuildConfigToInvoke$ -ide -clean'
+
+      .ProjectConfigs = {}
+      ForEach( .MyConfig in .MyAllConfigs )
+      {
+        .MyProjectConfig =
+        [
+          .Platform = 'Win32' // Unused
+          .Config = .MyConfig
+        ]
+        ^ProjectConfigs + .MyProjectConfig
+      }
+    }
+    ^SolutionProjects + .MyProjectName
+
+    .MyFolder =
+    [
+      .Path = 'misc'
+      .Projects = { .MyProjectName }
+    ]
+    ^SolutionFolders + .MyFolder
+  }
+}
+
+VSSolution( '$MySolutionName$' )
+{
+  .SolutionOutput = '$MyVisualStudioRoot$/$MySolutionName$.sln'
+  //TODO: .SolutionBuildProject = 'Application-Proj'
+  // Note: Use .ExtraFiles to add a .natvis file, for example.
+}
+
+Alias( 'vs' )
+{
+  .Targets = '$MySolutionName$'
+}
 
 
 // The canonical alias 'all'
