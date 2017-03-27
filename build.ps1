@@ -12,6 +12,19 @@ function Sanitize-PathName([string]$PathName)
   [System.IO.Path]::GetFullPath($PathName) -replace '[/\\]+$','' # Without trailing slashes
 }
 
+function Get-FullVersionString([System.Version]$Version)
+{
+  if($Version.Revision -lt 0)
+  {
+    if($Version.Build -lt 0) { "${Version}.0.0" }
+    else                     { "${Version}.0" }
+  }
+  else
+  {
+    "$Version"
+  }
+}
+
 #
 # Gather Platform info
 #
@@ -136,7 +149,7 @@ if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 
 // Windows specific
 .WindowsSDKDir = '$($LatestWindowsSDK.RootDir)'
-.WindowsSDKVersion = '$($LatestWindowsSDK.Version)'
+.WindowsSDKVersion = '$(Get-FullVersionString $LatestWindowsSDK.Version)'
 .VSDir = '$($LatestVisualStudio.RootDir)'
 .VSVersion = '$($LatestVisualStudio.Version)'
 .VSVersionMajor = '$($LatestVisualStudio.Version.Major)'
