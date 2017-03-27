@@ -6,10 +6,11 @@
     Don't actually write to the destination file.
 
   .PARAMETER PassThru
-    Return the destination file object. By default, $null is returned.
+    Return the content of the destination file object. By default, nothing is returned.
 #>
 Param(
   [string]$DestFilePath,
+  [string[]]$FASTBuildTargets,
 
   [switch]$PassThru,
   [switch]$WhatIf
@@ -27,51 +28,63 @@ $DestFile = New-Item $DestFilePath -ItemType File -Force
 
 
 $Content = @{}
-$Content["folders"] = @(
-  @{ "path" = "$RepoRoot"; }
+$Content.folders = @(
+  @{
+    "path" = "$RepoRoot";
+  }
 )
 
-$BuildSystemVariants = @(
-  @{
-    "name" = "Build Only";
-    "windows" = @{
-      "cmd" = @( Join-Path $RepoRoot "code/build.bat" );
-    };
-  };
-  @{
-    "name" = "Build and Run";
-    "windows" = @{
-      "cmd" = @( Join-Path $RepoRoot "code/build.bat"; "run" );
-    };
-  };
-);
+$MainBuildSystem =
+@{
+  "name" = "$RepoName";
+  "file_regex" = "([A-z]:.*?)\\(([0-9]+)(?:,\\s*[0-9]+)?\\)";
+};
 
-$MTBDir = Join-Path $RepoRoot "../mtb"
-if(Test-Path $MTBDir)
+$BuildScript = Join-Path $RepoRoot "build.ps1"
+
+if(!$FASTBuildTargets)
 {
-  $BuildSystemVariants += @{
-    "name" = "Update MTB";
-    "windows" = @{
-      "cmd" = @( "py"; "-3"; Join-Path -Resolve $MTBDir "tools/generate_self_contained.py"; "-o"; Join-Path $RepoRoot "code/mtb.hpp" );
-    };
-  };
-}
-else
-{
-  Write-Host "Warning: MTB dir not found."
+  $Targets = (& $BuildScript -showtargets)
+  foreach($Target in $Targets)
+  {
+    # FASTBuild emits targets indented, so only treat those lines as targets, that start with whitespace.
+    if([char]::IsWhitespace($Target[0]))
+    {
+      $FASTBuildTargets += @($Target.Trim())
+    }
+  }
 }
 
+foreach($Action in @("Build", "Rebuild"))
+{
+  foreach($Target in $FASTBuildTargets)
+  {
+    $Cmd = @("powershell"; "-ExecutionPolicy"; "Bypass"; $BuildScript; $Target; "-ide";);
+    if($Action -eq "Rebuild")
+    {
+      $Cmd += @("-clean")
+    }
 
-$Content["build_systems"] = @(
-  @{
-    "name" = "$RepoName";
-    "file_regex" = "([A-z]:.*?)\\(([0-9]+)(?:,\\s*[0-9]+)?\\)";
-    "variants" = $BuildSystemVariants
-  };
-)
+    if($Action -eq "Build" -and $Target -eq "all")
+    {
+      $MainBuildSystem.cmd = $Cmd
+    }
 
-ConvertTo-Json $Content -Depth 100 | Set-Content $DestFile -WhatIf:$WhatIf
+    $BuildSystemVariants += @(
+      @{
+        "name" = "${Action}: $Target";
+        "cmd" = $Cmd
+      }
+    )
+  }
+}
+
+$MainBuildSystem.variants = $BuildSystemVariants
+$Content.build_systems = @($MainBuildSystem)
+
+$JsonContent = ConvertTo-Json $Content -Depth 100
+$JsonContent | Set-Content $DestFile -WhatIf:$WhatIf
 if($PassThru)
 {
-  $DestFile
+  $JsonContent
 }
