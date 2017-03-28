@@ -9,7 +9,7 @@ param(
 
 function Sanitize-PathName([string]$PathName)
 {
-  [System.IO.Path]::GetFullPath($PathName) -replace '[/\\]+$','' # Without trailing slashes
+  $PathName -replace '[/\\]+$','' # Without trailing slashes
 }
 
 function Get-FullVersionString([System.Version]$Version)
