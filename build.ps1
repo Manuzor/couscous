@@ -128,6 +128,11 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 }
 
 #
+# Powershell
+#
+$Powershell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+
+#
 # Ensure system.bff exists.
 #
 $SystemBFFPath = Join-Path $WorkspaceDir.FullName "system.bff"
@@ -140,6 +145,8 @@ if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 .RepoRoot = '$RepoRoot'
 .MyBuildRoot = '$BuildDir'
 .MyWorkspaceRoot = '$WorkspaceDir'
+
+.Powershell = '$Powershell'
 
 "@
 
@@ -155,18 +162,85 @@ if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 .VSVersionMajor = '$($LatestVisualStudio.Version.Major)'
 "@
   }
+  else
+  {
+    $SystemBFFContent += @"
+
+    // Non-Windows platforms
+    // TODO(Manuzor)
+"@
+  }
 
   Set-Content -Path $SystemBFFPath -Value $SystemBFFContent -WhatIf:$WhatIf
 }
 
 #
-# Invoke FASTBuild
+# FASTBuild
 #
-$FBuildExe = switch($OS.Platform)
+$FASTBuildWorkspaceDir = New-Item (Join-Path $WorkspaceDir "fastbuild") -ItemType Directory -Force
+
+function Find-FBuildExe(
+  [string]$DirectoryToSearch,
+  [string[]]$FBuildNames = @('FBuild', 'fbuild')
+)
 {
-  ([PlatformID]::Win32NT) { Join-Path $RepoRoot "tools/fastbuild/win32/FBuild.exe" }
-  ([PlatformID]::Unix)    { Join-Path $RepoRoot "tools/fastbuild/linux/fbuild" }
-  ([PlatformID]::MacOSX)  { Join-Path $RepoRoot "tools/fastbuild/osx/FBuild" }
+  $LocationsToTry = @(
+    (Join-Path $FASTBuildWorkspaceDir 'fbuild');
+    (Join-Path $FASTBuildWorkspaceDir 'FBuild');
+    'fbuild'; # PATH (system).
+    'FBuild'; # PATH (system).
+  )
+
+  $Result = Get-Command $LocationsToTry -ErrorAction Ignore
+  if($Result)
+  {
+    return $Result[0]
+  }
+}
+
+# Try to find the FBuild executable in the FASTBuildWorkspaceDir or in the path (system).
+$FBuildExe = Find-FBuildExe $FASTBuildWorkspaceDir
+
+# If no FBuild executable was found, download one that is known to work.
+if(!$FBuildExe)
+{
+  Write-Warning "No FBuild client was found on this machine."
+  Write-Host "Was looking here:"
+  Write-Host "  - '$FASTBuildWorkspaceDir'"
+  Write-Host "  - System path"
+
+  $FBuildDownloadUrl = switch($OS.Platform)
+  {
+    ([PlatformID]::Win32NT) { "http://fastbuild.org/downloads/v0.93/FASTBuild-Windows-x64-v0.93.zip" }
+    ([PlatformID]::Unix)    { "http://fastbuild.org/downloads/v0.93/FASTBuild-Linux-x64-v0.93.zip" }
+    ([PlatformID]::MacOSX)  { "http://fastbuild.org/downloads/v0.93/FASTBuild-OSX-x64-v0.93.zip" }
+  }
+  $FBuildZipFile = Join-Path $FASTBuildWorkspaceDir "FASTBuild.zip"
+  if(!$WhatIf)
+  {
+    Write-Host "Downloading: $FBuildDownloadUrl => $FBuildZipFile"
+    (New-Object System.Net.WebClient).DownloadFile($FBuildDownloadUrl, $FBuildZipFile)
+    if(Test-Path -PathType Leaf $FBuildZipFile)
+    {
+      Write-Host "Unzipping: $FBuildZipFile => $FASTBuildWorkspaceDir"
+      # Load the assembly
+      Add-Type -AssemblyName System.IO.Compression.FileSystem
+      [System.IO.Compression.ZipFile]::ExtractToDirectory($FBuildZipFile, $FASTBuildWorkspaceDir)
+      $FBuildExe = Find-FBuildExe $FASTBuildWorkspaceDir
+      if(!$FBuildExe)
+      {
+        Throw "Unable to unzip the FASTBuild client. Please go here and unzip it manually: $FASTBuildWorkspaceDir"
+      }
+    }
+    else
+    {
+      Throw "Unable to download a FASTBuild client. Please visit http://fastbuild.org and install it manually. Make sure it's in your path as well."
+    }
+  }
+  else
+  {
+    Write-Host "What if: Downloading: $FBuildDownloadUrl => $FASTBuildWorkspaceDir"
+  }
 }
 
 $FBuildOptions = @(
@@ -175,13 +249,12 @@ $FBuildOptions = @(
 
 if($WhatIf)
 {
-  Write-Host "What if: Invoking FASTBuild: $FBuildExe $FBuildOptions $Args"
+  Write-Host "What if: Invoking FASTBuild: $($FBuildExe.Source) $FBuildOptions $Args"
 }
 else
 {
   # Move to an intermediate directory and execute from there.
-  $FASTBuildWorkingDir = New-Item (Join-Path $WorkspaceDir "fastbuild") -ItemType Directory -Force
-  Push-Location $FASTBuildWorkingDir
+  Push-Location $FASTBuildWorkspaceDir
   & $FBuildExe -config (Join-Path $RepoRoot "fbuild.bff") $Args
   Pop-Location
 }
