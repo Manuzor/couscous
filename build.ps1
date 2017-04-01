@@ -4,6 +4,7 @@
 #>
 param(
   [switch]$RenewSystemBFF,
+  [switch]$IgnoreFBuildInPath,
   [switch]$WhatIf
 )
 
@@ -36,7 +37,7 @@ $BuildDir = New-Item (Join-Path $RepoRoot "_build") -ItemType Directory -Force
 [OperatingSystem]$OS = [Environment]::OSVersion
 
 #
-# Windows SDK
+# Find Windows SDK
 #
 if($OS.Platform -eq [PlatformID]::Win32NT)
 {
@@ -84,7 +85,7 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 }
 
 #
-# Visual Studio
+# Find Visual Studio
 #
 if($OS.Platform -eq [PlatformID]::Win32NT)
 {
@@ -128,7 +129,7 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 }
 
 #
-# Powershell
+# Find Powershell
 #
 $Powershell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
 
@@ -175,21 +176,28 @@ if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 }
 
 #
-# FASTBuild
+# Find FASTBuild
 #
 $FASTBuildWorkspaceDir = New-Item (Join-Path $WorkspaceDir "fastbuild") -ItemType Directory -Force
 
 function Find-FBuildExe(
   [string]$DirectoryToSearch,
-  [string[]]$FBuildNames = @('FBuild', 'fbuild')
+  [string[]]$FBuildNames = @('FBuild', 'fbuild'),
+  [switch]$SearchInPath
 )
 {
   $LocationsToTry = @(
     (Join-Path $FASTBuildWorkspaceDir 'fbuild');
     (Join-Path $FASTBuildWorkspaceDir 'FBuild');
-    'fbuild'; # PATH (system).
-    'FBuild'; # PATH (system).
   )
+
+  if($SearchInPath)
+  {
+    $LocationsToTry += @(
+      'fbuild'; # PATH (system).
+      'FBuild'; # PATH (system).
+    )
+  }
 
   $Result = Get-Command $LocationsToTry -ErrorAction Ignore
   if($Result)
@@ -198,8 +206,8 @@ function Find-FBuildExe(
   }
 }
 
-# Try to find the FBuild executable in the FASTBuildWorkspaceDir or in the path (system).
-$FBuildExe = Find-FBuildExe $FASTBuildWorkspaceDir
+# Try to find the FBuild executable in the FASTBuildWorkspaceDir or in the PATH (system).
+$FBuildExe = Find-FBuildExe $FASTBuildWorkspaceDir -SearchInPath:(!$IgnoreFBuildInPath)
 
 # If no FBuild executable was found, download one that is known to work.
 if(!$FBuildExe)
@@ -207,7 +215,7 @@ if(!$FBuildExe)
   Write-Warning "No FBuild client was found on this machine."
   Write-Host "Was looking here:"
   Write-Host "  - '$FASTBuildWorkspaceDir'"
-  Write-Host "  - System path"
+  if(!$IgnoreFBuildInPath) { Write-Host "  - System PATH" }
 
   $FBuildDownloadUrl = switch($OS.Platform)
   {
@@ -219,14 +227,23 @@ if(!$FBuildExe)
   if(!$WhatIf)
   {
     Write-Host "Downloading: $FBuildDownloadUrl => $FBuildZipFile"
-    (New-Object System.Net.WebClient).DownloadFile($FBuildDownloadUrl, $FBuildZipFile)
+    Write-Progress -Id 1 "Fetching FBuild Client" "Downloading: $FBuildDownloadUrl"
+    $DownloadTime = Measure-Command {
+      (New-Object System.Net.WebClient).DownloadFile($FBuildDownloadUrl, $FBuildZipFile)
+    }
+    Write-Host ("Downloaded in {0:N2}s." -f $DownloadTime.TotalSeconds)
+
     if(Test-Path -PathType Leaf $FBuildZipFile)
     {
       Write-Host "Unzipping: $FBuildZipFile => $FASTBuildWorkspaceDir"
-      # Load the assembly
-      Add-Type -AssemblyName System.IO.Compression.FileSystem
-      [System.IO.Compression.ZipFile]::ExtractToDirectory($FBuildZipFile, $FASTBuildWorkspaceDir)
-      $FBuildExe = Find-FBuildExe $FASTBuildWorkspaceDir
+      Write-Progress -Id 1 "Fetching FBuild Client" "Unzipping: $FBuildZipFile => $FASTBuildWorkspaceDir"
+      $UnzipTime = Measure-Command {
+        Expand-Archive -Force $FBuildZipFile $FASTBuildWorkspaceDir
+      }
+      Write-Host ("Unzipped in {0:N2}s." -f $UnzipTime.TotalSeconds)
+
+      Write-Progress -Id 1 "Fetching FBuild Client" "Veryfing"
+      $FBuildExe = Find-FBuildExe $FASTBuildWorkspaceDir -SearchInPath:$false
       if(!$FBuildExe)
       {
         Throw "Unable to unzip the FASTBuild client. Please go here and unzip it manually: $FASTBuildWorkspaceDir"
@@ -234,7 +251,7 @@ if(!$FBuildExe)
     }
     else
     {
-      Throw "Unable to download a FASTBuild client. Please visit http://fastbuild.org and install it manually. Make sure it's in your path as well."
+      Throw "Unable to download a FASTBuild client. Please visit http://fastbuild.org and install it manually. Make sure it's in your PATH as well."
     }
   }
   else
@@ -244,7 +261,7 @@ if(!$FBuildExe)
 }
 
 $FBuildOptions = @(
-  "-config", $FBuildBFF
+  "-config", $FBuildBFF;
 )
 
 if($WhatIf)
