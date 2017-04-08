@@ -1,42 +1,33 @@
 #include "charmap.cpp"
 
-internal
-auto
-::InitMachine(machine* M)
-  -> void
+void
+InitMachine(machine* M)
 {
   // TODO: Ensure charmap size is ok.
   u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
-  CopyBytes(ByteLengthOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
+  mtb_CopyBytes(mtb_ArrayByteSizeOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
 
-  M->ProgramCounter = (size_t)((u8*)M->ProgramMemory - (u8*)M->InterpreterMemory);
-  MTB_DebugAssert(M->ProgramCounter == 0x200);
+  M->ProgramCounter = (u16)((u8*)M->ProgramMemory - (u8*)M->InterpreterMemory);
+  MTB_AssertDebug(M->ProgramCounter == 0x200);
 }
 
-internal
-auto
-::ClearScreen(machine* M)
-  -> void
+void
+ClearScreen(machine* M)
 {
-  size_t const ScreenPixelsLength = SCREEN_WIDTH * SCREEN_HEIGHT;
-  SetElements(ScreenPixelsLength, M->Screen);
+  mtb_SetBytes(mtb_ArrayByteSizeOf(M->Screen), M->Screen, 0);
 }
 
-internal
-auto
-::GetDigitSpriteAddress(machine* M, u8 Digit)
-  -> u16
+u16
+GetDigitSpriteAddress(machine* M, u8 Digit)
 {
   u16 Result = (u16)CHAR_MEMORY_OFFSET + (u16)Digit;
   return Result;
 }
 
-internal
-auto
-::DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
-  -> void
+void
+DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
 {
-  MTB_DebugAssert(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
+  MTB_AssertDebug(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
 
   int SpriteWidth = 8; // Always 1 byte.
   int SpriteHeight = Sprite.Length;
@@ -56,7 +47,7 @@ auto
       int ScreenOffset = (ScreenY * SCREEN_WIDTH) + ScreenX;
       bool32* ScreenPixel = M->Screen + ScreenOffset;
 
-      bool32 SpriteColor = IsBitSet((u32)*SpritePixel, 7 - SpriteX);
+      bool32 SpriteColor = mtb_IsBitSet((u32)*SpritePixel, 7 - SpriteX);
       HasCollision |= *ScreenPixel & SpriteColor;
       *ScreenPixel ^= SpriteColor;
     }
@@ -65,74 +56,58 @@ auto
   M->V[0xF] = !!HasCollision;
 }
 
-internal
-auto
-::LoadRom(machine* M, slice<u8> Rom)
-  -> bool
+bool
+LoadRom(machine* M,  size_t RomSize, u8* RomPtr)
 {
-  bool Result{};
+  bool Result = false;
 
-  if(LengthOf(Rom) <= LengthOf(M->ProgramMemory))
+  if(RomSize <= mtb_ArrayLengthOf(M->ProgramMemory))
   {
-    u8* Source = Rom.Ptr;
-    u8* Dest = M->ProgramMemory;
-    CopyBytes(LengthOf(Rom), Dest, Source);
-
+    mtb_CopyBytes(RomSize, M->ProgramMemory, RomPtr);
     Result = true;
   }
 
   return Result;
 }
 
-internal
-auto
-::ReadByte(machine* M, u16 Address)
-  -> u8
+u8
+ReadByte(machine* M, u16 Address)
 {
   u8* Ptr = M->Memory + Address;
   u8 Result = *Ptr;
   return Result;
 }
 
-internal
-auto
-::ReadWord(machine* M, u16 Address)
-  -> u16
+u16
+ReadWord(machine* M, u16 Address)
 {
   u8* Ptr = M->Memory + Address;
   u16 Result = *(u16*)Ptr;
-  #if MTB_IsOn(MTB_LittleEndian)
+  #if MTB_IS_LITTLE_ENDIAN
     Result = (u16)((Result << 8) | (Result >> 8));
   #endif
   return Result;
 }
 
-internal
-auto
-::WriteByte(machine* M, u16 Address, u8 Byte)
-  -> void
+void
+WriteByte(machine* M, u16 Address, u8 Byte)
 {
   u8* Ptr = M->Memory + Address;
   *Ptr = Byte;
 }
 
-internal
-auto
-::WriteWord(machine* M, u16 Address, u16 Word)
-  -> void
+void
+WriteWord(machine* M, u16 Address, u16 Word)
 {
   u8* Ptr = M->Memory + Address;
-  #if MTB_IsOn(MTB_LittleEndian)
+  #if MTB_IS_LITTLE_ENDIAN
     Word = (u16)((Word << 8) | (Word >> 8));
   #endif
     *(u16*)Ptr = Word;
 }
 
-#if MTB_IsOff(MTB_Internal)
-  #define PrintInstruction(...) MTB_NOP
-#else
-  internal
-  void
+#if MTB_FLAG(INTERNAL)
+  static void
   PrintInstruction(machine* M, u16 InstructionAddress, instruction_decoder Decoder, instruction Instruction)
   {
     printf("0x%03X: 0x%04X => ", InstructionAddress, Decoder.Data);
@@ -198,7 +173,7 @@ auto
 
     // if(false)
     {
-      for(int Index = 0; Index < LengthOf(M->V); ++Index)
+      for(int Index = 0; Index < mtb_ArrayLengthOf(M->V); ++Index)
         printf("V%X=%02X|", Index, M->V[Index]);
 
       printf("I=%03X|DT=%02X|ST=%02X|SP=%02X|PC=%02X",
@@ -211,12 +186,13 @@ auto
 
     printf("\n");
   }
-#endif // MTB_IsOn(MTB_Internal)
 
-internal
-auto
-::Tick(machine* M)
-  -> tick_result
+#else
+  #define PrintInstruction(...) MTB_NOP
+#endif // MTB_IsOn(MTB_static)
+
+tick_result
+Tick(machine* M)
 {
   tick_result result{};
   result.Continue = true;
@@ -260,10 +236,8 @@ auto
   return result;
 }
 
-internal
-auto
-::DecodeInstruction(instruction_decoder Decoder)
-  -> instruction
+instruction
+DecodeInstruction(instruction_decoder Decoder)
 {
   using inst = instruction_type;
   using arg = argument_type;
@@ -508,10 +482,8 @@ auto
   return Result;
 }
 
-internal
-auto
-::EncodeInstruction(instruction Instruction)
-  -> u16
+u16
+EncodeInstruction(instruction Instruction)
 {
   u16 result = 0x0000;
 
@@ -630,10 +602,8 @@ auto
 }
 
 
-internal
-auto
-::ExecuteInstruction(machine* M, instruction Instruction)
-  -> void
+void
+ExecuteInstruction(machine* M, instruction Instruction)
 {
   switch(Instruction.Type)
   {
@@ -649,7 +619,7 @@ auto
     }
     case instruction_type::SYS:
     {
-      MTB_ReportError("Not implemented.");
+      MTB_NOT_IMPLEMENTED;
       return;
     }
     case instruction_type::JP:
@@ -746,16 +716,15 @@ auto
                 *Reg = ReadByte(M, M->I);
               }
 
-              u16 O = M->I;
               while(Num > 0)
               {
-                u8* Reg = M->V + ReadByte(M, M->I);
+                // u8* Reg = M->V + ReadByte(M, M->I);
                 ++M->I;
                 --Num;
               }
               u8* Dest = M->Memory + M->I;
               u8* Source = M->V;
-              CopyBytes(Num, Dest, Source);
+              mtb_CopyBytes(Num, Dest, Source);
               return;
             }
           }
@@ -840,7 +809,7 @@ auto
               u8 Num = (u8)Instruction.Args[0].Value;
               u8* Dest = M->V;
               u8* Source = M->Memory + M->I;
-              CopyBytes(Num, Dest, Source);
+              mtb_CopyBytes(Num, Dest, Source);
               return;
             }
             case argument_type::BYTE:
@@ -857,7 +826,7 @@ auto
             }
             case argument_type::K:
             {
-              u8* Reg = M->V + Instruction.Args[0].Value;
+              // u8* Reg = M->V + Instruction.Args[0].Value;
               // TODO: All execution stops until a key is pressed, then the
               // value of that key is stored in Vx.
               return;
@@ -918,42 +887,42 @@ auto
     }
     case instruction_type::OR:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::AND:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::XOR:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::SUB:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::SHR:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::SUBN:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::SHL:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::RND:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::DRW:
@@ -987,18 +956,18 @@ auto
     }
     case instruction_type::SKP:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     case instruction_type::SKNP:
     {
-      MTB_ReportError("Not Implemented.");
+      MTB_NOT_IMPLEMENTED;
       break;
     }
     default: break;
   }
 
-  MTB_InternalCode( printf("Invalid instruction to execute."); )
+  MTB_INTERNAL_CODE( printf("Invalid instruction to execute.\n") );
 }
 
 #if defined(COUSCOUS_TESTS)

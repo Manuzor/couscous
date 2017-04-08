@@ -1,13 +1,11 @@
 
-internal
-bool
+static bool
 operator==(machine const& A, machine const& B)
 {
-  return AreBytesEqual(sizeof(machine), &A, &B);
+  return mtb_AreBytesEqual(sizeof(machine), &A, &B);
 }
 
-internal
-bool
+static bool
 operator!=(machine const& A, machine const& B)
 {
   return !(A == B);
@@ -23,8 +21,7 @@ operator!=(machine const& A, machine const& B)
 #define INST2(InstType, Arg1Type, Arg1Val, Arg2Type, Arg2Val) instruction{ instruction_type::InstType, argument{ argument_type::Arg1Type, Arg1Val }, argument{ argument_type::Arg2Type, Arg2Val } }
 #define INST3(InstType, Arg1Type, Arg1Val, Arg2Type, Arg2Val, Arg3Type, Arg3Val) instruction{ instruction_type::InstType, argument{ argument_type::Arg1Type, Arg1Val }, argument{ argument_type::Arg2Type, Arg2Val }, argument{ argument_type::Arg3Type, Arg3Val } }
 
-internal
-void
+static void
 RunTests()
 {
   using inst = instruction_type;

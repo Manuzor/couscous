@@ -1,11 +1,10 @@
 #define MTB_IMPLEMENTATION
-#include "mtb.hpp"
+#include "mtb.h"
 
-#if MTB_IsOn(MTB_Internal)
+#if MTB_FLAG(INTERNAL)
   #include <stdio.h>
 #endif
 
-#define INSTRUCTION(Word) (u8)((Word) >> 8), (u8)((Word) & 0x00FF)
 
 #include "couscous.hpp"
 #include "couscous.cpp"
@@ -21,6 +20,7 @@
 #endif
 
 #if USE_TEST_PROGRAM
+  #define INSTRUCTION(Word) (u8)((Word) >> 8), (u8)((Word) & 0x00FF)
   #include "testprogram.cpp"
 #endif
 
@@ -46,8 +46,7 @@ struct mem_stack
   u8* Ptr;
 };
 
-internal
-void*
+static void*
 PushBytes(mem_stack* Memory, size_t NumBytes)
 {
   if(Memory->Current + NumBytes > Memory->Length)
@@ -58,20 +57,20 @@ PushBytes(mem_stack* Memory, size_t NumBytes)
   return Ptr;
 }
 
-#define PushStruct(Memory, Struct) (Struct*)PushBytes((Memory), SizeOf<Struct>())
-#define PushArray(Memory, Length, Struct) (Struct*)PushBytes((Memory), (Length) * SizeOf<Struct>())
+#define PushStruct(Memory, Struct) (Struct*)PushBytes((Memory), mtb_SafeSizeOf<Struct>())
+#define PushArray(Memory, Length, Struct) (Struct*)PushBytes((Memory), (Length) * mtb_SafeSizeOf<Struct>())
 
-struct loaded_rom
+struct win32_loaded_rom
 {
   size_t Length;
   u8* Ptr;
 };
 
-internal
-slice<u8>
-Win32LoadRomFromFile(char const* FileName, slice<u8> RomBuffer)
+static win32_loaded_rom
+Win32LoadRomFromFile(char const* FileName, size_t RomBufferLen, u8* RomBufferPtr)
 {
-  slice<u8> Result{};
+  win32_loaded_rom Result{};
+  Result.Ptr = RomBufferPtr;
 
   HANDLE FileHandle = CreateFileA(
     FileName,        // _In_     LPCTSTR               lpFileName,
@@ -87,13 +86,13 @@ Win32LoadRomFromFile(char const* FileName, slice<u8> RomBuffer)
     LARGE_INTEGER FileSize;
     GetFileSizeEx(FileHandle, &FileSize);
 
-    auto const RomLength = Convert<DWORD>(FileSize.QuadPart);
-    if(RomLength <= LengthOf(RomBuffer))
+    DWORD const RomLength = (DWORD)FileSize.QuadPart;
+    if(RomLength <= RomBufferLen)
     {
       DWORD NumBytesRead;
       if(ReadFile(
           FileHandle,    // _In_        HANDLE       hFile
-          RomBuffer.Ptr, // _Out_       LPVOID       lpBuffer
+          RomBufferPtr,  // _Out_       LPVOID       lpBuffer
           RomLength,     // _In_        DWORD        nNumberOfBytesToRead
           &NumBytesRead, // _Out_opt_   LPDWORD      lpNumberOfBytesRead
           nullptr))      // _Inout_opt_ LPOVERLAPPED lpOverlapped
@@ -102,7 +101,8 @@ Win32LoadRomFromFile(char const* FileName, slice<u8> RomBuffer)
 
         if(NumBytesRead == RomLength)
         {
-          Result = { RomLength, RomBuffer.Ptr };
+          Result.Length = RomLength;
+          Result.Ptr = RomBufferPtr;
         }
       }
       else
@@ -114,7 +114,7 @@ Win32LoadRomFromFile(char const* FileName, slice<u8> RomBuffer)
     else
     {
       // TODO: Logging?
-      MTB_ReportError("Rom file too large.");
+      MTB_Fail("Rom file too large.");
     }
   }
   else
@@ -139,8 +139,7 @@ struct win32_front_buffer
   colorRGB8 PixelColorOff;
 };
 
-internal
-void
+static void
 Win32SwapBuffers(bool32* ScreenPixels, win32_front_buffer* Front)
 {
   colorRGB8* FrontPixel = Front->Pixels;
@@ -158,24 +157,22 @@ Win32SwapBuffers(bool32* ScreenPixels, win32_front_buffer* Front)
   }
 }
 
-internal
-void
+static void
 Win32GetWindowClientArea(HWND WindowHandle, int* ClientWidth, int* ClientHeight)
 {
   RECT ClientRect;
   GetClientRect(WindowHandle, &ClientRect);
-  *ClientWidth = Convert<int>(ClientRect.right - ClientRect.left);
-  *ClientHeight = Convert<int>(ClientRect.bottom - ClientRect.top);
+  *ClientWidth = (int)(ClientRect.right - ClientRect.left);
+  *ClientHeight = (int)(ClientRect.bottom - ClientRect.top);
 }
 
 struct rect_i32
 {
-  i32 X, Y;
-  i32 Width, Height;
+  s32 X, Y;
+  s32 Width, Height;
 };
 
-internal
-void
+static void
 Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
 {
   HDC DC = GetDC(WindowHandle);
@@ -186,20 +183,20 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
   SourceRect.Width = (int)FrontBuffer->Width;
   SourceRect.Height = (int)FrontBuffer->Height;
 
-  float Aspect = (float)SourceRect.Width / (float)SourceRect.Height;
+  // float Aspect = (float)SourceRect.Width / (float)SourceRect.Height;
 
   rect_i32 DestRect{};
   Win32GetWindowClientArea(WindowHandle, &DestRect.Width, &DestRect.Height);
 
   // Add some margin to possibly catch errors.
-  #if MTB_IsOn(MTB_Internal)
+  #if MTB_FLAG(INTERNAL)
     DestRect.X += 64;
     DestRect.Y += 64;
     DestRect.Width -= DestRect.X + 64;
     DestRect.Height -= DestRect.Y + 64;
   #endif
 
-  MTB_DebugCode(int Result =) StretchDIBits(
+  MTB_DEBUG_CODE(int Result =) StretchDIBits(
     DC,                       // _In_       HDC        hdc
     DestRect.X,               // _In_       int        XDest
     DestRect.Y,               // _In_       int        YDest
@@ -219,8 +216,7 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
   ReleaseDC(WindowHandle, DC);
 }
 
-internal void
-Win32ToggleFullscreenWindow(HWND WindowHandle)
+static void Win32ToggleFullscreenWindow(HWND WindowHandle)
 {
   // Note: This follows  prescription
   // for fullscreen toggling, see:
@@ -252,14 +248,13 @@ Win32ToggleFullscreenWindow(HWND WindowHandle)
   }
 }
 
-internal
-LRESULT CALLBACK
+static LRESULT CALLBACK
 Win32MainWindowCallback(HWND WindowHandle, UINT Message,
                         WPARAM WParam, LPARAM LParam)
 {
   LRESULT Result = 0;
 
-  auto FrontBuffer = Reinterpret<win32_front_buffer*>(GetWindowLongPtr(WindowHandle, GWLP_USERDATA));
+  auto FrontBuffer = (win32_front_buffer*)GetWindowLongPtr(WindowHandle, GWLP_USERDATA);
 
   if(Message == WM_CLOSE || Message == WM_DESTROY)
   {
@@ -273,14 +268,14 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
     if(Message != WM_CHAR) // Char messages are ignored (for now).)
     {
       u32 VKCode = (u32)WParam;
-      bool KeyWasDown = IsBitSet((u64)LParam, 30);
-      bool KeyIsDown = !IsBitSet((u64)LParam, 31);
+      bool KeyWasDown = mtb_IsBitSet((u64)LParam, 30);
+      bool KeyIsDown = !mtb_IsBitSet((u64)LParam, 31);
       bool KeyWasPressed = !KeyWasDown && KeyIsDown;
-      bool KeyWasReleased = KeyWasDown && !KeyIsDown;
+      // bool KeyWasReleased = KeyWasDown && !KeyIsDown;
 
       bool AltKeyModifier = false;
       if(Message == WM_SYSKEYDOWN || Message == WM_SYSKEYUP)
-        AltKeyModifier = IsBitSet((u64)LParam, 29);
+        AltKeyModifier = mtb_IsBitSet((u64)LParam, 29);
 
       if(KeyWasPressed)
       {
@@ -305,8 +300,8 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
   }
   else if(Message == WM_SIZE)
   {
-    u32 NewWidth = Convert<u32>(LParam & 0xffff);
-    u32 NewHeight = Convert<u32>((LParam & 0xffff0000) >> 16);
+    // u32 NewWidth = (u32)(LParam & 0xffff);
+    // u32 NewHeight = (u32)((LParam & 0xffff0000) >> 16);
     // TODO: Handle resizing.
   }
   else if(Message == WM_PAINT)
@@ -332,8 +327,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
   return(Result);
 }
 
-internal
-void
+static void
 Win32MessagePump(struct win32_window* Window)
 {
   MSG Message;
@@ -363,8 +357,7 @@ struct win32_window
   int ClientHeight;
 };
 
-internal
-win32_window
+static win32_window
 Win32CreateWindow(HINSTANCE ProcessHandle,
                   char const* WindowTitle,
                   int ClientWidth, int ClientHeight)
@@ -428,12 +421,12 @@ Win32CreateWindow(HINSTANCE ProcessHandle,
     }
     else
     {
-      MTB_ReportError("Failed to create window.");
+      MTB_Fail("Failed to create window.");
     }
   }
   else
   {
-    MTB_ReportError("Failed to register window class: %s", WindowClass.lpszClassName);
+    MTB_Fail("Failed to register window class: %s", WindowClass.lpszClassName);
   }
 
   return Result;
@@ -444,8 +437,7 @@ struct win32_clock
   LARGE_INTEGER Frequency;
 };
 
-internal
-win32_clock
+static win32_clock
 Win32CreateClock()
 {
   win32_clock Result;
@@ -458,8 +450,7 @@ struct win32_timestamp
   LARGE_INTEGER Timestamp;
 };
 
-internal
-win32_timestamp
+static win32_timestamp
 Win32Timestamp()
 {
   win32_timestamp Result;
@@ -467,8 +458,7 @@ Win32Timestamp()
   return Result;
 }
 
-internal
-f64
+static f64
 Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
 {
   LONGLONG EndInt = End->Timestamp.QuadPart;
@@ -484,7 +474,7 @@ int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
 {
-  #if MTB_IsOn(MTB_Internal)
+  #if MTB_FLAG(INTERNAL)
     AllocConsole();
     AttachConsole(GetCurrentProcessId());
     freopen("CON", "w", stdout);
@@ -500,32 +490,30 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
   char const* FileName = CommandLine;
 
   mem_stack UtilStack{};
-  UtilStack.Length = MiB(1);
+  UtilStack.Length = (size_t)mtb_MiB(1);
 
   LPVOID BaseAddress = nullptr;
-  MTB_InternalCode( BaseAddress = (LPVOID)(size_t)0x2'000'000 );
+  MTB_INTERNAL_CODE( BaseAddress = (LPVOID)(size_t)0x2'000'000 );
   UtilStack.Ptr = (u8*)VirtualAlloc(BaseAddress, UtilStack.Length,
                                     MEM_RESERVE | MEM_COMMIT,
                                     PAGE_READWRITE);
 
-  auto M = (machine*)PushStruct(&UtilStack, machine);
-  ConstructElements(1, M);
+  machine* M = (machine*)PushStruct(&UtilStack, machine);
+  mtb_SetBytes(sizeof(machine), M, 0);
 
-  bool RomLoaded{};
+  bool RomLoaded = false;
   {
-    slice<u8> Rom{};
     #if USE_TEST_PROGRAM
-      Rom = Slice(GlobalTestProgram);
+      win32_loaded_rom Rom{ mtb_ArrayLengthOf(GlobalTestProgram), GlobalTestProgram };
       // DWORD RomLength = (DWORD)sizeof(GlobalTestProgram);
       // CopyBytes(RomLength, M->Memory + PROGRAM_START_ADDRESS, (u8*)GlobalTestProgram);
     #else
-
-      u8 RomData[SizeOf<decltype(machine::ProgramMemory)>()];
-      Rom = Win32LoadRomFromFile(FileName, Slice(RomData));
+      u8 RomData[sizeof(decltype(machine::ProgramMemory))];
+      win32_loaded_rom Rom = Win32LoadRomFromFile(FileName, mtb_ArrayLengthOf(RomData), RomData);
     #endif
 
     // Insert ROM data into the machine.
-    RomLoaded = LoadRom(M, Rom);
+    RomLoaded = LoadRom(M, Rom.Length, Rom.Ptr);
   }
 
   if(RomLoaded)
@@ -534,7 +522,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
     {
       char WindowTitle[512]{};
-      Concat("Couscous CHIP-8 // "_S, SliceFromString(FileName), Slice(WindowTitle));
+      mtb_ConcatStrings("Couscous CHIP-8 // ", FileName, mtb_ArrayLengthOf(WindowTitle), WindowTitle);
 
       const int ScreenWidth = SCREEN_WIDTH;
       const int ScreenHeight = SCREEN_HEIGHT;
@@ -558,7 +546,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       Win32FrontBuffer.BitmapInfo.bmiHeader.biWidth = (LONG)Win32FrontBuffer.Width;
       Win32FrontBuffer.BitmapInfo.bmiHeader.biHeight = -(LONG)Win32FrontBuffer.Height; // Note: This is negative so pixels go downwards.
       Win32FrontBuffer.BitmapInfo.bmiHeader.biPlanes = 1;
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biBitCount = Win32FrontBuffer.BytesPerPixel * 8;
+      Win32FrontBuffer.BitmapInfo.bmiHeader.biBitCount = (WORD)(Win32FrontBuffer.BytesPerPixel * 8);
       Win32FrontBuffer.BitmapInfo.bmiHeader.biCompression = BI_RGB;
       Win32FrontBuffer.Pixels = (decltype(Win32FrontBuffer.Pixels))PushBytes(&UtilStack, Win32FrontBuffer.Width * Win32FrontBuffer.Height * Win32FrontBuffer.BytesPerPixel);
       Win32FrontBuffer.PixelColorOff = { 16, 64, 16 };
@@ -569,7 +557,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       Win32SwapBuffers(M->Screen, &Win32FrontBuffer);
 
       // Associate the back buffer with the window for presenting.
-      SetWindowLongPtr(Window.Handle, GWLP_USERDATA, Reinterpret<LONG_PTR>(&Win32FrontBuffer));
+      SetWindowLongPtr(Window.Handle, GWLP_USERDATA, (LONG_PTR)&Win32FrontBuffer);
 
       InitMachine(M);
 
@@ -620,7 +608,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
   else
   {
     // TODO: Logging?
-    MTB_ReportError("Unable to load ROM.");
+    MTB_Fail("Unable to load ROM.");
     return 1;
   }
 

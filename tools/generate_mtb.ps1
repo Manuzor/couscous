@@ -1,7 +1,7 @@
 param(
   # [Parameter(Mandatory=$true)]
   [ValidateNotNullOrEmpty()]
-  [string]$OutFilePath = (Join-Path (Resolve-Path "$PSScriptRoot/../code") "mtb.hpp")
+  [string]$OutFilePath = (Join-Path (Resolve-Path "$PSScriptRoot/../code") "mtb.h")
 )
 
 # TODO(Manuzor): Find MTB in a more sophisticated way? Download it somewhere?!

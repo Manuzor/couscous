@@ -48,6 +48,14 @@
     .Compiler = '$VSDir$\VC\bin\amd64\cl.exe'
     .CompilerOptions = ' %1 /Fo"%2" /c'
                      + ' /nologo'
+                     + ' /WX' // Treat warnings as errors.
+                     + ' /W4' // Warning level
+                     + ' /wd4100' // "unreferenced formal parameter"
+                     + ' /wd4201' // "nonstandard extension used: nameless struct/union"
+                     + ' /wd4307' // "integral constant overflow"
+                     + ' /wd4310' // "cast truncates constant value" TODO: Re-enable and fix these!
+                     + ' /wd4505' // "unreferenced local function has been removed"
+
                      + ' /DCOUSCOUS_TESTS'
 
                      //
@@ -91,6 +99,7 @@
 
       .CompilerOptions + ' /Zi'
                        + ' /MTd'
+                       + ' /wd4189' // "local variable is initialized but not referenced"
                        + ' /DDEBUG'
                        + ' /D_DEBUG'
 
@@ -127,6 +136,7 @@
 
       .CompilerOptions + ' /MT'
                        + ' /Ox'
+                       + ' /DNDEBUG'
 
       .MyTarget = '$MyName$-$MyBuildId$'
       ObjectList( '$MyTarget$-obj' ) {}

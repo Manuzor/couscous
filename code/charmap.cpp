@@ -1,6 +1,6 @@
 
-internal
-u8 GlobalCharMap[][5]
+static u8
+GlobalCharMap[][5]
 {
   // 0
   {

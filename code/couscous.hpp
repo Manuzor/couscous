@@ -1,8 +1,19 @@
-#include "mtb.hpp"
-using namespace mtb;
+#include "mtb.h"
 
-// More descriptive for translation-unit-local functions.
-#define internal static
+using u8  = mtb_u08;
+using u16 = mtb_u16;
+using u32 = mtb_u32;
+using u64 = mtb_u64;
+using s8  = mtb_s08;
+using s16 = mtb_s16;
+using s32 = mtb_s32;
+using s64 = mtb_s64;
+
+using f32 = mtb_f32;
+using f64 = mtb_f64;
+
+using bool32 = int;
+
 
 enum
 {
@@ -133,34 +144,34 @@ union instruction_decoder
 static_assert(sizeof(instruction_decoder) == sizeof(u16), "Invalid size for `instruction`.");
 
 // TODO: Should the machine load the rom?
-void
+static void
 InitMachine(machine* M);
 
-void
+static void
 ClearScreen(machine* M);
 
-u16
+static u16
 GetDigitSpriteAddress(machine* M, u8 Digit);
 
-sprite
+static sprite
 GetCharacterSprite(machine* M, char Character);
 
-void
+static void
 DrawSprite(machine* M, int X, int Y, sprite Sprite);
 
-bool
-LoadRom(machine* M, slice<u8> Rom);
+static bool
+LoadRom(machine* M, size_t RomSize, u8* RomPtr);
 
-u8
+static u8
 ReadByte(machine* M, u16 Address);
 
-u16
+static u16
 ReadWord(machine* M, u16 Address);
 
-void
+static void
 WriteByte(machine* M, u16 Address, u8 Byte);
 
-void
+static void
 WriteWord(machine* M, u16 Address, u16 Word);
 
 struct tick_result
@@ -169,17 +180,17 @@ struct tick_result
 };
 
 // Return value of `true` means continue ticking.
-tick_result
+static tick_result
 Tick(machine* M);
 
-u16
+static u16
 FetchInstruction(machine* M);
 
-instruction
+static instruction
 DecodeInstruction(instruction_decoder Decoder);
 
-u16
+static u16
 EncodeInstruction(instruction Instruction);
 
-void
+static void
 ExecuteInstruction(machine* M, instruction Instruction);
