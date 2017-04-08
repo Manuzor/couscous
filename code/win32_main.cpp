@@ -2,6 +2,7 @@
 #include "mtb.h"
 
 #if MTB_FLAG(INTERNAL)
+  // printf
   #include <stdio.h>
 #endif
 
@@ -166,7 +167,7 @@ Win32GetWindowClientArea(HWND WindowHandle, int* ClientWidth, int* ClientHeight)
   *ClientHeight = (int)(ClientRect.bottom - ClientRect.top);
 }
 
-struct rect_i32
+struct rect_s32
 {
   s32 X, Y;
   s32 Width, Height;
@@ -179,24 +180,24 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
   colorRGB8* Pixels = FrontBuffer->Pixels;
 
   // TODO: Keep aspect ratio of screen.
-  rect_i32 SourceRect{};
+  rect_s32 SourceRect{};
   SourceRect.Width = (int)FrontBuffer->Width;
   SourceRect.Height = (int)FrontBuffer->Height;
 
   // float Aspect = (float)SourceRect.Width / (float)SourceRect.Height;
 
-  rect_i32 DestRect{};
+  rect_s32 DestRect{};
   Win32GetWindowClientArea(WindowHandle, &DestRect.Width, &DestRect.Height);
 
   // Add some margin to possibly catch errors.
-  #if MTB_FLAG(INTERNAL)
+  #if MTB_FLAG(DEBUG)
     DestRect.X += 64;
     DestRect.Y += 64;
     DestRect.Width -= DestRect.X + 64;
     DestRect.Height -= DestRect.Y + 64;
   #endif
 
-  MTB_DEBUG_CODE(int Result =) StretchDIBits(
+  MTB_INTERNAL_CODE(int Result =) StretchDIBits(
     DC,                       // _In_       HDC        hdc
     DestRect.X,               // _In_       int        XDest
     DestRect.Y,               // _In_       int        YDest
@@ -216,10 +217,10 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
   ReleaseDC(WindowHandle, DC);
 }
 
-static void Win32ToggleFullscreenWindow(HWND WindowHandle)
+static void
+Win32ToggleFullscreenWindow(HWND WindowHandle)
 {
-  // Note: This follows  prescription
-  // for fullscreen toggling, see:
+  // Source:
   // http://blogs.msdn.com/b/oldnewthing/archive/2010/04/12/9994016.aspx
 
   static WINDOWPLACEMENT LocalWindowPosition{ sizeof(LocalWindowPosition) };
@@ -254,7 +255,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
 {
   LRESULT Result = 0;
 
-  auto FrontBuffer = (win32_front_buffer*)GetWindowLongPtr(WindowHandle, GWLP_USERDATA);
+  win32_front_buffer* FrontBuffer = (win32_front_buffer*)GetWindowLongPtr(WindowHandle, GWLP_USERDATA);
 
   if(Message == WM_CLOSE || Message == WM_DESTROY)
   {

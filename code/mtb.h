@@ -3310,10 +3310,10 @@ mtb_TrimWhitespaceFront(size_t* SourceLen, char const** SourcePtr)
     --Len;
   }
 
-  size_t LenTrimmed = *SourceLen - Len;
+  size_t NumTrimmed = *SourceLen - Len;
   *SourceLen = Len;
   *SourcePtr = Ptr;
-  return LenTrimmed;
+  return NumTrimmed;
 }
 
 /// If a '+' was consumed, `1` is returned and \a SourcePtr is advanced by 1,
@@ -3366,11 +3366,11 @@ mtb_ParseString_f64(size_t SourceLen, char const* SourcePtr, mtb_f64 Fallback)
     // Parse all parts of a floating point number.
     if(Len)
     {
-      // Leneric part
-      mtb_parse_string_result_u64 LenericResult = mtb_ParseString_u64(Len, Ptr, (mtb_u64)-1);
-      Len = LenericResult.RemainingSourceLen;
-      Ptr = LenericResult.RemainingSourcePtr;
-      double Value = (double)LenericResult.Value;
+      // Numeric part
+      mtb_parse_string_result_u64 NumericResult = mtb_ParseString_u64(Len, Ptr, (mtb_u64)-1);
+      Len = NumericResult.RemainingSourceLen;
+      Ptr = NumericResult.RemainingSourcePtr;
+      double Value = (double)NumericResult.Value;
 
       // Decimal part
       bool HasDecimalPart = false;
@@ -3393,7 +3393,7 @@ mtb_ParseString_f64(size_t SourceLen, char const* SourcePtr, mtb_f64 Fallback)
         Value += (double)DecimalValue / (double)DecimalDivider;
       }
 
-      if(LenericResult.Success || HasDecimalPart)
+      if(NumericResult.Success || HasDecimalPart)
       {
         // Parse exponent, if any.
         if(Len && (Ptr[0] == 'e' || Ptr[0] == 'E'))

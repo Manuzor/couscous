@@ -83,7 +83,7 @@ ReadWord(machine* M, u16 Address)
 {
   u8* Ptr = M->Memory + Address;
   u16 Result = *(u16*)Ptr;
-  #if MTB_IS_LITTLE_ENDIAN
+  #if MTB_FLAG(LITTLE_ENDIAN)
     Result = (u16)((Result << 8) | (Result >> 8));
   #endif
   return Result;
@@ -100,10 +100,10 @@ void
 WriteWord(machine* M, u16 Address, u16 Word)
 {
   u8* Ptr = M->Memory + Address;
-  #if MTB_IS_LITTLE_ENDIAN
+  #if MTB_FLAG(LITTLE_ENDIAN)
     Word = (u16)((Word << 8) | (Word >> 8));
   #endif
-    *(u16*)Ptr = Word;
+  *(u16*)Ptr = Word;
 }
 
 #if MTB_FLAG(INTERNAL)
@@ -189,7 +189,7 @@ WriteWord(machine* M, u16 Address, u16 Word)
 
 #else
   #define PrintInstruction(...) MTB_NOP
-#endif // MTB_IsOn(MTB_static)
+#endif // MTB_FLAG(INTERNAL)
 
 tick_result
 Tick(machine* M)
