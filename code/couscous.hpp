@@ -194,3 +194,15 @@ EncodeInstruction(instruction Instruction);
 
 static void
 ExecuteInstruction(machine* M, instruction Instruction);
+
+static instruction
+AssembleInstruction(size_t Size, char* Code);
+
+struct disassembled_instruction
+{
+  size_t Size;
+  #define MAX_ASSEMBLER_INSTRUCTION_SIZE 32
+  char Code[MAX_ASSEMBLER_INSTRUCTION_SIZE];
+};
+static disassembled_instruction
+DisassembleInstruction(instruction Instruction);

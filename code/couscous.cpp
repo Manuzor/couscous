@@ -106,107 +106,106 @@ WriteWord(machine* M, u16 Address, u16 Word)
   *(u16*)Ptr = Word;
 }
 
-#if MTB_FLAG(INTERNAL)
-  static void
-  PrintInstruction(machine* M, u16 InstructionAddress, instruction_decoder Decoder, instruction Instruction)
+static instruction
+AssembleInstruction(size_t Size, char* Code)
+{
+  instruction Result{};
+  // TODO
+  return Result;
+}
+
+static disassembled_instruction
+DisassembleInstruction(instruction Instruction)
+{
+  disassembled_instruction Result{};
+  char* BufferBegin = &Result.Code[0];
+  char* BufferOnePastLast = BufferBegin + mtb_ArrayLengthOf(Result.Code);
+
+  char const* InstructionToString[] =
   {
-    printf("0x%03X: 0x%04X => ", InstructionAddress, Decoder.Data);
+    "INVALID", // instruction_type::INVALID
+    "CLS",     // instruction_type::CLS
+    "RET",     // instruction_type::RET
+    "SYS",     // instruction_type::SYS
+    "JP",      // instruction_type::JP
+    "CALL",    // instruction_type::CALL
+    "SE",      // instruction_type::SE
+    "SNE",     // instruction_type::SNE
+    "LD",      // instruction_type::LD
+    "ADD",     // instruction_type::ADD
+    "OR",      // instruction_type::OR
+    "AND",     // instruction_type::AND
+    "XOR",     // instruction_type::XOR
+    "SUB",     // instruction_type::SUB
+    "SHR",     // instruction_type::SHR
+    "SUBN",    // instruction_type::SUBN
+    "SHL",     // instruction_type::SHL
+    "RND",     // instruction_type::RND
+    "DRW",     // instruction_type::DRW
+    "SKP",     // instruction_type::SKP
+    "SKNP",    // instruction_type::SKNP
+  };
 
-    switch(Instruction.Type)
+  MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+  BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", InstructionToString[(int)Instruction.Type]);
+
+  char const* Joiner = " ";
+  for(argument& Arg : Instruction.Args)
+  {
+    if(Arg.Type == argument_type::NONE)
+      break;
+
+    MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+    BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", Joiner);
+    Joiner = ", ";
+
+    MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+    switch(Arg.Type)
     {
-      case instruction_type::CLS:  printf("CLS "); break;
-      case instruction_type::RET:  printf("RET "); break;
-      case instruction_type::SYS:  printf("SYS "); break;
-      case instruction_type::JP:   printf("JP  "); break;
-      case instruction_type::CALL: printf("CALL"); break;
-      case instruction_type::SE:   printf("SE  "); break;
-      case instruction_type::SNE:  printf("SNE "); break;
-      case instruction_type::LD:   printf("LD  "); break;
-      case instruction_type::ADD:  printf("ADD "); break;
-      case instruction_type::OR:   printf("OR  "); break;
-      case instruction_type::AND:  printf("AND "); break;
-      case instruction_type::XOR:  printf("XOR "); break;
-      case instruction_type::SUB:  printf("SUB "); break;
-      case instruction_type::SHR:  printf("SHR "); break;
-      case instruction_type::SUBN: printf("SUBN"); break;
-      case instruction_type::SHL:  printf("SHL "); break;
-      case instruction_type::RND:  printf("RND "); break;
-      case instruction_type::DRW:  printf("DRW "); break;
-      case instruction_type::SKP:  printf("SKP "); break;
-      case instruction_type::SKNP: printf("SKNP"); break;
+      case argument_type::V: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "V%X", Arg.Value); break; }
+
+      case argument_type::ADDRESS: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%03X", Arg.Value); break; }
+      case argument_type::BYTE:    { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%02X", Arg.Value); break; }
+      case argument_type::NIBBLE:  { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%01X", Arg.Value); break; }
+
+      case argument_type::I:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "I");   break; }
+      case argument_type::DT:  { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "DT");  break; }
+      case argument_type::ST:  { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "ST");  break; }
+      case argument_type::K:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "K");   break; }
+      case argument_type::F:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "F");   break; }
+      case argument_type::B:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "B");   break; }
+      case argument_type::ATI: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "[I]"); break; }
+
       default:
-        printf("<INVALID INSTRUCTION TYPE>");
-        return;
-    }
-
-
-    char Spaces[16]{ ' ' };
-    int RemainingMessageLength = 13;
-
-    char const* Prefix = " ";
-    for(argument& Arg : Instruction.Args)
-    {
-      if(Arg.Type == argument_type::NONE)
-        break;
-
-      RemainingMessageLength -= printf(Prefix);
-
-      switch(Arg.Type)
       {
-        case argument_type::V:       RemainingMessageLength -= printf("V%X", Arg.Value); break;
-        case argument_type::I:       RemainingMessageLength -= printf("I"); break;
-        case argument_type::DT:      RemainingMessageLength -= printf("DT"); break;
-        case argument_type::ST:      RemainingMessageLength -= printf("ST"); break;
-        case argument_type::K:       RemainingMessageLength -= printf("K"); break;
-        case argument_type::F:       RemainingMessageLength -= printf("F"); break;
-        case argument_type::B:       RemainingMessageLength -= printf("B"); break;
-        case argument_type::ATI:     RemainingMessageLength -= printf("[I]"); break;
-        case argument_type::ADDRESS: RemainingMessageLength -= printf("%03X", Arg.Value); break;
-        case argument_type::BYTE:    RemainingMessageLength -= printf("%02X", Arg.Value); break;
-        case argument_type::NIBBLE:  RemainingMessageLength -= printf("%01X", Arg.Value); break;
+        MTB_INVALID_CODE_PATH;
+        break;
       }
-
-      Prefix = ", ";
     }
-
-    printf("%*s", RemainingMessageLength, "..................");
-
-    // if(false)
-    {
-      for(int Index = 0; Index < mtb_ArrayLengthOf(M->V); ++Index)
-        printf("V%X=%02X|", Index, M->V[Index]);
-
-      printf("I=%03X|DT=%02X|ST=%02X|SP=%02X|PC=%02X",
-             M->I,
-             M->DT,
-             M->ST,
-             M->StackPointer,
-             M->ProgramCounter);
-    }
-
-    printf("\n");
   }
 
-#else
-  #define PrintInstruction(...) MTB_NOP
-#endif // MTB_FLAG(INTERNAL)
+  MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+
+  Result.Size = BufferBegin - &Result.Code[0];
+
+  return Result;
+}
 
 tick_result
 Tick(machine* M)
 {
-  tick_result result{};
-  result.Continue = true;
+  tick_result Result{};
+  Result.Continue = true;
 
   // Fetch new instruction.
   instruction_decoder Decoder;
   Decoder.Data = ReadWord(M, M->ProgramCounter);
   instruction Instruction = DecodeInstruction(Decoder);
+  disassembled_instruction DisInst = DisassembleInstruction(Instruction);
+  printf("0x%04X => %s\n", Decoder.Data, DisInst.Code);
 
   if(Instruction.Type != instruction_type::INVALID)
   {
-    // For debugging.
-    PrintInstruction(M, M->ProgramCounter, Decoder, Instruction);
-
     // Advance the program counter.
     M->ProgramCounter += 2;
 
@@ -230,10 +229,10 @@ Tick(machine* M)
   }
   else
   {
-    result.Continue = false;
+    Result.Continue = false;
   }
 
-  return result;
+  return Result;
 }
 
 instruction
@@ -485,18 +484,18 @@ DecodeInstruction(instruction_decoder Decoder)
 u16
 EncodeInstruction(instruction Instruction)
 {
-  u16 result = 0x0000;
+  u16 Result = 0x0000;
 
   switch(Instruction.Type)
   {
     case instruction_type::CLS:
     {
-      result = 0x00E0;
+      Result = 0x00E0;
       break;
     }
     case instruction_type::RET:
     {
-      result = 0x00EE;
+      Result = 0x00EE;
       break;
     }
     case instruction_type::SYS:
@@ -505,7 +504,7 @@ EncodeInstruction(instruction Instruction)
       {
         case argument_type::ADDRESS:
         {
-          result = Instruction.Args[0].Value;
+          Result = Instruction.Args[0].Value;
           break;
         }
       }
@@ -598,7 +597,7 @@ EncodeInstruction(instruction Instruction)
     }
   }
 
-  return result;
+  return Result;
 }
 
 
