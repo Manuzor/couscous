@@ -44,13 +44,13 @@ RunTests()
     ExecuteInstruction(A, Inst);
     MTB_Require( *A == *B );
 
-    Inst = INST2(LD, V, 0, BYTE, 42);
+    Inst = INST2(LD, V, 0, CONSTANT, 42);
     ExecuteInstruction(A, Inst);
     MTB_Require( *A != *B );
     B->V[0x0] = 42;
     MTB_Require( *A == *B );
 
-    Inst = INST2(LD, I,, ADDRESS, 512);
+    Inst = INST2(LD, I,, CONSTANT, 512);
     ExecuteInstruction(A, Inst);
     B->I = 512;
     MTB_Require( *A == *B );

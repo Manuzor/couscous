@@ -1,4 +1,5 @@
 #include "charmap.cpp"
+#include <stdio.h>
 
 void
 InitMachine(machine* M)
@@ -32,24 +33,22 @@ DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
   int SpriteWidth = 8; // Always 1 byte.
   int SpriteHeight = Sprite.Length;
 
-  if(StartY + SpriteHeight > SCREEN_HEIGHT)
-    SpriteHeight = SCREEN_HEIGHT - StartY;
-
-  bool32 HasCollision{};
+  bool32 HasCollision = false;
   for (int SpriteY = 0; SpriteY < SpriteHeight; ++SpriteY)
   {
     u8* SpritePixel = Sprite.Pixels + SpriteY;
-    int ScreenY = StartY + SpriteY;
+    int ScreenY = (StartY + SpriteY) % SCREEN_HEIGHT;
     for (int SpriteX = 0; SpriteX < SpriteWidth; ++SpriteX)
     {
-      int ScreenX = StartX + SpriteX;
+      int ScreenX = (StartX + SpriteX) % SCREEN_WIDTH;
 
       int ScreenOffset = (ScreenY * SCREEN_WIDTH) + ScreenX;
       bool32* ScreenPixel = M->Screen + ScreenOffset;
 
       bool32 SpriteColor = mtb_IsBitSet((u32)*SpritePixel, 7 - SpriteX);
-      HasCollision |= *ScreenPixel & SpriteColor;
-      *ScreenPixel ^= SpriteColor;
+      bool32 ScreenColor = *ScreenPixel;
+      HasCollision |= ScreenColor & SpriteColor;
+      *ScreenPixel = ScreenColor ^ SpriteColor;
     }
   }
 
@@ -106,11 +105,292 @@ WriteWord(machine* M, u16 Address, u16 Word)
   *(u16*)Ptr = Word;
 }
 
-static instruction
-AssembleInstruction(size_t Size, char* Code)
+static instruction_type
+ParseInstructionType(size_t CodeSize, char* Code)
 {
+  instruction_type Result{};
+
+  if(CodeSize >= 2)
+  {
+    switch(Code[0])
+    {
+      case 'A':
+      {
+        if(CodeSize == 3)
+        {
+          if(mtb_StringsAreEqual(CodeSize, "ADD", Code))
+            Result = instruction_type::ADD;
+          else if(mtb_StringsAreEqual(CodeSize, "AND", Code))
+            Result = instruction_type::AND;
+        }
+        break;
+      }
+
+      case 'C':
+      {
+        if(CodeSize == 4 && mtb_StringsAreEqual(CodeSize, "CALL", Code))
+          Result = instruction_type::CALL;
+        else if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "CLS", Code))
+          Result = instruction_type::CLS;
+        break;
+      }
+
+      case 'D':
+      {
+        if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "DRW", Code))
+          Result = instruction_type::DRW;
+        break;
+      }
+
+      case 'J':
+      {
+        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "JP", Code))
+          Result = instruction_type::JP;
+        break;
+      }
+
+      case 'L':
+      {
+        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "LD", Code))
+          Result = instruction_type::LD;
+        break;
+      }
+
+      case 'O':
+      {
+        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "OR", Code))
+          Result = instruction_type::OR;
+        break;
+      }
+
+      case 'R':
+      {
+        if(CodeSize == 3)
+        {
+          if(mtb_StringsAreEqual(CodeSize, "RET", Code))
+            Result = instruction_type::RET;
+          else if(mtb_StringsAreEqual(CodeSize, "RND", Code))
+            Result = instruction_type::RND;
+        }
+        break;
+      }
+
+      case 'S':
+      {
+        if(CodeSize == 2)
+        {
+          if(mtb_StringsAreEqual(3, "SE", Code))
+            Result = instruction_type::SE;
+        }
+        else if(CodeSize == 3)
+        {
+          if(mtb_StringsAreEqual(CodeSize, "SHL", Code))
+            Result = instruction_type::SHL;
+          else if(mtb_StringsAreEqual(CodeSize, "SHR", Code))
+            Result = instruction_type::SHR;
+          else if(mtb_StringsAreEqual(CodeSize, "SKP", Code))
+            Result = instruction_type::SKP;
+          else if(mtb_StringsAreEqual(CodeSize, "SNE", Code))
+            Result = instruction_type::SNE;
+          else if(mtb_StringsAreEqual(CodeSize, "SUB", Code))
+            Result = instruction_type::SUB;
+          else if(mtb_StringsAreEqual(CodeSize, "SYS", Code))
+            Result = instruction_type::SYS;
+        }
+        else if(CodeSize == 4)
+        {
+          if(mtb_StringsAreEqual(CodeSize, "SKNP", Code))
+            Result = instruction_type::SKNP;
+          else if(mtb_StringsAreEqual(CodeSize, "SUBN", Code))
+            Result = instruction_type::SUBN;
+        }
+        break;
+      }
+
+      case 'X':
+      {
+        if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "XOR", Code))
+          Result = instruction_type::XOR;
+        break;
+      }
+
+      default:
+      {
+        MTB_INVALID_CODE_PATH;
+        break;
+      }
+    }
+  }
+
+  return Result;
+}
+
+static argument
+ParseArgument(instruction_type Type, int ArgumentPos, size_t CodeSize, char* Code)
+{
+  argument Result{};
+
+  if(CodeSize > 0)
+  {
+    switch(Code[0])
+    {
+      case 'V':
+      {
+        if(CodeSize == 2)
+        {
+          switch(Code[1])
+          {
+            case '0': Result.Value = 0x0; break;
+            case '1': Result.Value = 0x1; break;
+            case '2': Result.Value = 0x2; break;
+            case '3': Result.Value = 0x3; break;
+            case '4': Result.Value = 0x4; break;
+            case '5': Result.Value = 0x5; break;
+            case '6': Result.Value = 0x6; break;
+            case '7': Result.Value = 0x7; break;
+            case '8': Result.Value = 0x8; break;
+            case '9': Result.Value = 0x9; break;
+            case 'A': Result.Value = 0xA; break;
+            case 'B': Result.Value = 0xB; break;
+            case 'C': Result.Value = 0xC; break;
+            case 'D': Result.Value = 0xD; break;
+            case 'E': Result.Value = 0xE; break;
+            case 'F': Result.Value = 0xF; break;
+            default: MTB_INVALID_CODE_PATH; break;
+          }
+        }
+        break;
+      }
+
+      case 'I':
+      {
+        if(CodeSize == 1)
+          Result.Type = argument_type::I;
+        break;
+      }
+
+      case 'D':
+      {
+        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "DT", Code))
+          Result.Type = argument_type::DT;
+        break;
+      }
+
+      case 'S':
+      {
+        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "ST", Code))
+          Result.Type = argument_type::ST;
+        break;
+      }
+
+      case 'K':
+      {
+        if(CodeSize == 1)
+          Result.Type = argument_type::K;
+        break;
+      }
+
+      case 'F':
+      {
+        if(CodeSize == 1)
+          Result.Type = argument_type::F;
+        break;
+      }
+
+      case 'B':
+      {
+        if(CodeSize == 1)
+          Result.Type = argument_type::B;
+        break;
+      }
+
+      case '[':
+      {
+        if(CodeSize == 3)
+        {
+          if(mtb_StringsAreEqual(CodeSize, "[I]", Code))
+            Result.Type = argument_type::ATI;
+        }
+        break;
+      }
+
+      case '0': // 0x123
+      {
+        if(CodeSize > 2)
+        {
+          Result.Type = argument_type::CONSTANT;
+
+          unsigned int Value;
+          sscanf(Code + 2, "%3X", &Value);
+          Result.Value = (u16)Value;
+        }
+        break;
+      }
+    }
+  }
+
+  return Result;
+}
+
+static instruction
+AssembleInstruction(size_t CodeSize, char* Code)
+{
+  // Assume we are parsing "ABC D, E, F"
+
   instruction Result{};
-  // TODO
+
+  char Buffer[mtb_ArrayLengthOf(disassembled_instruction().Code)] MTB_DEBUG_CODE({});
+  MTB_AssertDebug(CodeSize < mtb_ArrayLengthOf(Buffer));
+
+  // Copy from Code into Buffer, making everything upper-case.
+  for(size_t CharIndex = 0; CharIndex < CodeSize; ++CharIndex)
+  {
+    char Char = Code[CharIndex];
+    if(Char >= 'a' && Char <= 'z')
+      Char -= 0x20;
+    Buffer[CharIndex] = Char;
+  }
+
+  char* Current = Buffer;
+  char* OnePastLast = Current + CodeSize;
+
+  // Skip whitespace
+  while(Current < OnePastLast && mtb_IsWhitespace(*Current))
+    ++Current;
+
+  // Parse "ABC"
+  char* NameStart = Current;
+  while(Current < OnePastLast && !mtb_IsWhitespace(*Current))
+    ++Current;
+  char* NameOnePastLast = Current;
+
+  Result.Type = ParseInstructionType(NameOnePastLast - NameStart, NameStart);
+
+  int CurrentArgumentPos = 0;
+  while(true)
+  {
+    // Skip whitespace
+    while(Current < OnePastLast && mtb_IsWhitespace(*Current))
+      ++Current;
+
+    // Parse "D", then "E", then "F"
+    char* ArgumentStart = Current;
+    while(Current < OnePastLast && *Current != ',')
+      ++Current;
+    char* ArgumentOnePastLast = Current;
+    Result.Args[CurrentArgumentPos] = ParseArgument(Result.Type, CurrentArgumentPos, ArgumentOnePastLast - ArgumentStart, ArgumentStart);
+
+    if(Current == OnePastLast)
+      break;
+
+    if(*Current != ',')
+      MTB_INVALID_CODE_PATH;
+
+    // Skip ','
+    ++Current;
+    ++CurrentArgumentPos;
+  }
+
   return Result;
 }
 
@@ -164,9 +444,7 @@ DisassembleInstruction(instruction Instruction)
     {
       case argument_type::V: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "V%X", Arg.Value); break; }
 
-      case argument_type::ADDRESS: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%03X", Arg.Value); break; }
-      case argument_type::BYTE:    { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%02X", Arg.Value); break; }
-      case argument_type::NIBBLE:  { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%01X", Arg.Value); break; }
+      case argument_type::CONSTANT: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%X", Arg.Value); break; }
 
       case argument_type::I:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "I");   break; }
       case argument_type::DT:  { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "DT");  break; }
@@ -203,6 +481,7 @@ Tick(machine* M)
   instruction Instruction = DecodeInstruction(Decoder);
   disassembled_instruction DisInst = DisassembleInstruction(Instruction);
   printf("0x%04X => %s\n", Decoder.Data, DisInst.Code);
+  instruction AssInst = AssembleInstruction(DisInst.Size, DisInst.Code);
 
   if(Instruction.Type != instruction_type::INVALID)
   {
@@ -256,7 +535,7 @@ DecodeInstruction(instruction_decoder Decoder)
           break;
         default: // 0nnn - SYS addr
           Result.Type = inst::SYS;
-          Result.Args[0].Type = arg::ADDRESS;
+          Result.Args[0].Type = arg::CONSTANT;
           Result.Args[0].Value = Decoder.Address;
           break;
       }
@@ -265,14 +544,14 @@ DecodeInstruction(instruction_decoder Decoder)
     case 0x1: // 1nnn - JP addr
     {
       Result.Type = inst::JP;
-      Result.Args[0].Type = arg::ADDRESS;
+      Result.Args[0].Type = arg::CONSTANT;
       Result.Args[0].Value = Decoder.Address;
       break;
     }
     case 0x2: // 2nnn - CALL addr
     {
       Result.Type = inst::CALL;
-      Result.Args[0].Type = arg::ADDRESS;
+      Result.Args[0].Type = arg::CONSTANT;
       Result.Args[0].Value = Decoder.Address;
       break;
     }
@@ -281,7 +560,7 @@ DecodeInstruction(instruction_decoder Decoder)
       Result.Type = inst::SE;
       Result.Args[0].Type = arg::V;
       Result.Args[0].Value = Decoder.X;
-      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Type = arg::CONSTANT;
       Result.Args[1].Value = Decoder.LSB;
       break;
     }
@@ -290,7 +569,7 @@ DecodeInstruction(instruction_decoder Decoder)
       Result.Type = inst::SNE;
       Result.Args[0].Type = arg::V;
       Result.Args[0].Value = Decoder.X;
-      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Type = arg::CONSTANT;
       Result.Args[1].Value = Decoder.LSB;
       break;
     }
@@ -308,7 +587,7 @@ DecodeInstruction(instruction_decoder Decoder)
       Result.Type = inst::LD;
       Result.Args[0].Type = arg::V;
       Result.Args[0].Value = Decoder.X;
-      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Type = arg::CONSTANT;
       Result.Args[1].Value = Decoder.LSB;
       break;
     }
@@ -317,7 +596,7 @@ DecodeInstruction(instruction_decoder Decoder)
       Result.Type = inst::ADD;
       Result.Args[0].Type = arg::V;
       Result.Args[0].Value = Decoder.X;
-      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Type = arg::CONSTANT;
       Result.Args[1].Value = Decoder.LSB;
       break;
     }
@@ -354,7 +633,7 @@ DecodeInstruction(instruction_decoder Decoder)
     {
       Result.Type = inst::LD;
       Result.Args[0].Type = arg::I;
-      Result.Args[1].Type = arg::ADDRESS;
+      Result.Args[1].Type = arg::CONSTANT;
       Result.Args[1].Value = Decoder.Address;
       break;
     }
@@ -363,7 +642,7 @@ DecodeInstruction(instruction_decoder Decoder)
       Result.Type = inst::LD;
       Result.Args[0].Type = arg::V;
       Result.Args[0].Value = 0;
-      Result.Args[1].Type = arg::ADDRESS;
+      Result.Args[1].Type = arg::CONSTANT;
       Result.Args[1].Value = Decoder.Address;
       break;
     }
@@ -372,7 +651,7 @@ DecodeInstruction(instruction_decoder Decoder)
       Result.Type = inst::RND;
       Result.Args[0].Type = arg::V;
       Result.Args[0].Value = Decoder.X;
-      Result.Args[1].Type = arg::BYTE;
+      Result.Args[1].Type = arg::CONSTANT;
       Result.Args[1].Value = Decoder.LSB;
       break;
     }
@@ -383,7 +662,7 @@ DecodeInstruction(instruction_decoder Decoder)
       Result.Args[0].Value = Decoder.X;
       Result.Args[1].Type = arg::V;
       Result.Args[1].Value = Decoder.Y;
-      Result.Args[2].Type = arg::NIBBLE;
+      Result.Args[2].Type = arg::CONSTANT;
       Result.Args[2].Value = Decoder.LSN;
       break;
     }
@@ -502,7 +781,7 @@ EncodeInstruction(instruction Instruction)
     {
       switch(Instruction.Args[0].Type)
       {
-        case argument_type::ADDRESS:
+        case argument_type::CONSTANT:
         {
           Result = Instruction.Args[0].Value;
           break;
@@ -631,7 +910,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
           M->ProgramCounter = Instruction.Args[1].Value + *Reg;
           return;
         }
-        case argument_type::ADDRESS:
+        case argument_type::CONSTANT:
         {
           M->ProgramCounter = Instruction.Args[0].Value;
           return;
@@ -643,7 +922,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
     {
       switch(Instruction.Args[0].Type)
       {
-        case argument_type::ADDRESS:
+        case argument_type::CONSTANT:
         {
           M->Stack[M->StackPointer++] = M->ProgramCounter;
           M->ProgramCounter = Instruction.Args[0].Value;
@@ -659,18 +938,24 @@ ExecuteInstruction(machine* M, instruction Instruction)
         case argument_type::V:
         {
           u8 Lhs = M->V[Instruction.Args[0].Value];
-          u8 Rhs = M->V[Instruction.Args[1].Value];
-          if(Lhs == Rhs)
-            M->ProgramCounter += 2;
-          return;
-        }
-        case argument_type::BYTE:
-        {
-          u8 Lhs = M->V[Instruction.Args[0].Value];
-          u8 Rhs = (u8)Instruction.Args[1].Value;
-          if(Lhs == Rhs)
-            M->ProgramCounter += 2;
-          return;
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8 Rhs = M->V[Instruction.Args[1].Value];
+              if(Lhs == Rhs)
+                M->ProgramCounter += 2;
+              return;
+            }
+
+            case argument_type::CONSTANT:
+            {
+              u8 Rhs = (u8)Instruction.Args[1].Value;
+              if(Lhs == Rhs)
+                M->ProgramCounter += 2;
+              return;
+            }
+          }
         }
       }
       break;
@@ -687,7 +972,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
             M->ProgramCounter += 2;
           return;
         }
-        case argument_type::BYTE:
+        case argument_type::CONSTANT:
         {
           u8 Lhs = M->V[Instruction.Args[0].Value];
           u8 Rhs = (u8)Instruction.Args[1].Value;
@@ -778,7 +1063,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
         {
           switch(Instruction.Args[1].Type)
           {
-            case argument_type::ADDRESS:
+            case argument_type::CONSTANT:
             {
               M->I = Instruction.Args[1].Value;
               return;
@@ -811,7 +1096,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
               mtb_CopyBytes(Num, Dest, Source);
               return;
             }
-            case argument_type::BYTE:
+            case argument_type::CONSTANT:
             {
               u8* Reg = M->V + Instruction.Args[0].Value;
               *Reg = (u8)Instruction.Args[1].Value;
@@ -865,7 +1150,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
           u8* Reg = M->V + Instruction.Args[0].Value;
           switch(Instruction.Args[1].Type)
           {
-            case argument_type:: BYTE:
+            case argument_type::CONSTANT:
             {
               *Reg += (u8)Instruction.Args[1].Value;
               return;
@@ -936,7 +1221,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
             {
               switch(Instruction.Args[2].Type)
               {
-                case argument_type::NIBBLE:
+                case argument_type::CONSTANT:
                 {
                   u8* RegA = M->V + Instruction.Args[0].Value;
                   u8* RegB = M->V + Instruction.Args[1].Value;

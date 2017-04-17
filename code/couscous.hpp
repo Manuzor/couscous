@@ -73,9 +73,7 @@ enum struct argument_type
   B,
   ATI, // [I], "at I"
 
-  ADDRESS,
-  BYTE,
-  NIBBLE,
+  CONSTANT,
 };
 
 struct argument
@@ -201,8 +199,7 @@ AssembleInstruction(size_t Size, char* Code);
 struct disassembled_instruction
 {
   size_t Size;
-  #define MAX_ASSEMBLER_INSTRUCTION_SIZE 32
-  char Code[MAX_ASSEMBLER_INSTRUCTION_SIZE];
+  char Code[32];
 };
 static disassembled_instruction
 DisassembleInstruction(instruction Instruction);
