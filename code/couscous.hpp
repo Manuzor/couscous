@@ -12,6 +12,7 @@ using s64 = mtb_s64;
 using f32 = mtb_f32;
 using f64 = mtb_f64;
 
+using uint = unsigned int;
 using bool32 = int;
 
 
@@ -161,16 +162,16 @@ static bool
 LoadRom(machine* M, size_t RomSize, u8* RomPtr);
 
 static u8
-ReadByte(machine* M, u16 Address);
+ReadByte(void* Ptr);
 
 static u16
-ReadWord(machine* M, u16 Address);
+ReadWord(void* Ptr);
 
 static void
-WriteByte(machine* M, u16 Address, u8 Byte);
+WriteByte(void* Ptr, u8 Value);
 
 static void
-WriteWord(machine* M, u16 Address, u16 Word);
+WriteWord(void* Ptr, u16 Value);
 
 struct tick_result
 {
@@ -193,13 +194,16 @@ EncodeInstruction(instruction Instruction);
 static void
 ExecuteInstruction(machine* M, instruction Instruction);
 
-static instruction
-AssembleInstruction(size_t Size, char* Code);
+#if COUSCOUS_ASSEMBLER
+  struct assembler_code
+  {
+    size_t Size;
+    char Data[32];
+  };
 
-struct disassembled_instruction
-{
-  size_t Size;
-  char Code[32];
-};
-static disassembled_instruction
-DisassembleInstruction(instruction Instruction);
+  static instruction
+  AssembleInstruction(assembler_code Code);
+
+  static assembler_code
+  DisassembleInstruction(instruction Instruction);
+#endif // COUSCOUS_ASSEMBLER

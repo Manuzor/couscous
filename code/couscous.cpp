@@ -1,5 +1,4 @@
 #include "charmap.cpp"
-#include <stdio.h>
 
 void
 InitMachine(machine* M)
@@ -70,17 +69,15 @@ LoadRom(machine* M,  size_t RomSize, u8* RomPtr)
 }
 
 u8
-ReadByte(machine* M, u16 Address)
+ReadByte(void* Ptr)
 {
-  u8* Ptr = M->Memory + Address;
-  u8 Result = *Ptr;
+  u8 Result = *(u8*)Ptr;
   return Result;
 }
 
 u16
-ReadWord(machine* M, u16 Address)
+ReadWord(void* Ptr)
 {
-  u8* Ptr = M->Memory + Address;
   u16 Result = *(u16*)Ptr;
   #if MTB_FLAG(LITTLE_ENDIAN)
     Result = (u16)((Result << 8) | (Result >> 8));
@@ -89,384 +86,18 @@ ReadWord(machine* M, u16 Address)
 }
 
 void
-WriteByte(machine* M, u16 Address, u8 Byte)
+WriteByte(void* Ptr, u8 Value)
 {
-  u8* Ptr = M->Memory + Address;
-  *Ptr = Byte;
+  *(u8*)Ptr = Value;
 }
 
 void
-WriteWord(machine* M, u16 Address, u16 Word)
+WriteWord(void* Ptr, u16 Value)
 {
-  u8* Ptr = M->Memory + Address;
   #if MTB_FLAG(LITTLE_ENDIAN)
-    Word = (u16)((Word << 8) | (Word >> 8));
+    Value = (u16)((Value << 8) | (Value >> 8));
   #endif
-  *(u16*)Ptr = Word;
-}
-
-static instruction_type
-ParseInstructionType(size_t CodeSize, char* Code)
-{
-  instruction_type Result{};
-
-  if(CodeSize >= 2)
-  {
-    switch(Code[0])
-    {
-      case 'A':
-      {
-        if(CodeSize == 3)
-        {
-          if(mtb_StringsAreEqual(CodeSize, "ADD", Code))
-            Result = instruction_type::ADD;
-          else if(mtb_StringsAreEqual(CodeSize, "AND", Code))
-            Result = instruction_type::AND;
-        }
-        break;
-      }
-
-      case 'C':
-      {
-        if(CodeSize == 4 && mtb_StringsAreEqual(CodeSize, "CALL", Code))
-          Result = instruction_type::CALL;
-        else if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "CLS", Code))
-          Result = instruction_type::CLS;
-        break;
-      }
-
-      case 'D':
-      {
-        if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "DRW", Code))
-          Result = instruction_type::DRW;
-        break;
-      }
-
-      case 'J':
-      {
-        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "JP", Code))
-          Result = instruction_type::JP;
-        break;
-      }
-
-      case 'L':
-      {
-        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "LD", Code))
-          Result = instruction_type::LD;
-        break;
-      }
-
-      case 'O':
-      {
-        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "OR", Code))
-          Result = instruction_type::OR;
-        break;
-      }
-
-      case 'R':
-      {
-        if(CodeSize == 3)
-        {
-          if(mtb_StringsAreEqual(CodeSize, "RET", Code))
-            Result = instruction_type::RET;
-          else if(mtb_StringsAreEqual(CodeSize, "RND", Code))
-            Result = instruction_type::RND;
-        }
-        break;
-      }
-
-      case 'S':
-      {
-        if(CodeSize == 2)
-        {
-          if(mtb_StringsAreEqual(3, "SE", Code))
-            Result = instruction_type::SE;
-        }
-        else if(CodeSize == 3)
-        {
-          if(mtb_StringsAreEqual(CodeSize, "SHL", Code))
-            Result = instruction_type::SHL;
-          else if(mtb_StringsAreEqual(CodeSize, "SHR", Code))
-            Result = instruction_type::SHR;
-          else if(mtb_StringsAreEqual(CodeSize, "SKP", Code))
-            Result = instruction_type::SKP;
-          else if(mtb_StringsAreEqual(CodeSize, "SNE", Code))
-            Result = instruction_type::SNE;
-          else if(mtb_StringsAreEqual(CodeSize, "SUB", Code))
-            Result = instruction_type::SUB;
-          else if(mtb_StringsAreEqual(CodeSize, "SYS", Code))
-            Result = instruction_type::SYS;
-        }
-        else if(CodeSize == 4)
-        {
-          if(mtb_StringsAreEqual(CodeSize, "SKNP", Code))
-            Result = instruction_type::SKNP;
-          else if(mtb_StringsAreEqual(CodeSize, "SUBN", Code))
-            Result = instruction_type::SUBN;
-        }
-        break;
-      }
-
-      case 'X':
-      {
-        if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "XOR", Code))
-          Result = instruction_type::XOR;
-        break;
-      }
-
-      default:
-      {
-        MTB_INVALID_CODE_PATH;
-        break;
-      }
-    }
-  }
-
-  return Result;
-}
-
-static argument
-ParseArgument(instruction_type Type, int ArgumentPos, size_t CodeSize, char* Code)
-{
-  argument Result{};
-
-  if(CodeSize > 0)
-  {
-    switch(Code[0])
-    {
-      case 'V':
-      {
-        if(CodeSize == 2)
-        {
-          switch(Code[1])
-          {
-            case '0': Result.Value = 0x0; break;
-            case '1': Result.Value = 0x1; break;
-            case '2': Result.Value = 0x2; break;
-            case '3': Result.Value = 0x3; break;
-            case '4': Result.Value = 0x4; break;
-            case '5': Result.Value = 0x5; break;
-            case '6': Result.Value = 0x6; break;
-            case '7': Result.Value = 0x7; break;
-            case '8': Result.Value = 0x8; break;
-            case '9': Result.Value = 0x9; break;
-            case 'A': Result.Value = 0xA; break;
-            case 'B': Result.Value = 0xB; break;
-            case 'C': Result.Value = 0xC; break;
-            case 'D': Result.Value = 0xD; break;
-            case 'E': Result.Value = 0xE; break;
-            case 'F': Result.Value = 0xF; break;
-            default: MTB_INVALID_CODE_PATH; break;
-          }
-        }
-        break;
-      }
-
-      case 'I':
-      {
-        if(CodeSize == 1)
-          Result.Type = argument_type::I;
-        break;
-      }
-
-      case 'D':
-      {
-        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "DT", Code))
-          Result.Type = argument_type::DT;
-        break;
-      }
-
-      case 'S':
-      {
-        if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "ST", Code))
-          Result.Type = argument_type::ST;
-        break;
-      }
-
-      case 'K':
-      {
-        if(CodeSize == 1)
-          Result.Type = argument_type::K;
-        break;
-      }
-
-      case 'F':
-      {
-        if(CodeSize == 1)
-          Result.Type = argument_type::F;
-        break;
-      }
-
-      case 'B':
-      {
-        if(CodeSize == 1)
-          Result.Type = argument_type::B;
-        break;
-      }
-
-      case '[':
-      {
-        if(CodeSize == 3)
-        {
-          if(mtb_StringsAreEqual(CodeSize, "[I]", Code))
-            Result.Type = argument_type::ATI;
-        }
-        break;
-      }
-
-      case '0': // 0x123
-      {
-        if(CodeSize > 2)
-        {
-          Result.Type = argument_type::CONSTANT;
-
-          unsigned int Value;
-          sscanf(Code + 2, "%3X", &Value);
-          Result.Value = (u16)Value;
-        }
-        break;
-      }
-    }
-  }
-
-  return Result;
-}
-
-static instruction
-AssembleInstruction(size_t CodeSize, char* Code)
-{
-  // Assume we are parsing "ABC D, E, F"
-
-  instruction Result{};
-
-  char Buffer[mtb_ArrayLengthOf(disassembled_instruction().Code)] MTB_DEBUG_CODE({});
-  MTB_AssertDebug(CodeSize < mtb_ArrayLengthOf(Buffer));
-
-  // Copy from Code into Buffer, making everything upper-case.
-  for(size_t CharIndex = 0; CharIndex < CodeSize; ++CharIndex)
-  {
-    char Char = Code[CharIndex];
-    if(Char >= 'a' && Char <= 'z')
-      Char -= 0x20;
-    Buffer[CharIndex] = Char;
-  }
-
-  char* Current = Buffer;
-  char* OnePastLast = Current + CodeSize;
-
-  // Skip whitespace
-  while(Current < OnePastLast && mtb_IsWhitespace(*Current))
-    ++Current;
-
-  // Parse "ABC"
-  char* NameStart = Current;
-  while(Current < OnePastLast && !mtb_IsWhitespace(*Current))
-    ++Current;
-  char* NameOnePastLast = Current;
-
-  Result.Type = ParseInstructionType(NameOnePastLast - NameStart, NameStart);
-
-  int CurrentArgumentPos = 0;
-  while(true)
-  {
-    // Skip whitespace
-    while(Current < OnePastLast && mtb_IsWhitespace(*Current))
-      ++Current;
-
-    // Parse "D", then "E", then "F"
-    char* ArgumentStart = Current;
-    while(Current < OnePastLast && *Current != ',')
-      ++Current;
-    char* ArgumentOnePastLast = Current;
-    Result.Args[CurrentArgumentPos] = ParseArgument(Result.Type, CurrentArgumentPos, ArgumentOnePastLast - ArgumentStart, ArgumentStart);
-
-    if(Current == OnePastLast)
-      break;
-
-    if(*Current != ',')
-      MTB_INVALID_CODE_PATH;
-
-    // Skip ','
-    ++Current;
-    ++CurrentArgumentPos;
-  }
-
-  return Result;
-}
-
-static disassembled_instruction
-DisassembleInstruction(instruction Instruction)
-{
-  disassembled_instruction Result{};
-  char* BufferBegin = &Result.Code[0];
-  char* BufferOnePastLast = BufferBegin + mtb_ArrayLengthOf(Result.Code);
-
-  char const* InstructionToString[] =
-  {
-    "INVALID", // instruction_type::INVALID
-    "CLS",     // instruction_type::CLS
-    "RET",     // instruction_type::RET
-    "SYS",     // instruction_type::SYS
-    "JP",      // instruction_type::JP
-    "CALL",    // instruction_type::CALL
-    "SE",      // instruction_type::SE
-    "SNE",     // instruction_type::SNE
-    "LD",      // instruction_type::LD
-    "ADD",     // instruction_type::ADD
-    "OR",      // instruction_type::OR
-    "AND",     // instruction_type::AND
-    "XOR",     // instruction_type::XOR
-    "SUB",     // instruction_type::SUB
-    "SHR",     // instruction_type::SHR
-    "SUBN",    // instruction_type::SUBN
-    "SHL",     // instruction_type::SHL
-    "RND",     // instruction_type::RND
-    "DRW",     // instruction_type::DRW
-    "SKP",     // instruction_type::SKP
-    "SKNP",    // instruction_type::SKNP
-  };
-
-  MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-  BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", InstructionToString[(int)Instruction.Type]);
-
-  char const* Joiner = " ";
-  for(argument& Arg : Instruction.Args)
-  {
-    if(Arg.Type == argument_type::NONE)
-      break;
-
-    MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-    BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", Joiner);
-    Joiner = ", ";
-
-    MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-    switch(Arg.Type)
-    {
-      case argument_type::V: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "V%X", Arg.Value); break; }
-
-      case argument_type::CONSTANT: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%X", Arg.Value); break; }
-
-      case argument_type::I:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "I");   break; }
-      case argument_type::DT:  { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "DT");  break; }
-      case argument_type::ST:  { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "ST");  break; }
-      case argument_type::K:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "K");   break; }
-      case argument_type::F:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "F");   break; }
-      case argument_type::B:   { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "B");   break; }
-      case argument_type::ATI: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "[I]"); break; }
-
-      default:
-      {
-        MTB_INVALID_CODE_PATH;
-        break;
-      }
-    }
-  }
-
-  MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-
-  Result.Size = BufferBegin - &Result.Code[0];
-
-  return Result;
+  *(u16*)Ptr = Value;
 }
 
 tick_result
@@ -477,11 +108,13 @@ Tick(machine* M)
 
   // Fetch new instruction.
   instruction_decoder Decoder;
-  Decoder.Data = ReadWord(M, M->ProgramCounter);
+  Decoder.Data = ReadWord(M->Memory + M->ProgramCounter);
   instruction Instruction = DecodeInstruction(Decoder);
+  #if 0
   disassembled_instruction DisInst = DisassembleInstruction(Instruction);
   printf("0x%04X => %s\n", Decoder.Data, DisInst.Code);
   instruction AssInst = AssembleInstruction(DisInst.Size, DisInst.Code);
+  #endif
 
   if(Instruction.Type != instruction_type::INVALID)
   {
@@ -521,6 +154,7 @@ DecodeInstruction(instruction_decoder Decoder)
   using arg = argument_type;
 
   instruction Result{};
+
   switch(Decoder.Group)
   {
     case 0x0:
@@ -757,24 +391,28 @@ DecodeInstruction(instruction_decoder Decoder)
     }
   }
 
+  // If the instruction is invalid, save the raw instructin value in Args[0].
+  if(Result.Type == instruction_type::INVALID)
+    Result.Args[0].Value = Decoder.Data;
+
   return Result;
 }
 
 u16
 EncodeInstruction(instruction Instruction)
 {
-  u16 Result = 0x0000;
+  instruction_decoder Decoder{};
 
   switch(Instruction.Type)
   {
     case instruction_type::CLS:
     {
-      Result = 0x00E0;
+      Decoder.Data = 0x00E0;
       break;
     }
     case instruction_type::RET:
     {
-      Result = 0x00EE;
+      Decoder.Data = 0x00EE;
       break;
     }
     case instruction_type::SYS:
@@ -783,7 +421,7 @@ EncodeInstruction(instruction Instruction)
       {
         case argument_type::CONSTANT:
         {
-          Result = Instruction.Args[0].Value;
+          Decoder.Data = Instruction.Args[0].Value;
           break;
         }
       }
@@ -811,6 +449,22 @@ EncodeInstruction(instruction Instruction)
     }
     case instruction_type::LD:
     {
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::I:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::CONSTANT:
+            {
+              Decoder.Data = Instruction.Args[1].Value;
+              Decoder.MSN = 0xA;
+              break;
+            }
+          }
+          break;
+        }
+      }
       // TODO
       break;
     }
@@ -876,9 +530,8 @@ EncodeInstruction(instruction Instruction)
     }
   }
 
-  return Result;
+  return Decoder.Data;
 }
-
 
 void
 ExecuteInstruction(machine* M, instruction Instruction)
@@ -997,7 +650,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
               for (int Index = 0; Index < Num; ++Index, ++M->I)
               {
                 u8* Reg = M->V + Index;
-                *Reg = ReadByte(M, M->I);
+                *Reg = ReadByte(M->Memory + M->I);
               }
 
               while(Num > 0)
@@ -1253,6 +906,388 @@ ExecuteInstruction(machine* M, instruction Instruction)
 
   MTB_INTERNAL_CODE( printf("Invalid instruction to execute.\n") );
 }
+
+#if COUSCOUS_ASSEMBLER
+  static instruction_type
+  ParseInstructionType(size_t CodeSize, char* Code)
+  {
+    instruction_type Result{};
+
+    if(CodeSize >= 2)
+    {
+      switch(Code[0])
+      {
+        case 'A':
+        {
+          if(CodeSize == 3)
+          {
+            if(mtb_StringsAreEqual(CodeSize, "ADD", Code))
+              Result = instruction_type::ADD;
+            else if(mtb_StringsAreEqual(CodeSize, "AND", Code))
+              Result = instruction_type::AND;
+          }
+          break;
+        }
+
+        case 'C':
+        {
+          if(CodeSize == 4 && mtb_StringsAreEqual(CodeSize, "CALL", Code))
+            Result = instruction_type::CALL;
+          else if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "CLS", Code))
+            Result = instruction_type::CLS;
+          break;
+        }
+
+        case 'D':
+        {
+          if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "DRW", Code))
+            Result = instruction_type::DRW;
+          break;
+        }
+
+        case 'J':
+        {
+          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "JP", Code))
+            Result = instruction_type::JP;
+          break;
+        }
+
+        case 'L':
+        {
+          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "LD", Code))
+            Result = instruction_type::LD;
+          break;
+        }
+
+        case 'O':
+        {
+          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "OR", Code))
+            Result = instruction_type::OR;
+          break;
+        }
+
+        case 'R':
+        {
+          if(CodeSize == 3)
+          {
+            if(mtb_StringsAreEqual(CodeSize, "RET", Code))
+              Result = instruction_type::RET;
+            else if(mtb_StringsAreEqual(CodeSize, "RND", Code))
+              Result = instruction_type::RND;
+          }
+          break;
+        }
+
+        case 'S':
+        {
+          if(CodeSize == 2)
+          {
+            if(mtb_StringsAreEqual(3, "SE", Code))
+              Result = instruction_type::SE;
+          }
+          else if(CodeSize == 3)
+          {
+            if(mtb_StringsAreEqual(CodeSize, "SHL", Code))
+              Result = instruction_type::SHL;
+            else if(mtb_StringsAreEqual(CodeSize, "SHR", Code))
+              Result = instruction_type::SHR;
+            else if(mtb_StringsAreEqual(CodeSize, "SKP", Code))
+              Result = instruction_type::SKP;
+            else if(mtb_StringsAreEqual(CodeSize, "SNE", Code))
+              Result = instruction_type::SNE;
+            else if(mtb_StringsAreEqual(CodeSize, "SUB", Code))
+              Result = instruction_type::SUB;
+            else if(mtb_StringsAreEqual(CodeSize, "SYS", Code))
+              Result = instruction_type::SYS;
+          }
+          else if(CodeSize == 4)
+          {
+            if(mtb_StringsAreEqual(CodeSize, "SKNP", Code))
+              Result = instruction_type::SKNP;
+            else if(mtb_StringsAreEqual(CodeSize, "SUBN", Code))
+              Result = instruction_type::SUBN;
+          }
+          break;
+        }
+
+        case 'X':
+        {
+          if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "XOR", Code))
+            Result = instruction_type::XOR;
+          break;
+        }
+
+        default:
+        {
+          MTB_INVALID_CODE_PATH;
+          break;
+        }
+      }
+    }
+
+    return Result;
+  }
+
+  static argument
+  ParseArgument(size_t CodeSize, char* Code)
+  {
+    argument Result{};
+
+    if(CodeSize > 0)
+    {
+      switch(Code[0])
+      {
+        case 'V':
+        {
+          if(CodeSize == 2)
+          {
+            switch(Code[1])
+            {
+              case '0': Result.Value = 0x0; break;
+              case '1': Result.Value = 0x1; break;
+              case '2': Result.Value = 0x2; break;
+              case '3': Result.Value = 0x3; break;
+              case '4': Result.Value = 0x4; break;
+              case '5': Result.Value = 0x5; break;
+              case '6': Result.Value = 0x6; break;
+              case '7': Result.Value = 0x7; break;
+              case '8': Result.Value = 0x8; break;
+              case '9': Result.Value = 0x9; break;
+              case 'A': Result.Value = 0xA; break;
+              case 'B': Result.Value = 0xB; break;
+              case 'C': Result.Value = 0xC; break;
+              case 'D': Result.Value = 0xD; break;
+              case 'E': Result.Value = 0xE; break;
+              case 'F': Result.Value = 0xF; break;
+              default: MTB_INVALID_CODE_PATH; break;
+            }
+          }
+          break;
+        }
+
+        case 'I':
+        {
+          if(CodeSize == 1)
+            Result.Type = argument_type::I;
+          break;
+        }
+
+        case 'D':
+        {
+          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "DT", Code))
+            Result.Type = argument_type::DT;
+          break;
+        }
+
+        case 'S':
+        {
+          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "ST", Code))
+            Result.Type = argument_type::ST;
+          break;
+        }
+
+        case 'K':
+        {
+          if(CodeSize == 1)
+            Result.Type = argument_type::K;
+          break;
+        }
+
+        case 'F':
+        {
+          if(CodeSize == 1)
+            Result.Type = argument_type::F;
+          break;
+        }
+
+        case 'B':
+        {
+          if(CodeSize == 1)
+            Result.Type = argument_type::B;
+          break;
+        }
+
+        case '[':
+        {
+          if(CodeSize == 3)
+          {
+            if(mtb_StringsAreEqual(CodeSize, "[I]", Code))
+              Result.Type = argument_type::ATI;
+          }
+          break;
+        }
+
+        default: // 0x123
+        {
+          Result.Type = argument_type::CONSTANT;
+
+          unsigned int Value = 0;
+          if(Code[0] == '0')
+          {
+            switch(Code[1])
+            {
+              case 'X': sscanf(Code + 2, "%3X", &Value); break;
+              case 'B': MTB_NOT_IMPLEMENTED;
+              case 'D': sscanf(Code + 2, "%3d", &Value);; break;
+              default:  sscanf(Code + 1, "%3d", &Value);; break;
+            }
+          }
+          else
+          {
+            sscanf(Code, "%3d", &Value);
+          }
+
+          Result.Value = (u16)Value;
+        }
+        break;
+      }
+    }
+
+    return Result;
+  }
+
+  static instruction
+  AssembleInstruction(assembler_code Code)
+  {
+    // Assume we are parsing "ABC D, E, F"
+
+    instruction Result{};
+
+    // Make it all uppercase.
+    for(size_t CharIndex = 0; CharIndex < Code.Size; ++CharIndex)
+    {
+      char Char = Code.Data[CharIndex];
+      if(Char >= 'a' && Char <= 'z')
+        Char -= 0x20;
+      Code.Data[CharIndex] = Char;
+    }
+
+    char* Current = Code.Data;
+    char* OnePastLast = Current + Code.Size;
+
+    // Skip whitespace
+    while(Current < OnePastLast && mtb_IsWhitespace(*Current))
+      ++Current;
+
+    // Parse "ABC"
+    char* NameStart = Current;
+    while(Current < OnePastLast && !mtb_IsWhitespace(*Current))
+      ++Current;
+    char* NameOnePastLast = Current;
+
+    Result.Type = ParseInstructionType(NameOnePastLast - NameStart, NameStart);
+
+    int CurrentArgumentPos = 0;
+    while(true)
+    {
+      // Skip whitespace
+      while(Current < OnePastLast && mtb_IsWhitespace(*Current))
+        ++Current;
+
+      // Parse "D", then "E", then "F"
+      char* ArgumentStart = Current;
+      while(Current < OnePastLast && !mtb_IsWhitespace(*Current) && *Current != ',')
+        ++Current;
+      char* ArgumentOnePastLast = Current;
+      Result.Args[CurrentArgumentPos] = ParseArgument(ArgumentOnePastLast - ArgumentStart, ArgumentStart);
+
+      if(Current == OnePastLast)
+        break;
+
+      if(*Current == ',')
+        ++Current;
+
+      ++CurrentArgumentPos;
+    }
+
+    return Result;
+  }
+
+  static assembler_code
+  DisassembleInstruction(instruction Instruction)
+  {
+    assembler_code Result{};
+    if(Instruction.Type != instruction_type::INVALID)
+    {
+      char* BufferBegin = &Result.Data[0];
+      char* BufferOnePastLast = BufferBegin + mtb_ArrayLengthOf(Result.Data);
+
+      char const* InstructionToString[] =
+      {
+        "INVALID", // instruction_type::INVALID
+        "CLS",     // instruction_type::CLS
+        "RET",     // instruction_type::RET
+        "SYS",     // instruction_type::SYS
+        "JP",      // instruction_type::JP
+        "CALL",    // instruction_type::CALL
+        "SE",      // instruction_type::SE
+        "SNE",     // instruction_type::SNE
+        "LD",      // instruction_type::LD
+        "ADD",     // instruction_type::ADD
+        "OR",      // instruction_type::OR
+        "AND",     // instruction_type::AND
+        "XOR",     // instruction_type::XOR
+        "SUB",     // instruction_type::SUB
+        "SHR",     // instruction_type::SHR
+        "SUBN",    // instruction_type::SUBN
+        "SHL",     // instruction_type::SHL
+        "RND",     // instruction_type::RND
+        "DRW",     // instruction_type::DRW
+        "SKP",     // instruction_type::SKP
+        "SKNP",    // instruction_type::SKNP
+      };
+
+      MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+      BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", InstructionToString[(int)Instruction.Type]);
+
+      char const* Joiner = " ";
+      for(argument& Arg : Instruction.Args)
+      {
+        if(Arg.Type == argument_type::NONE)
+          break;
+
+        MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+        BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", Joiner);
+        Joiner = ", ";
+
+        MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+        switch(Arg.Type)
+        {
+          case argument_type::V: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "V%X", Arg.Value); break; }
+
+          case argument_type::CONSTANT: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%X", Arg.Value); break; }
+
+          case argument_type::I: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "I");   break; }
+          case argument_type::DT: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "DT");  break; }
+          case argument_type::ST: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "ST");  break; }
+          case argument_type::K: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "K");   break; }
+          case argument_type::F: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "F");   break; }
+          case argument_type::B: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "B");   break; }
+          case argument_type::ATI: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "[I]"); break; }
+
+          default:
+          {
+            MTB_INVALID_CODE_PATH;
+            break;
+          }
+        }
+      }
+
+      MTB_AssertDebug(BufferBegin < BufferOnePastLast);
+
+      Result.Size = BufferBegin - &Result.Data[0];
+    }
+    else
+    {
+      u16 RawInstruction = Instruction.Args[0].Value;
+      int NumCharsWritten = snprintf(Result.Data, mtb_ArrayLengthOf(Result.Data), "<0x%04X>", RawInstruction);
+      MTB_AssertDebug(NumCharsWritten == 3 + 4 + 1);
+      Result.Size = (size_t)NumCharsWritten;
+    }
+
+    return Result;
+  }
+#endif // COUSCOUS_ASSEMBLER
 
 #if defined(COUSCOUS_TESTS)
   #include "couscous_tests.cpp"

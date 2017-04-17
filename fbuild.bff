@@ -26,6 +26,8 @@
 //
 // Define targets
 //
+
+// couscous
 {
   .ProjectConfigs = {}
   .ProjectInputPaths = {}
@@ -187,6 +189,168 @@
     }
   }
 }
+
+// couscous_assembler
+{
+  .ProjectConfigs = {}
+  .ProjectInputPaths = {}
+
+  .MyName = 'couscous_assembler'
+
+  .MyCodePath = '$RepoRoot$/code'
+  .ProjectBasePath = .MyCodePath
+  .ProjectInputPaths + .MyCodePath
+
+  // win_msvc_x64
+  {
+    .MyOutputName = 'couscous_assembler'
+    .MyOutputExtension = '.exe'
+
+    .CompilerInputFiles = '$MyCodePath$/couscous_assembler.cpp'
+
+    .MyPlatformId = 'win_msvc_x64'
+
+    .Compiler = '$VSDir$\VC\bin\amd64\cl.exe'
+    .CompilerOptions = ' %1 /Fo"%2" /c'
+                     + ' /nologo'
+                     + ' /WX' // Treat warnings as errors.
+                     + ' /W4' // Warning level
+                     + ' /wd4100' // "unreferenced formal parameter"
+                     + ' /wd4201' // "nonstandard extension used: nameless struct/union"
+                     + ' /wd4307' // "integral constant overflow"
+                     + ' /wd4310' // "cast truncates constant value" TODO: Re-enable and fix these!
+                     + ' /wd4505' // "unreferenced local function has been removed"
+
+                     //
+                     // Windows specific defines
+                     //
+                     + ' /DNOMINMAX'                // Exclude annoying Windows macros.
+                     + ' /DWIN32_LEAN_AND_MEAN'     // Strip some rarely used Windows stuff.
+                     + ' /D_CRT_SECURE_NO_WARNINGS' // Shut up windows.h's warnings
+
+                     + ' /I"$MyCodePath$"'
+
+                     //
+                     // System Includes
+                     //
+                     + ' /I"$VSDir$\VC\Include"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\ucrt"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\shared"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\um"'
+                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\winrt"'
+
+    .Linker = '$VSDir$\VC\bin\amd64\link.exe'
+    .LinkerOptions = ' %1 /OUT:"%2"'
+                   + ' /NOLOGO'
+                   + ' /INCREMENTAL:NO'
+                   + ' /LIBPATH:"$VSDir$\VC\lib\amd64"'
+                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\um\x64"'
+                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\ucrt\x64"'
+                   + ' User32.lib'
+                   + ' Gdi32.lib'
+
+    // win_msvc_x64_debug
+    {
+      .MyConfigId = 'debug'
+      .MyBuildId = '$MyPlatformId$_$MyConfigId$'
+      .MyBuildPath = '$MyBuildRoot$/$MyBuildId$'
+      .MyIntermediatePath = '$MyBuildRoot$/$MyBuildId$/intermediate'
+
+      .CompilerOutputPath = '$MyIntermediatePath$'
+      .LinkerOutputPath = '$MyBuildPath$'
+      .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
+
+      .CompilerOptions + ' /Zi'
+                       + ' /MTd'
+                       + ' /wd4189' // "local variable is initialized but not referenced"
+                       + ' /DDEBUG'
+                       + ' /D_DEBUG'
+
+      .LinkerOptions + ' /DEBUG'
+
+      .MyTarget = '$MyName$-$MyBuildId$'
+      ObjectList( '$MyTarget$-obj' ) {}
+      Executable( '$MyTarget$' )
+      {
+        .Libraries = { '$MyTarget$-obj' }
+      }
+      ^MyTargetList + .MyTarget
+
+      .MyProjectConfig =
+      [
+        .Config = '$MyBuildId$'
+        .Platform = 'Win32' // Unused
+        .Target = .MyTarget
+      ]
+      ^ProjectConfigs + .MyProjectConfig
+      ^SolutionConfigs + .MyProjectConfig
+    }
+
+    // win_msvc_x64_release
+    {
+      .MyConfigId = 'release'
+      .MyBuildId = '$MyPlatformId$_$MyConfigId$'
+      .MyBuildPath = '$MyBuildRoot$/$MyBuildId$'
+      .MyIntermediatePath = '$MyBuildRoot$/$MyBuildId$/intermediate'
+
+      .CompilerOutputPath = '$MyIntermediatePath$'
+      .LinkerOutputPath = '$MyBuildPath$'
+      .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
+
+      .CompilerOptions + ' /MT'
+                       + ' /Ox'
+                       + ' /DNDEBUG'
+
+      .MyTarget = '$MyName$-$MyBuildId$'
+      ObjectList( '$MyTarget$-obj' ) {}
+      Executable( '$MyTarget$' )
+      {
+        .Libraries = { '$MyTarget$-obj' }
+      }
+      ^MyTargetList + .MyTarget
+
+      .MyProjectConfig =
+      [
+        .Config = '$MyBuildId$'
+        .Platform = 'Win32' // Unused
+        .Target = .MyTarget
+      ]
+      ^ProjectConfigs + .MyProjectConfig
+      ^SolutionConfigs + .MyProjectConfig
+    }
+
+    // Generate .vcxproj file
+    {
+      .MyProjectName = '$MyName$.vcxproj'
+      VCXProject( "$MyProjectName$" )
+      {
+        .MyVsBuildId = '^$(Configuration)'
+
+        .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
+
+        .ProjectBuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide'
+        .ProjectRebuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide -clean'
+        // TODO(Manuzor): Find a way to clean.
+        // .ProjectCleanCommand   = '"$RepoRoot$\build.ps1" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
+        .Output = '$MyBuildRoot$/$MyVsBuildId$/$MyOutputName$$MyOutputExtension$'
+
+        .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
+        .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
+        .LocalDebuggerWorkingDirectory = '^$(OutDir)'
+      }
+
+      ^SolutionProjects + .MyProjectName
+
+      .MyFolder =
+      [
+        .Path = 'projects'
+        .Projects = { .MyProjectName }
+      ]
+      ^SolutionFolders + .MyFolder
+    }
+  }
+}
+
 
 //
 // Visual Studio solution (.sln)

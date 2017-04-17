@@ -37,7 +37,7 @@ $Content.folders = @(
 $MainBuildSystem =
 @{
   "name" = "$RepoName";
-  "file_regex" = "([A-z]:.*?)\\(([0-9]+)(?:,\\s*[0-9]+)?\\)";
+  "file_regex" = "([A-z]:.*?)\(([0-9]+)(?:,\s*[0-9]+)?\)";
 };
 
 $BuildScript = Join-Path $RepoRoot "build.ps1"
