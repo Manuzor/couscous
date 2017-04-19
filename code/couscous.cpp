@@ -789,7 +789,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
         {
           switch(Instruction.Args[1].Type)
           {
-            case argument_type:: V:
+            case argument_type::V:
             {
               u8* Reg = M->V + Instruction.Args[1].Value;
               M->I += *Reg;
@@ -808,7 +808,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
               *Reg += (u8)Instruction.Args[1].Value;
               return;
             }
-            case argument_type:: V:
+            case argument_type::V:
             {
               u8* OtherReg = M->V + Instruction.Args[1].Value;
               u16 Result = (u16)*Reg + (u16)*OtherReg;
@@ -824,37 +824,137 @@ ExecuteInstruction(machine* M, instruction Instruction)
     }
     case instruction_type::OR:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* RegA = M->V + Instruction.Args[0].Value;
+              u8* RegB = M->V + Instruction.Args[1].Value;
+              *RegA = *RegA | *RegB;
+              return;
+            }
+          }
+        break;
+        }
+      }
       break;
     }
     case instruction_type::AND:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* RegA = M->V + Instruction.Args[0].Value;
+              u8* RegB = M->V + Instruction.Args[1].Value;
+              *RegA = *RegA & *RegB;
+              return;
+            }
+          }
+        break;
+        }
+      }
       break;
     }
     case instruction_type::XOR:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* RegA = M->V + Instruction.Args[0].Value;
+              u8* RegB = M->V + Instruction.Args[1].Value;
+              *RegA = *RegA ^ *RegB;
+              return;
+            }
+          }
+        break;
+        }
+      }
       break;
     }
     case instruction_type::SUB:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* RegA = M->V + Instruction.Args[0].Value;
+              u8* RegB = M->V + Instruction.Args[1].Value;
+              M->V[0xF] = (*RegA > *RegB) ? 1 : 0;
+              *RegA = *RegA - *RegB;
+              return;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
     case instruction_type::SHR:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          u8* RegA = M->V + Instruction.Args[0].Value;
+          M->V[0xF] = *RegA & 0b0000'0001;
+          *RegA /= 2;
+          return;
+        }
+      }
       break;
     }
     case instruction_type::SUBN:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch(Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              u8* RegA = M->V + Instruction.Args[0].Value;
+              u8* RegB = M->V + Instruction.Args[1].Value;
+              M->V[0xF] = (*RegB > *RegA) ? 1 : 0;
+              *RegA = *RegB - *RegA;
+              return;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
     case instruction_type::SHL:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          u8* RegA = M->V + Instruction.Args[0].Value;
+          M->V[0xF] = *RegA & 0b1000'0000;
+          *RegA *= 2;
+          return;
+        }
+      }
       break;
     }
     case instruction_type::RND:
