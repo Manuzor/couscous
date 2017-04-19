@@ -134,7 +134,7 @@ int main(int NumArgs, char const* Args[])
         mtb_CopyBytes(Code.Size, Code.Data, LineStart);
         instruction Instruction = AssembleInstruction(Code);
         u16 EncodedInstruction = EncodeInstruction(Instruction);
-        int NumPrintedChars = fprintf(OutFile, "%04X", EncodedInstruction);
+        MTB_DEBUG_CODE(int NumPrintedChars =) fprintf(OutFile, "%04X", EncodedInstruction);
         MTB_AssertDebug(NumPrintedChars == 4);
       }
     }
