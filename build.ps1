@@ -89,6 +89,7 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 #
 if($OS.Platform -eq [PlatformID]::Win32NT)
 {
+  <#
   function Get-VisualStudioInfos
   {
     $KeyCandidates = @(
@@ -126,6 +127,30 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 
   $LatestVisualStudio = $AllVisualStudioInfos[0]
   if($LatestVisualStudio.Version.Major -lt 10) { Throw "Need at least Visual Studio 2010. Latest version found: $LatestVisualStudio" }
+  #>
+
+  if(!(Get-Command Get-VSSetupInstance))
+  {
+    # Infos about VSSetup can be found here:
+    # https://blogs.msdn.microsoft.com/vcblog/2017/03/06/finding-the-visual-c-compiler-tools-in-visual-studio-2017/
+    Install-Module VSSetup -Scope CurrentUser -Force -WhatIf:$WhatIf
+  }
+  if(!(Get-Command Get-VSSetupInstance))
+  {
+    Throw "Unable to install PS module 'VSSetup' which is required to find installed Visual Studio instances."
+  }
+
+  $VSInstance = Get-VSSetupInstance | Select-VSSetupInstance -Latest -Require Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+  if($VSInstance.InstallationVersion.Major -ge 15)
+  {
+    $MSVCToolsVersionFile = Join-Path -Resolve $VSInstance.InstallationPath "VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
+    $MSVCToolsVersion = New-Object System.Version (Get-Content $MSVCToolsVersionFile)
+    $MSVCToolsDir = Join-Path -Resolve $VSInstance.InstallationPath "VC/Tools/MSVC/$MSVCToolsVersion"
+  }
+  else
+  {
+    # TODO
+  }
 }
 
 #
@@ -158,10 +183,23 @@ if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 // Windows specific
 .WindowsSDKDir = '$($LatestWindowsSDK.RootDir)'
 .WindowsSDKVersion = '$(Get-FullVersionString $LatestWindowsSDK.Version)'
-.VSDir = '$($LatestVisualStudio.RootDir)'
-.VSVersion = '$($LatestVisualStudio.Version)'
-.VSVersionMajor = '$($LatestVisualStudio.Version.Major)'
+.VSDir = '$($VSInstance.InstallationPath)'
+.VSVersion = '$($VSInstance.InstallationVersion)'
+.VSVersionMajor = '$($VSInstance.InstallationVersion.Major)'
+
 "@
+
+    if($VSInstance.InstallationVersion.Major -ge 15)
+    {
+      $HostArch = "x64"
+      $SystemBFFContent += @"
+.MSVCBin_x86 = '$MSVCToolsDir/bin/Host$($HostArch.ToUpper())/x86'
+.MSVCBin_x64 = '$MSVCToolsDir/bin/Host$($HostArch.ToUpper())/x64'
+"@
+    }
+    else
+    {
+    }
   }
   else
   {
