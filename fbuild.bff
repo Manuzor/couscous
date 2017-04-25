@@ -47,7 +47,7 @@
 
     .MyPlatformId = 'win_msvc_x64'
 
-    .Compiler = '$MSVCBin_x64$\cl.exe'
+    .Compiler = '$MSVCDir$\$MSVCVersion$\bin\HostX64\x64\cl.exe'
     .CompilerOptions = ' %1 /Fo"%2" /c'
                      + ' /nologo'
                      + ' /WX' // Treat warnings as errors.
@@ -72,19 +72,19 @@
                      //
                      // System Includes
                      //
-                     + ' /I"$VSDir$\VC\Include"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\ucrt"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\shared"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\um"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\winrt"'
+                     + ' /I"$MSVCDir$\$MSVCVersion$\include"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\ucrt"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\shared"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\um"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\winrt"'
 
-    .Linker = '$MSVCBin_x64$\link.exe'
+    .Linker = '$MSVCDir$\$MSVCVersion$\bin\HostX64\x64\link.exe'
     .LinkerOptions = ' %1 /OUT:"%2"'
                    + ' /NOLOGO'
                    + ' /INCREMENTAL:NO'
-                   + ' /LIBPATH:"$VSDir$\VC\lib\amd64"'
-                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\um\x64"'
-                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\ucrt\x64"'
+                   + ' /LIBPATH:"$MSVCDir$\$MSVCVersion$\lib\x64"'
+                   + ' /LIBPATH:"$WinSDKDir$\Lib\$WinSDKVersion$\um\x64"'
+                   + ' /LIBPATH:"$WinSDKDir$\Lib\$WinSDKVersion$\ucrt\x64"'
                    + ' User32.lib'
                    + ' Gdi32.lib'
 
@@ -100,6 +100,7 @@
       .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
 
       .CompilerOptions + ' /Zi'
+                       + ' /Fd"$MyBuildPath$/$MyOutputName$"'
                        + ' /MTd'
                        + ' /wd4189' // "local variable is initialized but not referenced"
                        + ' /DDEBUG'
@@ -210,7 +211,7 @@
 
     .MyPlatformId = 'win_msvc_x64'
 
-    .Compiler = '$MSVCBin_x64$\cl.exe'
+    .Compiler = '$MSVCDir$\$MSVCVersion$\bin\HostX64\x64\cl.exe'
     .CompilerOptions = ' %1 /Fo"%2" /c'
                      + ' /nologo'
                      + ' /WX' // Treat warnings as errors.
@@ -233,19 +234,19 @@
                      //
                      // System Includes
                      //
-                     + ' /I"$VSDir$\VC\Include"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\ucrt"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\shared"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\um"'
-                     + ' /I"$WindowsSDKDir$\Include\$WindowsSDKVersion$\winrt"'
+                     + ' /I"$MSVCDir$\$MSVCVersion$\include"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\ucrt"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\shared"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\um"'
+                     + ' /I"$WinSDKDir$\Include\$WinSDKVersion$\winrt"'
 
-    .Linker = '$MSVCBin_x64$\link.exe'
+    .Linker = '$MSVCDir$\$MSVCVersion$\bin\HostX64\x64\link.exe'
     .LinkerOptions = ' %1 /OUT:"%2"'
                    + ' /NOLOGO'
                    + ' /INCREMENTAL:NO'
-                   + ' /LIBPATH:"$VSDir$\VC\lib\amd64"'
-                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\um\x64"'
-                   + ' /LIBPATH:"$WindowsSDKDir$\Lib\$WindowsSDKVersion$\ucrt\x64"'
+                   + ' /LIBPATH:"$MSVCDir$\$MSVCVersion$\lib\x64"'
+                   + ' /LIBPATH:"$WinSDKDir$\Lib\$WinSDKVersion$\um\x64"'
+                   + ' /LIBPATH:"$WinSDKDir$\Lib\$WinSDKVersion$\ucrt\x64"'
                    + ' User32.lib'
                    + ' Gdi32.lib'
 
@@ -261,6 +262,7 @@
       .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
 
       .CompilerOptions + ' /Zi'
+                       + ' /Fd"$MyBuildPath$/$MyOutputName$"'
                        + ' /MTd'
                        + ' /wd4189' // "local variable is initialized but not referenced"
                        + ' /DDEBUG'

@@ -89,68 +89,21 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 #
 if($OS.Platform -eq [PlatformID]::Win32NT)
 {
-  <#
-  function Get-VisualStudioInfos
-  {
-    $KeyCandidates = @(
-      'HKLM:\SOFTWARE\Microsoft\VisualStudio';
-      'HKLM:\SOFTWARE\WOW6432Node\Microsoft\VisualStudio';
-    )
-
-    $Results = foreach($Key in $KeyCandidates)
-    {
-      if(Test-Path $Key)
-      {
-        $Infos = Get-ChildItem $Key | Get-ItemProperty
-        foreach($Info in $Infos)
-        {
-          $Version = New-Object Version
-          if([Version]::TryParse($Info.PSChildName, [ref]$Version))
-          {
-            [PSCustomObject]@{
-              "Version" = $Version
-              "RootDir" = Sanitize-PathName $Info.ShellFolder
-            }
-          }
-        }
-      }
-    }
-
-    if($Results)
-    {
-      $Results | Sort-Object { $_.Version } -Descending
-    }
-  }
-
-  $AllVisualStudioInfos = Get-VisualStudioInfos
-  if(!($AllVisualStudioInfos)) { Throw "Visual Studio is not installed." }
-
-  $LatestVisualStudio = $AllVisualStudioInfos[0]
-  if($LatestVisualStudio.Version.Major -lt 10) { Throw "Need at least Visual Studio 2010. Latest version found: $LatestVisualStudio" }
-  #>
-
   if(!(Get-Command Get-VSSetupInstance))
   {
     # Infos about VSSetup can be found here:
     # https://blogs.msdn.microsoft.com/vcblog/2017/03/06/finding-the-visual-c-compiler-tools-in-visual-studio-2017/
     Install-Module VSSetup -Scope CurrentUser -Force -WhatIf:$WhatIf
   }
+
   if(!(Get-Command Get-VSSetupInstance))
   {
     Throw "Unable to install PS module 'VSSetup' which is required to find installed Visual Studio instances."
   }
 
   $VSInstance = Get-VSSetupInstance | Select-VSSetupInstance -Latest -Require Microsoft.VisualStudio.Component.VC.Tools.x86.x64
-  if($VSInstance.InstallationVersion.Major -ge 15)
-  {
-    $MSVCToolsVersionFile = Join-Path -Resolve $VSInstance.InstallationPath "VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
-    $MSVCToolsVersion = New-Object System.Version (Get-Content $MSVCToolsVersionFile)
-    $MSVCToolsDir = Join-Path -Resolve $VSInstance.InstallationPath "VC/Tools/MSVC/$MSVCToolsVersion"
-  }
-  else
-  {
-    # TODO
-  }
+  $MSVCToolsFile = Join-Path -Resolve $VSInstance.InstallationPath "VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt"
+  $MSVCVersion = New-Object System.Version (Get-Content $MSVCToolsFile).Trim()
 }
 
 #
@@ -178,28 +131,20 @@ if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 
   if($OS.Platform -eq [PlatformID]::Win32NT)
   {
+    $HostArch = "x64".ToUpper()
     $SystemBFFContent += @"
 
 // Windows specific
-.WindowsSDKDir = '$($LatestWindowsSDK.RootDir)'
-.WindowsSDKVersion = '$(Get-FullVersionString $LatestWindowsSDK.Version)'
+.WinSDKDir = '$($LatestWindowsSDK.RootDir)'
+.WinSDKVersion = '$(Get-FullVersionString $LatestWindowsSDK.Version)'
+
 .VSDir = '$($VSInstance.InstallationPath)'
 .VSVersion = '$($VSInstance.InstallationVersion)'
 .VSVersionMajor = '$($VSInstance.InstallationVersion.Major)'
 
+.MSVCDir = '$(Join-Path -Resolve $VSInstance.InstallationPath "VC/Tools/MSVC")'
+.MSVCVersion = '$MSVCVersion'
 "@
-
-    if($VSInstance.InstallationVersion.Major -ge 15)
-    {
-      $HostArch = "x64"
-      $SystemBFFContent += @"
-.MSVCBin_x86 = '$MSVCToolsDir/bin/Host$($HostArch.ToUpper())/x86'
-.MSVCBin_x64 = '$MSVCToolsDir/bin/Host$($HostArch.ToUpper())/x64'
-"@
-    }
-    else
-    {
-    }
   }
   else
   {
@@ -309,7 +254,7 @@ if($WhatIf)
 else
 {
   # Move to an intermediate directory and execute from there.
-  Push-Location $FASTBuildWorkspaceDir
+  # Push-Location $FASTBuildWorkspaceDir
   & $FBuildExe -config (Join-Path $RepoRoot "fbuild.bff") $Args
-  Pop-Location
+  # Pop-Location
 }
