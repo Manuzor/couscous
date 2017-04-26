@@ -2,21 +2,39 @@
 
 CHIP-8 interpreter toy thing.
 
+# Directories
+
+* `code` - Contains all source code
+* `tools` - Contains tools to generate a Sublime Text project, for example.
+* `roms` - Some roms to quickly try out the interpreter.
+* `docs` - Misc documentation.
+
+Generated directories start with an underscore `_` and are ignored by the versioning system.
+* `_build` - Contains all build artifacts
+* `_workspace` - Intermediate files used by the build system or tools
+
 # Build Instructions
-_Note: Right now, only Windows platforms are supported. In fact, only Windows 10 and MSVC 14 (Visual Studio 2015) have been tested._
+
+Platform requirements:
+* **Windows 10** or higher
+  * Needs **Visual Studio 2017** or higher installed
+  * An active **internet connection** the first time you execute the build script. See below for details.
+
+Other platforms may or may not be supported in the future.
 
 ## TL;DR
 ~~~
-> init.bat
-> build.bat
+> ./build.ps1
 ~~~
 
-Generate a Visual Studio project file in `workspace/vsXY` (e.g. `workspace/vs14`):
+Generate a Visual Studio project file in `_workspace/vsXY` (e.g. `_workspace/vs15`):
 ~~~
-> build.bat vs
+> ./build.ps1 vs
 ~~~
 
 ## Details
-The first thing to do is to execute the init-script (`init.bat`) located in the root of the repository. A `workspace` folder will be created that is used for a number of things (intermediate build stuff, Visual Studio files, etc.). If the `workspace`-folder is deleted, the init-script needs to be run again, otherwise building won't work. It is safe to run the init-script multiple times in a row.
+The underlying build system is [FASTBuild](https://fastbuild.org). You do not have to have it installed because the build script downloads an appropriate version automatically when it can't find FASTBuild in `_workspace/fastbuild`. This only needs to be done the first time the build script is executed. But of course, this requires an active internet connection. If you don't have a connection and still want to build, either make sure FASTBuild is in your path or put the binaries into the directory `_workspace/fastbuild`.
 
-The build-system used by this project is [FASTBuild](https://fastbuild.org). However, you should **prefer to use the top-level `build.bat`**, which forwards all arguments to `FBuild.exe` but also changes the working directory for the duration of the script.
+Arguments to the build script are forwarded to FASTBuild, i.e. you can use `./build.ps1 -showtargets` to show all defined targets.
+
+Build artifacts can be found in the `_build` directory.
