@@ -8,6 +8,8 @@ param(
   [switch]$WhatIf
 )
 
+$ErrorActionPreference = "Stop"
+
 function Sanitize-PathName([string]$PathName)
 {
   $PathName -replace '[/\\]+$','' # Without trailing slashes
@@ -89,16 +91,12 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 #
 if($OS.Platform -eq [PlatformID]::Win32NT)
 {
-  if(!(Get-Command Get-VSSetupInstance))
+  if(!(Get-Command Get-VSSetupInstance -ErrorAction Ignore))
   {
+    Write-Host "Install powershell module 'VSSetup'..."
     # Infos about VSSetup can be found here:
     # https://blogs.msdn.microsoft.com/vcblog/2017/03/06/finding-the-visual-c-compiler-tools-in-visual-studio-2017/
     Install-Module VSSetup -Scope CurrentUser -Force -WhatIf:$WhatIf
-  }
-
-  if(!(Get-Command Get-VSSetupInstance))
-  {
-    Throw "Unable to install PS module 'VSSetup' which is required to find installed Visual Studio instances."
   }
 
   $VSInstance = Get-VSSetupInstance | Select-VSSetupInstance -Latest -Require Microsoft.VisualStudio.Component.VC.Tools.x86.x64
