@@ -501,6 +501,14 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
   machine* M = (machine*)PushStruct(&UtilStack, machine);
   mtb_SetBytes(sizeof(machine), M, 0);
+#if defined(COUSCOUS_RANDOM_SEED)
+  M->RNG = mtb_RandomSeed(COUSCOUS_RANDOM_SEED);
+#elif MTB_FLAG(DEBUG)
+  M->RNG = mtb_RandomSeed(0);
+#else
+  // TODO(Manuzor): Find a way to properly initialize the RNG.
+  #error Random number generator is not initialized and has no seed!
+#endif
 
   bool RomLoaded = false;
   {

@@ -959,7 +959,24 @@ ExecuteInstruction(machine* M, instruction Instruction)
     }
     case instruction_type::RND:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch (Instruction.Args[0].Type)
+      {
+      case argument_type::V:
+      {
+        switch (Instruction.Args[1].Type)
+        {
+        case argument_type::CONSTANT:
+        {
+          u8* Reg = M->V + Instruction.Args[0].Value;
+          u8 Byte = (u8)Instruction.Args[1].Value;
+          u8 Rand = (u8)mtb_RandomBetween_u32(&M->RNG, 0, 255);
+          *Reg = Byte & Rand;
+          break;
+        }
+        }
+        break;
+      }
+      }
       break;
     }
     case instruction_type::DRW:

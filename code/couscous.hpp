@@ -58,6 +58,8 @@ struct machine
   bool Input[16];
 
   bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
+
+  mtb_rng RNG;
 };
 
 enum struct argument_type
