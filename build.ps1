@@ -36,12 +36,29 @@ $RepoName = Split-Path $RepoRoot -Leaf
 $FBuildBFF = Join-Path $RepoRoot "fbuild.bff" -Resolve
 $WorkspaceDir = New-Item (Join-Path $RepoRoot "_workspace") -ItemType Directory -Force
 $BuildDir = New-Item (Join-Path $RepoRoot "_build") -ItemType Directory -Force
-[OperatingSystem]$OS = [Environment]::OSVersion
+# For powershell versions < 6.0
+if($PSVersionTable.PSVersion.Major -lt 6)
+{
+  Write-Warning "It is recommended to use at least Powershell version 6. Please visit https://github.com/PowerShell/PowerShell/releases"
+  try
+  {
+    switch([Environment]::OSVersion.Platform)
+    {
+      ([PlatformID]::Win32NT){ $IsWindows = $true }
+      ([PlatformID]::Unix)   { $IsLinux = $true }
+      ([PlatformID]::Unix)   { $IsOSX = $true }
+    }
+  }
+  catch
+  {
+    Write-Error "Unable to determine platform."
+  }
+}
 
 #
 # Find Windows SDK
 #
-if($OS.Platform -eq [PlatformID]::Win32NT)
+if($IsWindows)
 {
   <#
   Gets infos about all installed Windows SDKs sorted in descending order,
@@ -89,7 +106,7 @@ if($OS.Platform -eq [PlatformID]::Win32NT)
 #
 # Find Visual Studio
 #
-if($OS.Platform -eq [PlatformID]::Win32NT)
+if($IsWindows)
 {
   if(!(Get-Command Get-VSSetupInstance -ErrorAction Ignore))
   {
@@ -127,7 +144,7 @@ if($RenewSystemBFF -or !(Test-Path $SystemBFFPath))
 
 "@
 
-  if($OS.Platform -eq [PlatformID]::Win32NT)
+  if($IsWindows)
   {
     $HostArch = "x64".ToUpper()
     $SystemBFFContent += @"
@@ -198,32 +215,28 @@ if(!$FBuildExe)
   Write-Host "  - '$FASTBuildWorkspaceDir'"
   if(!$IgnoreFBuildInPath) { Write-Host "  - System PATH" }
 
-  $FBuildDownloadUrl = switch($OS.Platform)
-  {
-    ([PlatformID]::Win32NT) { "http://fastbuild.org/downloads/v0.93/FASTBuild-Windows-x64-v0.93.zip" }
-    ([PlatformID]::Unix)    { "http://fastbuild.org/downloads/v0.93/FASTBuild-Linux-x64-v0.93.zip" }
-    ([PlatformID]::MacOSX)  { "http://fastbuild.org/downloads/v0.93/FASTBuild-OSX-x64-v0.93.zip" }
-  }
+  $FBuildDownloadUrl = if($IsWindows)   { "http://fastbuild.org/downloads/v0.93/FASTBuild-Windows-x64-v0.93.zip" }
+                       elseif($IsLinux) { "http://fastbuild.org/downloads/v0.93/FASTBuild-Linux-x64-v0.93.zip" }
+                       elseif($IsOSX)   { "http://fastbuild.org/downloads/v0.93/FASTBuild-OSX-x64-v0.93.zip" }
+
   $FBuildZipFile = Join-Path $FASTBuildWorkspaceDir "FASTBuild.zip"
   if(!$WhatIf)
   {
     Write-Host "Downloading: $FBuildDownloadUrl => $FBuildZipFile"
-    Write-Progress -Id 1 "Fetching FBuild Client" "Downloading: $FBuildDownloadUrl"
     $DownloadTime = Measure-Command {
-      (New-Object System.Net.WebClient).DownloadFile($FBuildDownloadUrl, $FBuildZipFile)
+      Invoke-WebRequest $FBuildDownloadUrl -OutFile $FBuildZipFile
     }
     Write-Host ("Downloaded in {0:N2}s." -f $DownloadTime.TotalSeconds)
 
     if(Test-Path -PathType Leaf $FBuildZipFile)
     {
       Write-Host "Unzipping: $FBuildZipFile => $FASTBuildWorkspaceDir"
-      Write-Progress -Id 1 "Fetching FBuild Client" "Unzipping: $FBuildZipFile => $FASTBuildWorkspaceDir"
       $UnzipTime = Measure-Command {
         Expand-Archive -Force $FBuildZipFile $FASTBuildWorkspaceDir
       }
       Write-Host ("Unzipped in {0:N2}s." -f $UnzipTime.TotalSeconds)
 
-      Write-Progress -Id 1 "Fetching FBuild Client" "Veryfing"
+      Write-Host "Verifying FBuild client"
       $FBuildExe = Find-FBuildExe $FASTBuildWorkspaceDir -SearchInPath:$false
       if(!$FBuildExe)
       {
@@ -252,7 +265,13 @@ if($WhatIf)
 else
 {
   # Move to an intermediate directory and execute from there.
-  # Push-Location $FASTBuildWorkspaceDir
-  & $FBuildExe -config (Join-Path $RepoRoot "fbuild.bff") $Args
-  # Pop-Location
+  Push-Location $FASTBuildWorkspaceDir
+  try
+  {
+    & $FBuildExe -config (Join-Path $RepoRoot "fbuild.bff") $Args
+  }
+  finally
+  {
+    Pop-Location
+  }
 }
