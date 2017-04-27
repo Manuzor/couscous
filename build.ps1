@@ -39,7 +39,7 @@ $BuildDir = New-Item (Join-Path $RepoRoot "_build") -ItemType Directory -Force
 # For powershell versions < 6.0
 if($PSVersionTable.PSVersion.Major -lt 6)
 {
-  Write-Warning "It is recommended to use at least Powershell version 6. Please visit https://github.com/PowerShell/PowerShell/releases"
+  # Emulate powershell v6.0 $Is* variables.
   try
   {
     switch([Environment]::OSVersion.Platform)
@@ -113,7 +113,7 @@ if($IsWindows)
     Write-Host "Install powershell module 'VSSetup'..."
     # Infos about VSSetup can be found here:
     # https://blogs.msdn.microsoft.com/vcblog/2017/03/06/finding-the-visual-c-compiler-tools-in-visual-studio-2017/
-    Install-Module VSSetup -Scope CurrentUser -Force -WhatIf:$WhatIf
+    Find-Module VSSetup | Install-Module -Scope CurrentUser -Force -WhatIf:$WhatIf
   }
 
   $VSInstance = Get-VSSetupInstance | Select-VSSetupInstance -Latest -Require Microsoft.VisualStudio.Component.VC.Tools.x86.x64
