@@ -13,6 +13,9 @@
 .MyAllConfigs = { 'win_msvc_x64_debug', 'win_msvc_x64_release' }
 
 .MyTargetList = {}
+.MyDebugTargetList = {}
+.MyReleaseTargetList = {}
+
 .SolutionConfigs = {}
 .SolutionProjects = {}
 .SolutionFolders = {}
@@ -115,6 +118,7 @@
         .Libraries = { '$MyTarget$-obj' }
       }
       ^MyTargetList + .MyTarget
+      ^MyDebugTargetList + .MyTarget
 
       .MyProjectConfig =
       [
@@ -148,6 +152,7 @@
         .Libraries = { '$MyTarget$-obj' }
       }
       ^MyTargetList + .MyTarget
+      ^MyReleaseTargetList + .MyTarget
 
       .MyProjectConfig =
       [
@@ -277,6 +282,7 @@
         .Libraries = { '$MyTarget$-obj' }
       }
       ^MyTargetList + .MyTarget
+      ^MyDebugTargetList + .MyTarget
 
       .MyProjectConfig =
       [
@@ -310,6 +316,7 @@
         .Libraries = { '$MyTarget$-obj' }
       }
       ^MyTargetList + .MyTarget
+      ^MyReleaseTargetList + .MyTarget
 
       .MyProjectConfig =
       [
@@ -415,8 +422,20 @@ Alias( 'vs' )
   .Targets = '$MySolutionName$'
 }
 
+Alias( 'all-debug' )
+{
+  .Targets = .MyDebugTargetList
+}
+
+Alias( 'all-release' )
+{
+  .Targets = .MyReleaseTargetList
+}
+
 // The canonical alias 'all'
 Alias( 'all' )
 {
-  .Targets = .MyTargetList
+  // TODO(Manuzor): Use the complete list once release builds work again.
+  // .Targets = .MyTargetList
+  .Targets = 'all-debug'
 }
