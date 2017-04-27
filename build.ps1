@@ -36,6 +36,7 @@ $RepoName = Split-Path $RepoRoot -Leaf
 $FBuildBFF = Join-Path $RepoRoot "fbuild.bff" -Resolve
 $WorkspaceDir = New-Item (Join-Path $RepoRoot "_workspace") -ItemType Directory -Force
 $BuildDir = New-Item (Join-Path $RepoRoot "_build") -ItemType Directory -Force
+
 # For powershell versions < 6.0
 if($PSVersionTable.PSVersion.Major -lt 6)
 {
