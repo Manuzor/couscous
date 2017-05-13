@@ -1,5 +1,415 @@
 #include "charmap.cpp"
 
+//
+// argument_type
+//
+
+char const*
+GetArgumentTypeAsString(argument_type Value)
+{
+  char const* Result = nullptr;
+  switch(Value)
+  {
+    case argument_type::NONE:     Result = "NONE"; break;
+    case argument_type::V:        Result = "V"; break;
+    case argument_type::I:        Result = "I"; break;
+    case argument_type::DT:       Result = "DT"; break;
+    case argument_type::ST:       Result = "ST"; break;
+    case argument_type::K:        Result = "K"; break;
+    case argument_type::F:        Result = "F"; break;
+    case argument_type::B:        Result = "B"; break;
+    case argument_type::ATI:      Result = "ATI"; break;
+    case argument_type::CONSTANT: Result = "CONSTANT"; break;
+    default:
+      MTB_INVALID_CODE_PATH;
+      break;
+  }
+
+  return Result;
+}
+
+
+argument_type
+MakeArgumentTypeFromString(size_t CodeLen, char const* Code)
+{
+  #define MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(EXPECTED) \
+    if(mtb_StringsAreEqual(sizeof(#EXPECTED) - 1, Code, #EXPECTED)) \
+    { \
+      Result = argument_type::EXPECTED; \
+      break; \
+    }
+
+  argument_type Result = {};
+  if(CodeLen > 0)
+  {
+    switch(Code[0])
+    {
+      case 'N': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(NONE);     break;
+      case 'V': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(V);        break;
+      case 'I': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(I);        break;
+      case 'D': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(DT);       break;
+      case 'S': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(ST);       break;
+      case 'K': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(K);        break;
+      case 'F': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(F);        break;
+      case 'B': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(B);        break;
+      case 'A': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(ATI);      break;
+      case 'C': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(CONSTANT); break;
+      default: break;
+    }
+  }
+  return Result;
+
+  #undef MAKE_ARGUMENT_TYPE_FROM_STRING_CASE
+}
+
+
+//
+// argument
+//
+size_t
+GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
+{
+  // Note(Manuzor): Use with care, this function is not tested...
+
+  size_t Result = 0;
+
+  if(BufferSize > 0) switch(Argument.Type)
+  {
+    case argument_type::V:
+    {
+      if(BufferSize > 1)
+      {
+        Buffer[0] = 'V';
+        Buffer[1] = '0' + mtb_SafeConvert_u08(Argument.Value);
+        Result = 2;
+      }
+    } break;
+
+    case argument_type::I:
+    {
+      Buffer[0] = 'I';
+      Result = 1;
+    } break;
+
+    case argument_type::DT:
+    {
+      if(BufferSize > 1)
+      {
+        Buffer[0] = 'D';
+        Buffer[1] = 'T';
+        Result = 2;
+      }
+    } break;
+
+    case argument_type::ST:
+    {
+      if(BufferSize > 1)
+      {
+        Buffer[0] = 'S';
+        Buffer[1] = 'T';
+        Result = 2;
+      }
+    } break;
+
+    case argument_type::K:
+    {
+      Buffer[0] = 'K';
+      Result = 1;
+    } break;
+
+    case argument_type::F:
+    {
+      Buffer[0] = 'F';
+      Result = 1;
+    } break;
+
+    case argument_type::B:
+    {
+      Buffer[0] = 'B';
+      Result = 1;
+    } break;
+
+    case argument_type::ATI:
+    {
+      if(BufferSize > 2)
+      {
+        Buffer[0] = '[';
+        Buffer[1] = 'I';
+        Buffer[2] = ']';
+        Result = 3;
+      }
+    } break;
+
+    case argument_type::CONSTANT:
+    {
+      if(Argument.Value < 10)
+      {
+        Buffer[0] = '0' + (char)Argument.Value;
+        Result = 1;
+      }
+      else if(Argument.Value < 100)
+      {
+        Buffer[0] = '0' + (char)(Argument.Value % 10);
+        Buffer[1] = '0' + (char)(Argument.Value / 10);
+        Result = 2;
+      }
+      else
+      {
+        MTB_AssertDebug(Argument.Value < 1000);
+        Buffer[0] = '0' + (char)(Argument.Value % 10);
+        Buffer[1] = '0' + (char)((Argument.Value / 10) % 10);
+        Buffer[2] = '0' + (char)((Argument.Value / 10) / 10);
+        Result = 3;
+      }
+    } break;
+
+    default:
+      MTB_INVALID_CODE_PATH;
+      break;
+  }
+
+  return Result;
+}
+
+argument
+MakeArgumentFromString(size_t CodeLen, char const* Code)
+{
+  argument Result{};
+
+  if(CodeLen > 0)
+  {
+    switch(Code[0])
+    {
+      case 'V':
+      {
+        if(CodeLen == 2)
+        {
+          switch(Code[1])
+          {
+            case '0': Result.Value = 0x0; break;
+            case '1': Result.Value = 0x1; break;
+            case '2': Result.Value = 0x2; break;
+            case '3': Result.Value = 0x3; break;
+            case '4': Result.Value = 0x4; break;
+            case '5': Result.Value = 0x5; break;
+            case '6': Result.Value = 0x6; break;
+            case '7': Result.Value = 0x7; break;
+            case '8': Result.Value = 0x8; break;
+            case '9': Result.Value = 0x9; break;
+            case 'A': Result.Value = 0xA; break;
+            case 'B': Result.Value = 0xB; break;
+            case 'C': Result.Value = 0xC; break;
+            case 'D': Result.Value = 0xD; break;
+            case 'E': Result.Value = 0xE; break;
+            case 'F': Result.Value = 0xF; break;
+            default: MTB_INVALID_CODE_PATH; break;
+          }
+        }
+        break;
+      }
+
+      case 'I':
+      {
+        if(CodeLen == 1)
+          Result.Type = argument_type::I;
+        break;
+      }
+
+      case 'D':
+      {
+        if(CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "DT", Code))
+          Result.Type = argument_type::DT;
+        break;
+      }
+
+      case 'S':
+      {
+        if(CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "ST", Code))
+          Result.Type = argument_type::ST;
+        break;
+      }
+
+      case 'K':
+      {
+        if(CodeLen == 1)
+          Result.Type = argument_type::K;
+        break;
+      }
+
+      case 'F':
+      {
+        if(CodeLen == 1)
+          Result.Type = argument_type::F;
+        break;
+      }
+
+      case 'B':
+      {
+        if(CodeLen == 1)
+          Result.Type = argument_type::B;
+        break;
+      }
+
+      case '[':
+      {
+        if(CodeLen == 3)
+        {
+          if(mtb_StringsAreEqual(CodeLen, "[I]", Code))
+            Result.Type = argument_type::ATI;
+        }
+        break;
+      }
+
+        default: // 0x123
+        {
+          Result.Type = argument_type::CONSTANT;
+
+          unsigned int Value = 0;
+          if(Code[0] == '0')
+          {
+            switch(Code[1])
+            {
+              case 'X': sscanf(Code + 2, "%3X", &Value); break;
+              case 'B': MTB_NOT_IMPLEMENTED;
+              case 'D': sscanf(Code + 2, "%3d", &Value);; break;
+              default:  sscanf(Code + 1, "%3d", &Value);; break;
+            }
+          }
+          else
+          {
+            sscanf(Code, "%3d", &Value);
+          }
+
+          Result.Value = (u16)Value;
+        }
+        break;
+      }
+    }
+
+    return Result;
+}
+
+
+//
+// instruction_type
+//
+
+char const*
+GetInstructionTypeAsString(instruction_type Value)
+{
+  char const* Result = nullptr;
+  switch(Value)
+  {
+    case instruction_type::INVALID: Result = "INVALID"; break;
+    case instruction_type::CLS:     Result = "CLS"; break;
+    case instruction_type::RET:     Result = "RET"; break;
+    case instruction_type::SYS:     Result = "SYS"; break;
+    case instruction_type::JP:      Result = "JP"; break;
+    case instruction_type::CALL:    Result = "CALL"; break;
+    case instruction_type::SE:      Result = "SE"; break;
+    case instruction_type::SNE:     Result = "SNE"; break;
+    case instruction_type::LD:      Result = "LD"; break;
+    case instruction_type::ADD:     Result = "ADD"; break;
+    case instruction_type::OR:      Result = "OR"; break;
+    case instruction_type::AND:     Result = "AND"; break;
+    case instruction_type::XOR:     Result = "XOR"; break;
+    case instruction_type::SUB:     Result = "SUB"; break;
+    case instruction_type::SHR:     Result = "SHR"; break;
+    case instruction_type::SUBN:    Result = "SUBN"; break;
+    case instruction_type::SHL:     Result = "SHL"; break;
+    case instruction_type::RND:     Result = "RND"; break;
+    case instruction_type::DRW:     Result = "DRW"; break;
+    case instruction_type::SKP:     Result = "SKP"; break;
+    case instruction_type::SKNP:    Result = "SKNP"; break;
+    default:
+      MTB_INVALID_CODE_PATH;
+      break;
+  }
+
+  return Result;
+}
+
+
+instruction_type
+MakeInstructionTypeFromString(size_t CodeLen, char const* Code)
+{
+  #define MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(EXPECTED) \
+    if(mtb_StringsAreEqual(sizeof(#EXPECTED) - 1, Code, #EXPECTED)) \
+    { \
+      Result = instruction_type::EXPECTED; \
+      break; \
+    }
+
+  instruction_type Result{};
+  if(CodeLen > 0) switch(Code[0])
+  {
+    case 'A': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(ADD);
+              MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(AND);
+              break;
+
+    case 'C': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(CALL);
+              MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(CLS);
+              break;
+
+    case 'D': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(DRW);
+              break;
+
+    case 'I': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(INVALID);
+              break;
+
+    case 'J': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(JP);
+              break;
+
+    case 'L': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(LD);
+              break;
+
+    case 'O': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(OR);
+              break;
+
+    case 'R': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(RET);
+              MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(RND);
+              break;
+
+    case 'S':
+    {
+      if(CodeLen > 1) switch(Code[1])
+      {
+        case 'E': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SE);
+                  break;
+
+        case 'H': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SHL);
+                  MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SHR);
+                  break;
+
+        case 'K': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SKNP);
+                  MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SKP);
+                  break;
+
+        case 'N': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SNE);
+                  break;
+
+        case 'U': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SUB);
+                  MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SUBN);
+                  break;
+
+        case 'Y': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SYS);
+                  break;
+
+        default: break;
+      }
+    } break;
+
+    case 'X': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(XOR);
+              break;
+
+    default: break;
+  }
+
+  return Result;
+
+  #undef MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE
+}
+
 void
 InitMachine(machine* M)
 {
@@ -1025,244 +1435,6 @@ ExecuteInstruction(machine* M, instruction Instruction)
 }
 
 #if COUSCOUS_ASSEMBLER
-  static instruction_type
-  ParseInstructionType(size_t CodeSize, char* Code)
-  {
-    instruction_type Result{};
-
-    if(CodeSize >= 2)
-    {
-      switch(Code[0])
-      {
-        case 'A':
-        {
-          if(CodeSize == 3)
-          {
-            if(mtb_StringsAreEqual(CodeSize, "ADD", Code))
-              Result = instruction_type::ADD;
-            else if(mtb_StringsAreEqual(CodeSize, "AND", Code))
-              Result = instruction_type::AND;
-          }
-          break;
-        }
-
-        case 'C':
-        {
-          if(CodeSize == 4 && mtb_StringsAreEqual(CodeSize, "CALL", Code))
-            Result = instruction_type::CALL;
-          else if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "CLS", Code))
-            Result = instruction_type::CLS;
-          break;
-        }
-
-        case 'D':
-        {
-          if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "DRW", Code))
-            Result = instruction_type::DRW;
-          break;
-        }
-
-        case 'J':
-        {
-          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "JP", Code))
-            Result = instruction_type::JP;
-          break;
-        }
-
-        case 'L':
-        {
-          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "LD", Code))
-            Result = instruction_type::LD;
-          break;
-        }
-
-        case 'O':
-        {
-          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "OR", Code))
-            Result = instruction_type::OR;
-          break;
-        }
-
-        case 'R':
-        {
-          if(CodeSize == 3)
-          {
-            if(mtb_StringsAreEqual(CodeSize, "RET", Code))
-              Result = instruction_type::RET;
-            else if(mtb_StringsAreEqual(CodeSize, "RND", Code))
-              Result = instruction_type::RND;
-          }
-          break;
-        }
-
-        case 'S':
-        {
-          if(CodeSize == 2)
-          {
-            if(mtb_StringsAreEqual(3, "SE", Code))
-              Result = instruction_type::SE;
-          }
-          else if(CodeSize == 3)
-          {
-            if(mtb_StringsAreEqual(CodeSize, "SHL", Code))
-              Result = instruction_type::SHL;
-            else if(mtb_StringsAreEqual(CodeSize, "SHR", Code))
-              Result = instruction_type::SHR;
-            else if(mtb_StringsAreEqual(CodeSize, "SKP", Code))
-              Result = instruction_type::SKP;
-            else if(mtb_StringsAreEqual(CodeSize, "SNE", Code))
-              Result = instruction_type::SNE;
-            else if(mtb_StringsAreEqual(CodeSize, "SUB", Code))
-              Result = instruction_type::SUB;
-            else if(mtb_StringsAreEqual(CodeSize, "SYS", Code))
-              Result = instruction_type::SYS;
-          }
-          else if(CodeSize == 4)
-          {
-            if(mtb_StringsAreEqual(CodeSize, "SKNP", Code))
-              Result = instruction_type::SKNP;
-            else if(mtb_StringsAreEqual(CodeSize, "SUBN", Code))
-              Result = instruction_type::SUBN;
-          }
-          break;
-        }
-
-        case 'X':
-        {
-          if(CodeSize == 3 && mtb_StringsAreEqual(CodeSize, "XOR", Code))
-            Result = instruction_type::XOR;
-          break;
-        }
-
-        default:
-        {
-          MTB_INVALID_CODE_PATH;
-          break;
-        }
-      }
-    }
-
-    return Result;
-  }
-
-  static argument
-  ParseArgument(size_t CodeSize, char* Code)
-  {
-    argument Result{};
-
-    if(CodeSize > 0)
-    {
-      switch(Code[0])
-      {
-        case 'V':
-        {
-          if(CodeSize == 2)
-          {
-            switch(Code[1])
-            {
-              case '0': Result.Value = 0x0; break;
-              case '1': Result.Value = 0x1; break;
-              case '2': Result.Value = 0x2; break;
-              case '3': Result.Value = 0x3; break;
-              case '4': Result.Value = 0x4; break;
-              case '5': Result.Value = 0x5; break;
-              case '6': Result.Value = 0x6; break;
-              case '7': Result.Value = 0x7; break;
-              case '8': Result.Value = 0x8; break;
-              case '9': Result.Value = 0x9; break;
-              case 'A': Result.Value = 0xA; break;
-              case 'B': Result.Value = 0xB; break;
-              case 'C': Result.Value = 0xC; break;
-              case 'D': Result.Value = 0xD; break;
-              case 'E': Result.Value = 0xE; break;
-              case 'F': Result.Value = 0xF; break;
-              default: MTB_INVALID_CODE_PATH; break;
-            }
-          }
-          break;
-        }
-
-        case 'I':
-        {
-          if(CodeSize == 1)
-            Result.Type = argument_type::I;
-          break;
-        }
-
-        case 'D':
-        {
-          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "DT", Code))
-            Result.Type = argument_type::DT;
-          break;
-        }
-
-        case 'S':
-        {
-          if(CodeSize == 2 && mtb_StringsAreEqual(CodeSize, "ST", Code))
-            Result.Type = argument_type::ST;
-          break;
-        }
-
-        case 'K':
-        {
-          if(CodeSize == 1)
-            Result.Type = argument_type::K;
-          break;
-        }
-
-        case 'F':
-        {
-          if(CodeSize == 1)
-            Result.Type = argument_type::F;
-          break;
-        }
-
-        case 'B':
-        {
-          if(CodeSize == 1)
-            Result.Type = argument_type::B;
-          break;
-        }
-
-        case '[':
-        {
-          if(CodeSize == 3)
-          {
-            if(mtb_StringsAreEqual(CodeSize, "[I]", Code))
-              Result.Type = argument_type::ATI;
-          }
-          break;
-        }
-
-        default: // 0x123
-        {
-          Result.Type = argument_type::CONSTANT;
-
-          unsigned int Value = 0;
-          if(Code[0] == '0')
-          {
-            switch(Code[1])
-            {
-              case 'X': sscanf(Code + 2, "%3X", &Value); break;
-              case 'B': MTB_NOT_IMPLEMENTED;
-              case 'D': sscanf(Code + 2, "%3d", &Value);; break;
-              default:  sscanf(Code + 1, "%3d", &Value);; break;
-            }
-          }
-          else
-          {
-            sscanf(Code, "%3d", &Value);
-          }
-
-          Result.Value = (u16)Value;
-        }
-        break;
-      }
-    }
-
-    return Result;
-  }
-
   static instruction
   AssembleInstruction(assembler_code Code)
   {
@@ -1292,7 +1464,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
       ++Current;
     char* NameOnePastLast = Current;
 
-    Result.Type = ParseInstructionType(NameOnePastLast - NameStart, NameStart);
+    Result.Type = MakeInstructionTypeFromString(NameOnePastLast - NameStart, NameStart);
 
     int CurrentArgumentPos = 0;
     while(true)
@@ -1306,7 +1478,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
       while(Current < OnePastLast && !mtb_IsWhitespace(*Current) && *Current != ',')
         ++Current;
       char* ArgumentOnePastLast = Current;
-      Result.Args[CurrentArgumentPos] = ParseArgument(ArgumentOnePastLast - ArgumentStart, ArgumentStart);
+      Result.Args[CurrentArgumentPos] = MakeArgumentFromString(ArgumentOnePastLast - ArgumentStart, ArgumentStart);
 
       if(Current == OnePastLast)
         break;
@@ -1329,33 +1501,8 @@ ExecuteInstruction(machine* M, instruction Instruction)
       char* BufferBegin = &Result.Data[0];
       char* BufferOnePastLast = BufferBegin + mtb_ArrayLengthOf(Result.Data);
 
-      char const* InstructionToString[] =
-      {
-        "INVALID", // instruction_type::INVALID
-        "CLS",     // instruction_type::CLS
-        "RET",     // instruction_type::RET
-        "SYS",     // instruction_type::SYS
-        "JP",      // instruction_type::JP
-        "CALL",    // instruction_type::CALL
-        "SE",      // instruction_type::SE
-        "SNE",     // instruction_type::SNE
-        "LD",      // instruction_type::LD
-        "ADD",     // instruction_type::ADD
-        "OR",      // instruction_type::OR
-        "AND",     // instruction_type::AND
-        "XOR",     // instruction_type::XOR
-        "SUB",     // instruction_type::SUB
-        "SHR",     // instruction_type::SHR
-        "SUBN",    // instruction_type::SUBN
-        "SHL",     // instruction_type::SHL
-        "RND",     // instruction_type::RND
-        "DRW",     // instruction_type::DRW
-        "SKP",     // instruction_type::SKP
-        "SKNP",    // instruction_type::SKNP
-      };
-
       MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-      BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", InstructionToString[(int)Instruction.Type]);
+      BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", GetInstructionTypeAsString(Instruction.Type));
 
       char const* Joiner = " ";
       for(argument& Arg : Instruction.Args)

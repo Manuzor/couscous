@@ -62,6 +62,11 @@ struct machine
   mtb_rng RNG;
 };
 
+
+//
+// Argument type stuff
+//
+
 enum struct argument_type
 {
   NONE,
@@ -79,11 +84,33 @@ enum struct argument_type
   CONSTANT,
 };
 
+static char const*
+GetArgumentTypeAsString(argument_type Value);
+
+static argument_type
+MakeArgumentTypeFromString(size_t CodeLen, char const* Code);
+
+
+//
+// argument
+//
+
 struct argument
 {
   argument_type Type;
   u16 Value; // Interpretation depends on Type.
 };
+
+static void
+GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer);
+
+static argument
+MakeArgumentFromString(size_t CodeLen, char const* Code);
+
+
+//
+// Instruction stuff
+//
 
 enum struct instruction_type
 {
@@ -110,6 +137,13 @@ enum struct instruction_type
   SKP,
   SKNP,
 };
+
+static char const*
+GetInstructionTypeAsString(instruction_type Value);
+
+static instruction_type
+MakeInstructionTypeFromString(size_t CodeLen, char const* Code);
+
 
 struct instruction
 {

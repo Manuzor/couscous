@@ -2,7 +2,7 @@
 #include "mtb.h"
 
 #if MTB_FLAG(INTERNAL)
-  // printf
+  // printf, snprintf
   #include <stdio.h>
 #endif
 
