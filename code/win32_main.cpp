@@ -7,7 +7,7 @@
 #endif
 
 
-#include "couscous.hpp"
+#include "couscous.h"
 #include "couscous.cpp"
 
 #include <Windows.h>

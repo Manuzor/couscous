@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define COUSCOUS_ASSEMBLER 1
-#include "couscous.hpp"
+#include "couscous.h"
 #include "couscous.cpp"
 
 
