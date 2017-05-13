@@ -101,7 +101,7 @@ struct argument
   u16 Value; // Interpretation depends on Type.
 };
 
-static void
+static size_t
 GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer);
 
 static argument
