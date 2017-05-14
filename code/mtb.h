@@ -546,14 +546,23 @@ constexpr mtb_f64 mtb_ToTB(mtb_u64 Size) { return (mtb_f64)Size / 1000 / 1000 / 
 //
 // ============================
 //
+constexpr mtb_u08 mtb_SetBit(mtb_u08 Bits, mtb_u08 Position)   { return Bits | (mtb_u08(1) << Position); }
+constexpr mtb_u16 mtb_SetBit(mtb_u16 Bits, mtb_u16 Position)   { return Bits | (mtb_u16(1) << Position); }
 constexpr mtb_u32 mtb_SetBit(mtb_u32 Bits, mtb_u32 Position)   { return Bits | (mtb_u32(1) << Position); }
-constexpr mtb_u32 mtb_UnsetBit(mtb_u32 Bits, mtb_u32 Position) { return Bits & ~(mtb_u32(1) << Position); }
-constexpr bool mtb_IsBitSet(mtb_u32 Bits, mtb_u32 Position) { return !!(Bits & (mtb_u32(1) << Position)); }
-
 constexpr mtb_u64 mtb_SetBit(mtb_u64 Bits, mtb_u64 Position)   { return Bits | (mtb_u64(1) << Position); }
+
+constexpr mtb_u08 mtb_UnsetBit(mtb_u08 Bits, mtb_u08 Position) { return Bits & ~(mtb_u08(1) << Position); }
+constexpr mtb_u16 mtb_UnsetBit(mtb_u16 Bits, mtb_u16 Position) { return Bits & ~(mtb_u16(1) << Position); }
+constexpr mtb_u32 mtb_UnsetBit(mtb_u32 Bits, mtb_u32 Position) { return Bits & ~(mtb_u32(1) << Position); }
 constexpr mtb_u64 mtb_UnsetBit(mtb_u64 Bits, mtb_u64 Position) { return Bits & ~(mtb_u64(1) << Position); }
+
+constexpr bool mtb_IsBitSet(mtb_u08 Bits, mtb_u08 Position) { return !!(Bits & (mtb_u08(1) << Position)); }
+constexpr bool mtb_IsBitSet(mtb_u16 Bits, mtb_u16 Position) { return !!(Bits & (mtb_u16(1) << Position)); }
+constexpr bool mtb_IsBitSet(mtb_u32 Bits, mtb_u32 Position) { return !!(Bits & (mtb_u32(1) << Position)); }
 constexpr bool mtb_IsBitSet(mtb_u64 Bits, mtb_u64 Position) { return !!(Bits & (mtb_u64(1) << Position)); }
 
+constexpr bool mtb_IsPowerOfTwo(mtb_u08 Value) { return Value < 1 ? false : (Value & (Value - 1)) == 0; }
+constexpr bool mtb_IsPowerOfTwo(mtb_u16 Value) { return Value < 1 ? false : (Value & (Value - 1)) == 0; }
 constexpr bool mtb_IsPowerOfTwo(mtb_u32 Value) { return Value < 1 ? false : (Value & (Value - 1)) == 0; }
 constexpr bool mtb_IsPowerOfTwo(mtb_u64 Value) { return Value < 1 ? false : (Value & (Value - 1)) == 0; }
 

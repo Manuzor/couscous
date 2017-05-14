@@ -25,6 +25,8 @@
 // .vcxproj files in Visual Studio.
 .PlatformToolset = 'v$VSVersionMajor$0'
 
+.MyVSDefaultPlatform = 'Win32'
+
 
 //
 // Define targets
@@ -103,7 +105,7 @@
       .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
 
       .CompilerOptions + ' /Zi'
-                       + ' /Fd"$MyBuildPath$/$MyOutputName$"'
+                       + ' /Fd"$MyIntermediatePath$/$MyOutputName$"' // PDB file path without extension.
                        + ' /MTd'
                        + ' /wd4189' // "local variable is initialized but not referenced"
                        + ' /DDEBUG'
@@ -123,7 +125,7 @@
       .MyProjectConfig =
       [
         .Config = '$MyBuildId$'
-        .Platform = 'Win32' // Unused
+        .Platform = .MyVSDefaultPlatform
         .Target = .MyTarget
       ]
       ^ProjectConfigs + .MyProjectConfig
@@ -157,7 +159,7 @@
       .MyProjectConfig =
       [
         .Config = '$MyBuildId$'
-        .Platform = 'Win32' // Unused
+        .Platform = .MyVSDefaultPlatform
         .Target = .MyTarget
       ]
       ^ProjectConfigs + .MyProjectConfig
@@ -181,7 +183,7 @@
 
         .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
         .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
-        .LocalDebuggerWorkingDirectory = '^$(OutDir)'
+        .LocalDebuggerWorkingDirectory = '$RepoRoot$'
       }
 
       ^SolutionProjects + .MyProjectName
@@ -267,7 +269,7 @@
       .LinkerOutput = '$LinkerOutputPath$/$MyOutputName$$MyOutputExtension$'
 
       .CompilerOptions + ' /Zi'
-                       + ' /Fd"$MyBuildPath$/$MyOutputName$"'
+                       + ' /Fd"$MyIntermediatePath$/$MyOutputName$"' // PDB file path without extension.
                        + ' /MTd'
                        + ' /wd4189' // "local variable is initialized but not referenced"
                        + ' /DDEBUG'
@@ -287,7 +289,7 @@
       .MyProjectConfig =
       [
         .Config = '$MyBuildId$'
-        .Platform = 'Win32' // Unused
+        .Platform = .MyVSDefaultPlatform
         .Target = .MyTarget
       ]
       ^ProjectConfigs + .MyProjectConfig
@@ -321,7 +323,7 @@
       .MyProjectConfig =
       [
         .Config = '$MyBuildId$'
-        .Platform = 'Win32' // Unused
+        .Platform = .MyVSDefaultPlatform
         .Target = .MyTarget
       ]
       ^ProjectConfigs + .MyProjectConfig
@@ -345,7 +347,7 @@
 
         .OutputDirectory       = '$MyBuildRoot$/$MyVsBuildId$'
         .IntermediateDirectory = '$MyBuildRoot$/$MyVsBuildId$/intermediate'
-        .LocalDebuggerWorkingDirectory = '^$(OutDir)'
+        .LocalDebuggerWorkingDirectory = '$RepoRoot$'
       }
 
       ^SolutionProjects + .MyProjectName
@@ -393,7 +395,7 @@
       {
         .MyProjectConfig =
         [
-          .Platform = 'Win32' // Unused
+          .Platform = .MyVSDefaultPlatform
           .Config = .MyConfig
         ]
         ^ProjectConfigs + .MyProjectConfig
@@ -413,8 +415,11 @@
 VSSolution( '$MySolutionName$' )
 {
   .SolutionOutput = '$MyVisualStudioRoot$/$MySolutionName$.sln'
+  .SolutionVisualStudioVersion = .VSVersion
   //TODO: .SolutionBuildProject = 'Application-Proj'
   // Note: Use .ExtraFiles to add a .natvis file, for example.
+
+  // Print( .SolutionConfigs )
 }
 
 Alias( 'vs' )

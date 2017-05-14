@@ -231,6 +231,18 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
   ReleaseDC(WindowHandle, DC);
 }
 
+struct win32_window
+{
+  HWND Handle;
+
+  // The entire inner area of the window.
+  int ClientWidth;
+  int ClientHeight;
+
+  win32_front_buffer FrontBuffer;
+  u16 InputState;
+};
+
 static void
 Win32ToggleFullscreenWindow(HWND WindowHandle)
 {
@@ -269,7 +281,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
 {
   LRESULT Result = 0;
 
-  win32_front_buffer* FrontBuffer = (win32_front_buffer*)GetWindowLongPtr(WindowHandle, GWLP_USERDATA);
+  win32_window* Window = (win32_window*)GetWindowLongPtr(WindowHandle, GWLP_USERDATA);
 
   if(Message == WM_CLOSE || Message == WM_DESTROY)
   {
@@ -287,6 +299,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
       bool KeyIsDown = !mtb_IsBitSet((u64)LParam, 31);
       bool KeyWasPressed = !KeyWasDown && KeyIsDown;
       // bool KeyWasReleased = KeyWasDown && !KeyIsDown;
+      bool IsInitialKeyAction = KeyWasDown != KeyIsDown;
 
       bool AltKeyModifier = false;
       if(Message == WM_SYSKEYDOWN || Message == WM_SYSKEYUP)
@@ -309,7 +322,41 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
           Win32ToggleFullscreenWindow(WindowHandle);
         }
 
-        // TODO: Process input.
+      }
+
+      if(IsInitialKeyAction)
+      {
+        char VKCodeAsChar = (char)VKCode;
+        char KeyChar = 0;
+        // Keyboard mapping / key bindings
+        switch(VKCodeAsChar)
+        {
+          case '1': KeyChar = '1'; break;
+          case '2': KeyChar = '2'; break;
+          case '3': KeyChar = '3'; break;
+          case '4': KeyChar = 'C'; break;
+          case 'Q': KeyChar = '4'; break;
+          case 'W': KeyChar = '5'; break;
+          case 'E': KeyChar = '6'; break;
+          case 'R': KeyChar = 'D'; break;
+          case 'A': KeyChar = '7'; break;
+          case 'S': KeyChar = '8'; break;
+          case 'D': KeyChar = '9'; break;
+          case 'F': KeyChar = 'E'; break;
+          case 'Z': KeyChar = 'A'; break;
+          case 'X': KeyChar = '0'; break;
+          case 'C': KeyChar = 'B'; break;
+          case 'V': KeyChar = 'F'; break;
+          default: break;
+        }
+
+        if(KeyChar > 0)
+        {
+          u16 KeyIndex = MapCharToKeyIndex(KeyChar);
+          u16 OldState = Window->InputState;
+          u16 NewState = SetKeyDown(OldState, KeyIndex, KeyIsDown);
+          Window->InputState = NewState;
+        }
       }
     }
   }
@@ -329,7 +376,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
     if(MustBeginAndEndPaint)
       BeginPaint(WindowHandle, &Paint);
 
-    Win32Present(WindowHandle, FrontBuffer);
+    Win32Present(WindowHandle, &Window->FrontBuffer);
 
     if(MustBeginAndEndPaint)
       EndPaint(WindowHandle, &Paint);
@@ -343,7 +390,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
 }
 
 static void
-Win32MessagePump(struct win32_window* Window)
+Win32MessagePump(win32_window* Window)
 {
   MSG Message;
   while(PeekMessageA(&Message, 0, 0, 0, PM_REMOVE))
@@ -362,15 +409,6 @@ Win32MessagePump(struct win32_window* Window)
     }
   }
 }
-
-struct win32_window
-{
-  HWND Handle;
-
-  // The entire inner area of the window.
-  int ClientWidth;
-  int ClientHeight;
-};
 
 static win32_window
 Win32CreateWindow(HINSTANCE ProcessHandle,
@@ -558,28 +596,28 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     if(Window.Handle)
     {
       //
-      // Create front buffer.
+      // Initialize the front buffer.
       //
-      win32_front_buffer Win32FrontBuffer{};
-      Win32FrontBuffer.BytesPerPixel = 3;
-      Win32FrontBuffer.Width = SCREEN_WIDTH;
-      Win32FrontBuffer.Height = SCREEN_HEIGHT;
-      Win32FrontBuffer.Pitch = Win32FrontBuffer.Width * Win32FrontBuffer.BytesPerPixel;
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biSize = sizeof(Win32FrontBuffer.BitmapInfo.bmiHeader);
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biWidth = (LONG)Win32FrontBuffer.Width;
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biHeight = -(LONG)Win32FrontBuffer.Height; // Note: This is negative so pixels go downwards.
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biPlanes = 1;
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biBitCount = (WORD)(Win32FrontBuffer.BytesPerPixel * 8);
-      Win32FrontBuffer.BitmapInfo.bmiHeader.biCompression = BI_RGB;
-      Win32FrontBuffer.Pixels = (decltype(Win32FrontBuffer.Pixels))PushBytes(&MemStack, Win32FrontBuffer.Width * Win32FrontBuffer.Height * Win32FrontBuffer.BytesPerPixel);
-      Win32FrontBuffer.PixelColorOff = { 16, 64, 16 };
-      Win32FrontBuffer.PixelColorOn = { 8, 16, 8 };
+      win32_front_buffer* FrontBuffer = &Window.FrontBuffer;
+      FrontBuffer->BytesPerPixel = 3;
+      FrontBuffer->Width = SCREEN_WIDTH;
+      FrontBuffer->Height = SCREEN_HEIGHT;
+      FrontBuffer->Pitch = FrontBuffer->Width * FrontBuffer->BytesPerPixel;
+      FrontBuffer->BitmapInfo.bmiHeader.biSize = sizeof(FrontBuffer->BitmapInfo.bmiHeader);
+      FrontBuffer->BitmapInfo.bmiHeader.biWidth = (LONG)FrontBuffer->Width;
+      FrontBuffer->BitmapInfo.bmiHeader.biHeight = -(LONG)FrontBuffer->Height; // Note: This is negative so pixels go downwards.
+      FrontBuffer->BitmapInfo.bmiHeader.biPlanes = 1;
+      FrontBuffer->BitmapInfo.bmiHeader.biBitCount = (WORD)(FrontBuffer->BytesPerPixel * 8);
+      FrontBuffer->BitmapInfo.bmiHeader.biCompression = BI_RGB;
+      FrontBuffer->Pixels = (decltype(FrontBuffer->Pixels))PushBytes(&MemStack, FrontBuffer->Width * FrontBuffer->Height * FrontBuffer->BytesPerPixel);
+      FrontBuffer->PixelColorOff = { 16, 64, 16 };
+      FrontBuffer->PixelColorOn = { 8, 16, 8 };
 
       // Init swap to ensure properly cleared buffers.
-      Win32SwapBuffers(M->Screen, &Win32FrontBuffer);
+      Win32SwapBuffers(M->Screen, FrontBuffer);
 
       // Associate the back buffer with the window for presenting.
-      SetWindowLongPtr(Window.Handle, GWLP_USERDATA, (LONG_PTR)&Win32FrontBuffer);
+      SetWindowLongPtr(Window.Handle, GWLP_USERDATA, (LONG_PTR)&Window);
 
       //
       // Initialize the machine
@@ -615,14 +653,17 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         }
         LastTickTime = CurrentTime;
 
+        // Apply new input state.
+        M->InputState = Window.InputState;
+
         tick_result TickResult = Tick(M);
         if(!TickResult.Continue)
         {
           break;
         }
 
-        Win32SwapBuffers(M->Screen, &Win32FrontBuffer);
-        Win32Present(Window.Handle, &Win32FrontBuffer);
+        Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
+        Win32Present(Window.Handle, &Window.FrontBuffer);
       }
 
       // PostQuitMessage(0);

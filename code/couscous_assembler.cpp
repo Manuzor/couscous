@@ -11,7 +11,7 @@
 static void
 PrintHelp(FILE* OutFile)
 {
-  fprintf(OutFile, "Usage: couscous_assembler [-help] [-assemble|-disassemble] <in_file> <out_file>\n");
+  fprintf(OutFile, "Usage: couscous_assembler [-help] (-assemble|-disassemble) <in_file> [<out_file>]\n");
 }
 
 enum struct commandline_mode

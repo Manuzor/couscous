@@ -54,7 +54,7 @@ struct machine
 
   u16 ProgramCounter;
 
-  bool Input[16];
+  u16 InputState;
 
   bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
 
@@ -218,6 +218,29 @@ EncodeInstruction(instruction Instruction);
 
 static void
 ExecuteInstruction(machine* M, instruction Instruction);
+
+static u16
+MapCharToKeyIndex(char Key);
+
+static char
+MapKeyIndexToChar(u16 KeyIndex);
+
+static bool
+IsKeyDown(u16 InputState, u16 KeyIndex);
+
+static u16
+SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown);
+
+// Assumed keyboard layout:
+//   1 2 3 C
+//   4 5 6 D
+//   7 8 9 E
+//   A 0 B F
+//
+// Usage: IsKeyDown(M, 'A');
+static bool32
+IsKeyDown(machine* M, char Key);
+
 
 #if COUSCOUS_ASSEMBLER
   struct assembler_code

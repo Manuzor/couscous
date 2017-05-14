@@ -1389,18 +1389,98 @@ ExecuteInstruction(machine* M, instruction Instruction)
     }
     case instruction_type::SKP:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          u8 KeyIndex = (u8)Instruction.Args[0].Value;
+          if(IsKeyDown(M->InputState, KeyIndex))
+          {
+            M->ProgramCounter += 2;
+          }
+        } break;
+      }
       break;
     }
     case instruction_type::SKNP:
     {
-      MTB_NOT_IMPLEMENTED;
+      switch(Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          u8 KeyIndex = (u8)Instruction.Args[0].Value;
+          if(!IsKeyDown(M->InputState, KeyIndex))
+          {
+            M->ProgramCounter += 2;
+          }
+        } break;
+      }
       break;
     }
     default: break;
   }
 
   MTB_INTERNAL_CODE( printf("Invalid instruction to execute.\n") );
+}
+
+u16
+MapCharToKeyIndex(char Key)
+{
+  u16 Result = (u16)-1;
+
+  switch(Key)
+  {
+    case '0': Result =  0; break;
+    case '1': Result =  1; break;
+    case '2': Result =  2; break;
+    case '3': Result =  3; break;
+    case '4': Result =  4; break;
+    case '5': Result =  5; break;
+    case '6': Result =  6; break;
+    case '7': Result =  7; break;
+    case '8': Result =  8; break;
+    case '9': Result =  9; break;
+    case 'A': Result = 10; break;
+    case 'B': Result = 11; break;
+    case 'C': Result = 12; break;
+    case 'D': Result = 13; break;
+    case 'E': Result = 14; break;
+    case 'F': Result = 15; break;
+    default: break;
+  }
+
+  return Result;
+}
+
+char
+MapKeyIndexToChar(u16 KeyIndex)
+{
+  char Result = 0;
+  if(KeyIndex < 16)
+  {
+    char const* Map = "0123456789ABCDEF";
+    Result = Map[KeyIndex];
+  }
+  return Result;
+}
+
+bool
+IsKeyDown(u16 InputState, u16 KeyIndex)
+{
+  bool Result = mtb_IsBitSet(InputState, KeyIndex);
+
+  return Result;
+}
+
+u16
+SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
+{
+  u16 Result;
+  // TODO: Check this code.
+  if(IsDown) Result = mtb_SetBit(InputState, KeyIndex);
+  else       Result = mtb_UnsetBit(InputState, KeyIndex);
+
+  return Result;
 }
 
 #if COUSCOUS_ASSEMBLER
