@@ -410,23 +410,6 @@ MakeInstructionTypeFromString(size_t CodeLen, char const* Code)
   #undef MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE
 }
 
-void
-InitMachine(machine* M)
-{
-  // TODO: Ensure charmap size is ok.
-  u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
-  mtb_CopyBytes(mtb_ArrayByteSizeOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
-
-  M->ProgramCounter = (u16)((u8*)M->ProgramMemory - (u8*)M->InterpreterMemory);
-  MTB_AssertDebug(M->ProgramCounter == 0x200);
-}
-
-void
-ClearScreen(machine* M)
-{
-  mtb_SetBytes(mtb_ArrayByteSizeOf(M->Screen), M->Screen, 0);
-}
-
 u16
 GetDigitSpriteAddress(machine* M, u8 Digit)
 {
@@ -462,20 +445,6 @@ DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
   }
 
   M->V[0xF] = !!HasCollision;
-}
-
-bool
-LoadRom(machine* M,  size_t RomSize, u8* RomPtr)
-{
-  bool Result = false;
-
-  if(RomSize <= mtb_ArrayLengthOf(M->ProgramMemory))
-  {
-    mtb_CopyBytes(RomSize, M->ProgramMemory, RomPtr);
-    Result = true;
-  }
-
-  return Result;
 }
 
 u8
@@ -950,7 +919,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
   {
     case instruction_type::CLS:
     {
-      ClearScreen(M);
+      mtb_SetBytes(mtb_ArrayByteSizeOf(M->Screen), M->Screen, 0);
       return;
     }
     case instruction_type::RET:
@@ -1371,21 +1340,21 @@ ExecuteInstruction(machine* M, instruction Instruction)
     {
       switch (Instruction.Args[0].Type)
       {
-      case argument_type::V:
-      {
-        switch (Instruction.Args[1].Type)
+        case argument_type::V:
         {
-        case argument_type::CONSTANT:
-        {
-          u8* Reg = M->V + Instruction.Args[0].Value;
-          u8 Byte = (u8)Instruction.Args[1].Value;
-          u8 Rand = (u8)mtb_RandomBetween_u32(&M->RNG, 0, 255);
-          *Reg = Byte & Rand;
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::CONSTANT:
+            {
+              u8* Reg = M->V + Instruction.Args[0].Value;
+              u8 Byte = (u8)Instruction.Args[1].Value;
+              u8 Rand = (u8)mtb_RandomBetween_u32(&M->RNG, 0, 255);
+              *Reg = Byte & Rand;
+              break;
+            }
+          }
           break;
         }
-        }
-        break;
-      }
       }
       break;
     }

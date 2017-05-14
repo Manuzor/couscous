@@ -15,7 +15,6 @@ using f64 = mtb_f64;
 using uint = unsigned int;
 using bool32 = int;
 
-
 enum
 {
   CHAR_MEMORY_OFFSET = 0,
@@ -178,13 +177,6 @@ union instruction_decoder
 
 static_assert(sizeof(instruction_decoder) == sizeof(u16), "Invalid size for `instruction`.");
 
-// TODO: Should the machine load the rom?
-static void
-InitMachine(machine* M);
-
-static void
-ClearScreen(machine* M);
-
 static u16
 GetDigitSpriteAddress(machine* M, u8 Digit);
 
@@ -194,9 +186,7 @@ GetCharacterSprite(machine* M, char Character);
 static void
 DrawSprite(machine* M, int X, int Y, sprite Sprite);
 
-static bool
-LoadRom(machine* M, size_t RomSize, u8* RomPtr);
-
+// TODO(Manuzor): Stuff like this could be put to the platform layer.
 static u8
 ReadByte(void* Ptr);
 
@@ -214,7 +204,6 @@ struct tick_result
   bool Continue;
 };
 
-// Return value of `true` means continue ticking.
 static tick_result
 Tick(machine* M);
 

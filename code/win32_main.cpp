@@ -2,10 +2,9 @@
 #include "mtb.h"
 
 #if MTB_FLAG(INTERNAL)
-  // printf, snprintf
+  // printf, snprintf, freopen
   #include <stdio.h>
 #endif
-
 
 #include "couscous.h"
 #include "couscous.cpp"
@@ -58,8 +57,9 @@ PushBytes(mem_stack* Memory, size_t NumBytes)
   return Ptr;
 }
 
-#define PushStruct(Memory, Struct) (Struct*)PushBytes((Memory), mtb_SafeSizeOf<Struct>())
-#define PushArray(Memory, Length, Struct) (Struct*)PushBytes((Memory), (Length) * mtb_SafeSizeOf<Struct>())
+#define PushStruct(Memory, Struct) ((Struct*)PushBytes((Memory), sizeof(Struct)))
+#define PushArray(Memory, Length, Struct) ((Struct*)PushBytes((Memory), (Length) * sizeof(Struct)))
+
 
 struct win32_loaded_rom
 {
@@ -121,6 +121,20 @@ Win32LoadRomFromFile(char const* FileName, size_t RomBufferLen, u8* RomBufferPtr
   else
   {
     // NOTE: Failed to open file.
+  }
+
+  return Result;
+}
+
+bool
+LoadRom(machine* M,  size_t RomSize, u8* RomPtr)
+{
+  bool Result = false;
+
+  if(RomSize <= mtb_ArrayLengthOf(M->ProgramMemory))
+  {
+    mtb_CopyBytes(RomSize, M->ProgramMemory, RomPtr);
+    Result = true;
   }
 
   return Result;
@@ -322,7 +336,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
   }
   else
   {
-    Result = DefWindowProcA(WindowHandle, Message, WParam, LParam);
+    Result = DefWindowProc(WindowHandle, Message, WParam, LParam);
   }
 
   return(Result);
@@ -490,25 +504,25 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
   char const* FileName = CommandLine;
 
-  mem_stack UtilStack{};
-  UtilStack.Length = (size_t)mtb_MiB(1);
+  mem_stack MemStack{};
+  MemStack.Length = (size_t)mtb_MiB(1);
 
   LPVOID BaseAddress = nullptr;
   MTB_INTERNAL_CODE( BaseAddress = (LPVOID)(size_t)0x2'000'000 );
-  UtilStack.Ptr = (u8*)VirtualAlloc(BaseAddress, UtilStack.Length,
+  MemStack.Ptr = (u8*)VirtualAlloc(BaseAddress, MemStack.Length,
                                     MEM_RESERVE | MEM_COMMIT,
                                     PAGE_READWRITE);
 
-  machine* M = (machine*)PushStruct(&UtilStack, machine);
+  machine* M = (machine*)PushStruct(&MemStack, machine);
   mtb_SetBytes(sizeof(machine), M, 0);
-#if defined(COUSCOUS_RANDOM_SEED)
-  M->RNG = mtb_RandomSeed(COUSCOUS_RANDOM_SEED);
-#elif MTB_FLAG(DEBUG)
-  M->RNG = mtb_RandomSeed(0);
-#else
-  // TODO(Manuzor): Find a way to properly initialize the RNG.
-  #error Random number generator is not initialized and has no seed!
-#endif
+  #if defined(COUSCOUS_RANDOM_SEED)
+    M->RNG = mtb_RandomSeed(COUSCOUS_RANDOM_SEED);
+  #elif MTB_FLAG(DEBUG)
+    M->RNG = mtb_RandomSeed(0);
+  #else
+    // TODO(Manuzor): Find a way to properly initialize the RNG.
+    #error Random number generator is not initialized and has no seed!
+  #endif
 
   bool RomLoaded = false;
   {
@@ -557,18 +571,26 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       Win32FrontBuffer.BitmapInfo.bmiHeader.biPlanes = 1;
       Win32FrontBuffer.BitmapInfo.bmiHeader.biBitCount = (WORD)(Win32FrontBuffer.BytesPerPixel * 8);
       Win32FrontBuffer.BitmapInfo.bmiHeader.biCompression = BI_RGB;
-      Win32FrontBuffer.Pixels = (decltype(Win32FrontBuffer.Pixels))PushBytes(&UtilStack, Win32FrontBuffer.Width * Win32FrontBuffer.Height * Win32FrontBuffer.BytesPerPixel);
+      Win32FrontBuffer.Pixels = (decltype(Win32FrontBuffer.Pixels))PushBytes(&MemStack, Win32FrontBuffer.Width * Win32FrontBuffer.Height * Win32FrontBuffer.BytesPerPixel);
       Win32FrontBuffer.PixelColorOff = { 16, 64, 16 };
       Win32FrontBuffer.PixelColorOn = { 8, 16, 8 };
 
-      // Init clear and swap to ensure properly cleared buffers.
-      ClearScreen(M);
+      // Init swap to ensure properly cleared buffers.
       Win32SwapBuffers(M->Screen, &Win32FrontBuffer);
 
       // Associate the back buffer with the window for presenting.
       SetWindowLongPtr(Window.Handle, GWLP_USERDATA, (LONG_PTR)&Win32FrontBuffer);
 
-      InitMachine(M);
+      //
+      // Initialize the machine
+      //
+      // TODO: Ensure charmap size is ok.
+      u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
+      mtb_CopyBytes(mtb_ArrayByteSizeOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
+
+      M->ProgramCounter = (u16)((u8*)M->ProgramMemory - (u8*)M->InterpreterMemory);
+      MTB_AssertDebug(M->ProgramCounter == 0x200);
+
 
       //
       // Clock setup.
