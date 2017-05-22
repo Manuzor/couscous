@@ -55,6 +55,7 @@ struct machine
   u16 ProgramCounter;
 
   u16 InputState;
+  u8* RequiredInput;
 
   bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
 

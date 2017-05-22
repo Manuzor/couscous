@@ -653,17 +653,39 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         }
         LastTickTime = CurrentTime;
 
-        // Apply new input state.
-        M->InputState = Window.InputState;
+        // Apply input.
+        u16 OldInputState = M->InputState;
+        u16 NewInputState = Window.InputState;
+        M->InputState = NewInputState;
 
-        tick_result TickResult = Tick(M);
-        if(!TickResult.Continue)
+        // See if input is required in order to continue execution.
+        bool CanTick = true;
+        if(M->RequiredInput)
         {
-          break;
+          CanTick = false;
+          for(u16 KeyIndex = 0; KeyIndex < 16; ++KeyIndex)
+          {
+            if(!mtb_IsBitSet(OldInputState, KeyIndex) && mtb_IsBitSet(NewInputState, KeyIndex))
+            {
+              MTB_AssertDebug((u16)(u8)KeyIndex == KeyIndex);
+              *M->RequiredInput = (u8)KeyIndex;
+              M->RequiredInput = nullptr;
+              CanTick = true;
+            }
+          }
         }
 
-        Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
-        Win32Present(Window.Handle, &Window.FrontBuffer);
+        if(CanTick)
+        {
+          tick_result TickResult = Tick(M);
+          if(!TickResult.Continue)
+          {
+            break;
+          }
+
+          Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
+          Win32Present(Window.Handle, &Window.FrontBuffer);
+        }
       }
 
       // PostQuitMessage(0);

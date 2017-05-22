@@ -1025,22 +1025,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
           {
             case argument_type::V:
             {
-              int Num = (int)Instruction.Args[1].Value;
-              for (int Index = 0; Index < Num; ++Index, ++M->I)
-              {
-                u8* Reg = M->V + Index;
-                *Reg = ReadByte(M->Memory + M->I);
-              }
-
-              while(Num > 0)
-              {
-                // u8* Reg = M->V + ReadByte(M, M->I);
-                ++M->I;
-                --Num;
-              }
+              u16 Range = Instruction.Args[1].Value;
               u8* Dest = M->Memory + M->I;
-              u8* Source = M->V;
-              mtb_CopyBytes(Num, Dest, Source);
+              u8* Source = M->V + 0;
+              mtb_CopyBytes(Range, Dest, Source);
               return;
             }
           }
@@ -1053,13 +1041,13 @@ ExecuteInstruction(machine* M, instruction Instruction)
             case argument_type::V:
             {
               u8* Reg = M->V + Instruction.Args[1].Value;
-              u8* DDD = M->Memory + (M->I + 0);
-              u8* DD  = M->Memory + (M->I + 1);
-              u8* D   = M->Memory + (M->I + 2);
+              u8* HundredsDigit = M->Memory + (M->I + 0);
+              u8* TensDigit = M->Memory + (M->I + 1);
+              u8* SingleDigit = M->Memory + (M->I + 2);
 
-              *DDD = *Reg / 100; // % 10;
-              *DD  = *Reg /  10 % 10;
-              *D   = *Reg /   1 % 10;
+              *HundredsDigit = (*Reg / 100);
+              *TensDigit = (*Reg / 10) % 10;
+              *SingleDigit = *Reg % 10;
               return;
             }
           }
@@ -1123,7 +1111,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
             case argument_type::ATI:
             {
               u8 Num = (u8)Instruction.Args[0].Value;
-              u8* Dest = M->V;
+              u8* Dest = M->V + 0;
               u8* Source = M->Memory + M->I;
               mtb_CopyBytes(Num, Dest, Source);
               return;
@@ -1142,9 +1130,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
             }
             case argument_type::K:
             {
-              // u8* Reg = M->V + Instruction.Args[0].Value;
-              // TODO: All execution stops until a key is pressed, then the
-              // value of that key is stored in Vx.
+              // Note(Manuzor): All execution stops until a key is pressed, then the
+              // value of that key is stored in Reg.
+              u8* Reg = M->V + Instruction.Args[0].Value;
+              M->RequiredInput = Reg;
               return;
             }
             case argument_type::V:
