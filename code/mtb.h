@@ -834,24 +834,64 @@ mtb_Convert(SourceT const& ToConvert, ExtraTypes&&... Extra)
   return Impl::Do(ToConvert, mtb_Forward<ExtraTypes>(Extra)...);
 }
 
-#define MTB__SAFE_CONVERT_BODY(TYPE) if(Value >= MTB_MinValue_##TYPE && Value <= MTB_MaxValue_##TYPE) \
-  MTB_Require(Value >= MTB_MinValue_##TYPE && Value <= MTB_MaxValue_##TYPE, "Value out of range."); \
-  mtb_##TYPE Result = (mtb_##TYPE)Value; \
+
+// Integer conversion table.
+// An 'x' marks whether a conversion is necessary.
+//
+//    |s08| s16|s32|s64|u08|u16|u32|u64
+// ---|---|----|---|---|---|---|---|---
+// s08|   |    |   |   | x | x | x | x
+// s16| x |    |   |   | x | x | x | x
+// s32| x |  x |   |   | x | x | x | x
+// s64| x |  x | x |   | x | x | x | x
+// u08| x |    |   |   |   |   |   |
+// u16| x |  x |   |   | x |   |   |
+// u32| x |  x | x |   | x | x |   |
+// u64| x |  x | x | x | x | x | x |
+
+#define MTB__SAFE_CONVERT_BODY(RESULT_TYPE) if(Value >= MTB_MinValue_##RESULT_TYPE && Value <= MTB_MaxValue_##RESULT_TYPE) \
+  MTB_Require(Value >= MTB_MinValue_##RESULT_TYPE && Value <= MTB_MaxValue_##RESULT_TYPE, "Value out of range."); \
+  mtb_##RESULT_TYPE Result = (mtb_##RESULT_TYPE)Value; \
   return Result;
 
 MTB_INLINE mtb_s08 mtb_SafeConvert_s08(mtb_s16 Value) { MTB__SAFE_CONVERT_BODY(s08); }
 MTB_INLINE mtb_s08 mtb_SafeConvert_s08(mtb_s32 Value) { MTB__SAFE_CONVERT_BODY(s08); }
 MTB_INLINE mtb_s08 mtb_SafeConvert_s08(mtb_s64 Value) { MTB__SAFE_CONVERT_BODY(s08); }
+MTB_INLINE mtb_s08 mtb_SafeConvert_s08(mtb_u08 Value) { MTB__SAFE_CONVERT_BODY(s08); }
+MTB_INLINE mtb_s08 mtb_SafeConvert_s08(mtb_u16 Value) { MTB__SAFE_CONVERT_BODY(s08); }
+MTB_INLINE mtb_s08 mtb_SafeConvert_s08(mtb_u32 Value) { MTB__SAFE_CONVERT_BODY(s08); }
+MTB_INLINE mtb_s08 mtb_SafeConvert_s08(mtb_u64 Value) { MTB__SAFE_CONVERT_BODY(s08); }
 MTB_INLINE mtb_s16 mtb_SafeConvert_s16(mtb_s32 Value) { MTB__SAFE_CONVERT_BODY(s16); }
 MTB_INLINE mtb_s16 mtb_SafeConvert_s16(mtb_s64 Value) { MTB__SAFE_CONVERT_BODY(s16); }
+MTB_INLINE mtb_s16 mtb_SafeConvert_s16(mtb_u16 Value) { MTB__SAFE_CONVERT_BODY(s16); }
+MTB_INLINE mtb_s16 mtb_SafeConvert_s16(mtb_u32 Value) { MTB__SAFE_CONVERT_BODY(s16); }
+MTB_INLINE mtb_s16 mtb_SafeConvert_s16(mtb_u64 Value) { MTB__SAFE_CONVERT_BODY(s16); }
 MTB_INLINE mtb_s32 mtb_SafeConvert_s32(mtb_s64 Value) { MTB__SAFE_CONVERT_BODY(s32); }
-
+MTB_INLINE mtb_s32 mtb_SafeConvert_s32(mtb_u32 Value) { MTB__SAFE_CONVERT_BODY(s32); }
+MTB_INLINE mtb_s32 mtb_SafeConvert_s32(mtb_u64 Value) { MTB__SAFE_CONVERT_BODY(s32); }
+MTB_INLINE mtb_s64 mtb_SafeConvert_s64(mtb_u64 Value) { MTB__SAFE_CONVERT_BODY(s64); }
+MTB_INLINE mtb_u08 mtb_SafeConvert_u08(mtb_s08 Value) { MTB__SAFE_CONVERT_BODY(u08); }
+MTB_INLINE mtb_u08 mtb_SafeConvert_u08(mtb_s16 Value) { MTB__SAFE_CONVERT_BODY(u08); }
+MTB_INLINE mtb_u08 mtb_SafeConvert_u08(mtb_s32 Value) { MTB__SAFE_CONVERT_BODY(u08); }
+MTB_INLINE mtb_u08 mtb_SafeConvert_u08(mtb_s64 Value) { MTB__SAFE_CONVERT_BODY(u08); }
 MTB_INLINE mtb_u08 mtb_SafeConvert_u08(mtb_u16 Value) { MTB__SAFE_CONVERT_BODY(u08); }
 MTB_INLINE mtb_u08 mtb_SafeConvert_u08(mtb_u32 Value) { MTB__SAFE_CONVERT_BODY(u08); }
 MTB_INLINE mtb_u08 mtb_SafeConvert_u08(mtb_u64 Value) { MTB__SAFE_CONVERT_BODY(u08); }
+MTB_INLINE mtb_u16 mtb_SafeConvert_u16(mtb_s08 Value) { MTB__SAFE_CONVERT_BODY(u16); }
+MTB_INLINE mtb_u16 mtb_SafeConvert_u16(mtb_s16 Value) { MTB__SAFE_CONVERT_BODY(u16); }
+MTB_INLINE mtb_u16 mtb_SafeConvert_u16(mtb_s32 Value) { MTB__SAFE_CONVERT_BODY(u16); }
+MTB_INLINE mtb_u16 mtb_SafeConvert_u16(mtb_s64 Value) { MTB__SAFE_CONVERT_BODY(u16); }
 MTB_INLINE mtb_u16 mtb_SafeConvert_u16(mtb_u32 Value) { MTB__SAFE_CONVERT_BODY(u16); }
 MTB_INLINE mtb_u16 mtb_SafeConvert_u16(mtb_u64 Value) { MTB__SAFE_CONVERT_BODY(u16); }
+MTB_INLINE mtb_u32 mtb_SafeConvert_u32(mtb_s08 Value) { MTB__SAFE_CONVERT_BODY(u32); }
+MTB_INLINE mtb_u32 mtb_SafeConvert_u32(mtb_s16 Value) { MTB__SAFE_CONVERT_BODY(u32); }
+MTB_INLINE mtb_u32 mtb_SafeConvert_u32(mtb_s32 Value) { MTB__SAFE_CONVERT_BODY(u32); }
+MTB_INLINE mtb_u32 mtb_SafeConvert_u32(mtb_s64 Value) { MTB__SAFE_CONVERT_BODY(u32); }
 MTB_INLINE mtb_u32 mtb_SafeConvert_u32(mtb_u64 Value) { MTB__SAFE_CONVERT_BODY(u32); }
+MTB_INLINE mtb_u64 mtb_SafeConvert_u64(mtb_s08 Value) { MTB__SAFE_CONVERT_BODY(u64); }
+MTB_INLINE mtb_u64 mtb_SafeConvert_u64(mtb_s16 Value) { MTB__SAFE_CONVERT_BODY(u64); }
+MTB_INLINE mtb_u64 mtb_SafeConvert_u64(mtb_s32 Value) { MTB__SAFE_CONVERT_BODY(u64); }
+MTB_INLINE mtb_u64 mtb_SafeConvert_u64(mtb_s64 Value) { MTB__SAFE_CONVERT_BODY(u64); }
 
 
 constexpr mtb_s08 mtb_Sign(mtb_s08 Value) { return (mtb_s08)(Value > 0 ? 1 : Value < 0 ? -1 : 0); }
