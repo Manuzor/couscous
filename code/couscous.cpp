@@ -1132,8 +1132,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
             {
               // Note(Manuzor): All execution stops until a key is pressed, then the
               // value of that key is stored in Reg.
-              u8* Reg = M->V + Instruction.Args[0].Value;
-              M->RequiredInput = Reg;
+              M->RequiredInputRegisterIndexPlusOne = mtb_SafeConvert_u08(Instruction.Args[0].Value + 1);
               return;
             }
             case argument_type::V:

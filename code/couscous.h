@@ -55,7 +55,7 @@ struct machine
   u16 ProgramCounter;
 
   u16 InputState;
-  u8* RequiredInput;
+  u8 RequiredInputRegisterIndexPlusOne; // "PlusOne" so it can be 0 by default.
 
   bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
 

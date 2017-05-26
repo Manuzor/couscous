@@ -660,16 +660,17 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
         // See if input is required in order to continue execution.
         bool CanTick = true;
-        if(M->RequiredInput)
+        if(M->RequiredInputRegisterIndexPlusOne)
         {
           CanTick = false;
           for(u16 KeyIndex = 0; KeyIndex < 16; ++KeyIndex)
           {
             if(!mtb_IsBitSet(OldInputState, KeyIndex) && mtb_IsBitSet(NewInputState, KeyIndex))
             {
+              u8* Reg = M->V + (M->RequiredInputRegisterIndexPlusOne - 1);
               MTB_AssertDebug((u16)(u8)KeyIndex == KeyIndex);
-              *M->RequiredInput = (u8)KeyIndex;
-              M->RequiredInput = nullptr;
+              *Reg = (u8)KeyIndex;
+              M->RequiredInputRegisterIndexPlusOne = 0;
               CanTick = true;
             }
           }
