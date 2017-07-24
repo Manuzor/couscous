@@ -920,18 +920,18 @@ ExecuteInstruction(machine* M, instruction Instruction)
     case instruction_type::CLS:
     {
       mtb_SetBytes(mtb_ArrayByteSizeOf(M->Screen), M->Screen, 0);
-      return;
-    }
+    } return;
+
     case instruction_type::RET:
     {
       M->ProgramCounter = M->Stack[--M->StackPointer];
-      return;
-    }
+    } return;
+
     case instruction_type::SYS:
     {
       MTB_NOT_IMPLEMENTED;
-      return;
-    }
+    } return;
+
     case instruction_type::JP:
     {
       switch(Instruction.Args[0].Type)
@@ -940,16 +940,15 @@ ExecuteInstruction(machine* M, instruction Instruction)
         {
           u8* Reg = M->V + Instruction.Args[0].Value;
           M->ProgramCounter = Instruction.Args[1].Value + *Reg;
-          return;
-        }
+        } return;
+
         case argument_type::CONSTANT:
         {
           M->ProgramCounter = Instruction.Args[0].Value;
-          return;
-        }
+        } return;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::CALL:
     {
       switch(Instruction.Args[0].Type)
@@ -958,11 +957,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
         {
           M->Stack[M->StackPointer++] = M->ProgramCounter;
           M->ProgramCounter = Instruction.Args[0].Value;
-          return;
-        }
+        } return;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SE:
     {
       switch(Instruction.Args[0].Type)
@@ -977,21 +975,19 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8 Rhs = M->V[Instruction.Args[1].Value];
               if(Lhs == Rhs)
                 M->ProgramCounter += 2;
-              return;
-            }
+            } return;
 
             case argument_type::CONSTANT:
             {
               u8 Rhs = (u8)Instruction.Args[1].Value;
               if(Lhs == Rhs)
                 M->ProgramCounter += 2;
-              return;
-            }
+            } return;
           }
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SNE:
     {
       switch(Instruction.Args[0].Type)
@@ -1002,19 +998,18 @@ ExecuteInstruction(machine* M, instruction Instruction)
           u8 Rhs = M->V[Instruction.Args[1].Value];
           if(Lhs != Rhs)
             M->ProgramCounter += 2;
-          return;
-        }
+        } return;
+
         case argument_type::CONSTANT:
         {
           u8 Lhs = M->V[Instruction.Args[0].Value];
           u8 Rhs = (u8)Instruction.Args[1].Value;
           if(Lhs != Rhs)
             M->ProgramCounter += 2;
-          return;
-        }
+        } return;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::LD:
     {
       switch(Instruction.Args[0].Type)
@@ -1029,11 +1024,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8* Dest = M->Memory + M->I;
               u8* Source = M->V + 0;
               mtb_CopyBytes(Range, Dest, Source);
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
+
         case argument_type::B:
         {
           switch(Instruction.Args[1].Type)
@@ -1048,11 +1042,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
               *HundredsDigit = (*Reg / 100);
               *TensDigit = (*Reg / 10) % 10;
               *SingleDigit = *Reg % 10;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
+
         case argument_type::DT:
         {
           switch(Instruction.Args[1].Type)
@@ -1061,11 +1054,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
             {
               u8* Reg = M->V + Instruction.Args[1].Value;
               M->DT = *Reg;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
+
         case argument_type::F:
         {
           switch(Instruction.Args[1].Type)
@@ -1074,11 +1066,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
             {
               u8* Reg = M->V + Instruction.Args[1].Value;
               M->I = GetDigitSpriteAddress(M, *Reg);
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
+
         case argument_type::I:
         {
           switch(Instruction.Args[1].Type)
@@ -1086,11 +1077,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
             case argument_type::CONSTANT:
             {
               M->I = Instruction.Args[1].Value;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
+
         case argument_type::ST:
         {
           switch(Instruction.Args[1].Type)
@@ -1099,11 +1089,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
             {
               u8* Reg = M->V + Instruction.Args[1].Value;
               M->ST = *Reg;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
+
         case argument_type::V:
         {
           switch(Instruction.Args[1].Type)
@@ -1114,40 +1103,38 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8* Dest = M->V + 0;
               u8* Source = M->Memory + M->I;
               mtb_CopyBytes(Num, Dest, Source);
-              return;
-            }
+            } return;
+
             case argument_type::CONSTANT:
             {
               u8* Reg = M->V + Instruction.Args[0].Value;
               *Reg = (u8)Instruction.Args[1].Value;
-              return;
-            }
+            } return;
+
             case argument_type::DT:
             {
               u8* Reg = M->V + Instruction.Args[0].Value;
               *Reg = M->DT;
-              return;
-            }
+            } return;
+
             case argument_type::K:
             {
               // Note(Manuzor): All execution stops until a key is pressed, then the
               // value of that key is stored in Reg.
               M->RequiredInputRegisterIndexPlusOne = mtb_SafeConvert_u08(Instruction.Args[0].Value + 1);
-              return;
-            }
+            } return;
+
             case argument_type::V:
             {
               u8* RegA = M->V + Instruction.Args[0].Value;
               u8* RegB = M->V + Instruction.Args[1].Value;
               *RegA = *RegB;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::ADD:
     {
       switch(Instruction.Args[0].Type)
@@ -1160,11 +1147,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
             {
               u8* Reg = M->V + Instruction.Args[1].Value;
               M->I += *Reg;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
+
         case argument_type::V:
         {
           u8* Reg = M->V + Instruction.Args[0].Value;
@@ -1173,22 +1159,20 @@ ExecuteInstruction(machine* M, instruction Instruction)
             case argument_type::CONSTANT:
             {
               *Reg += (u8)Instruction.Args[1].Value;
-              return;
-            }
+            } return;
+
             case argument_type::V:
             {
               u8* OtherReg = M->V + Instruction.Args[1].Value;
               u16 Result = (u16)*Reg + (u16)*OtherReg;
               M->V[0xF] = (u8)(Result > 255);
               *Reg = (u8)(Result & 0xFF);
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::OR:
     {
       switch(Instruction.Args[0].Type)
@@ -1202,14 +1186,12 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8* RegA = M->V + Instruction.Args[0].Value;
               u8* RegB = M->V + Instruction.Args[1].Value;
               *RegA = *RegA | *RegB;
-              return;
-            }
+            } return;
           }
-        break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::AND:
     {
       switch(Instruction.Args[0].Type)
@@ -1223,14 +1205,12 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8* RegA = M->V + Instruction.Args[0].Value;
               u8* RegB = M->V + Instruction.Args[1].Value;
               *RegA = *RegA & *RegB;
-              return;
-            }
+            } return;
           }
-        break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::XOR:
     {
       switch(Instruction.Args[0].Type)
@@ -1244,14 +1224,12 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8* RegA = M->V + Instruction.Args[0].Value;
               u8* RegB = M->V + Instruction.Args[1].Value;
               *RegA = *RegA ^ *RegB;
-              return;
-            }
+            } return;
           }
-        break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SUB:
     {
       switch(Instruction.Args[0].Type)
@@ -1266,14 +1244,12 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8* RegB = M->V + Instruction.Args[1].Value;
               M->V[0xF] = (*RegA > *RegB) ? 1 : 0;
               *RegA = *RegA - *RegB;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SHR:
     {
       switch(Instruction.Args[0].Type)
@@ -1283,11 +1259,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
           u8* RegA = M->V + Instruction.Args[0].Value;
           M->V[0xF] = *RegA & 0b0000'0001;
           *RegA /= 2;
-          return;
-        }
+        } return;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SUBN:
     {
       switch(Instruction.Args[0].Type)
@@ -1302,14 +1277,12 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8* RegB = M->V + Instruction.Args[1].Value;
               M->V[0xF] = (*RegB > *RegA) ? 1 : 0;
               *RegA = *RegB - *RegA;
-              return;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SHL:
     {
       switch(Instruction.Args[0].Type)
@@ -1319,11 +1292,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
           u8* RegA = M->V + Instruction.Args[0].Value;
           M->V[0xF] = *RegA & 0b1000'0000;
           *RegA *= 2;
-          return;
-        }
+        } return;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::RND:
     {
       switch (Instruction.Args[0].Type)
@@ -1338,14 +1310,12 @@ ExecuteInstruction(machine* M, instruction Instruction)
               u8 Byte = (u8)Instruction.Args[1].Value;
               u8 Rand = (u8)mtb_RandomBetween_u32(&M->RNG, 0, 255);
               *Reg = Byte & Rand;
-              break;
-            }
+            } return;
           }
-          break;
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::DRW:
     {
       switch(Instruction.Args[0].Type)
@@ -1366,15 +1336,14 @@ ExecuteInstruction(machine* M, instruction Instruction)
                   Sprite.Length = (int)Instruction.Args[2].Value;
                   Sprite.Pixels = (u8*)(M->Memory + M->I);
                   DrawSprite(M, *RegA, *RegB, Sprite);
-                  return;
-                }
+                } return;
               }
-            }
+            } break;
           }
-        }
+        } break;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SKP:
     {
       switch(Instruction.Args[0].Type)
@@ -1386,10 +1355,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
           {
             M->ProgramCounter += 2;
           }
-        } break;
+        } return;
       }
-      break;
-    }
+    } break;
+
     case instruction_type::SKNP:
     {
       switch(Instruction.Args[0].Type)
@@ -1401,14 +1370,17 @@ ExecuteInstruction(machine* M, instruction Instruction)
           {
             M->ProgramCounter += 2;
           }
-        } break;
+        } return;
       }
-      break;
-    }
+    } break;
+
     default: break;
   }
 
-  MTB_INTERNAL_CODE( printf("Invalid instruction to execute.\n") );
+  MTB_INTERNAL_CODE({
+    assembler_code Disassembly = DisassembleInstruction(Instruction);
+    printf("%*s: Invalid instruction to execute.\n", (int)Disassembly.Size, &Disassembly.Data[0]);
+  });
 }
 
 u16

@@ -4,6 +4,7 @@
 #if MTB_FLAG(INTERNAL)
   // printf, snprintf, freopen
   #include <stdio.h>
+  #define COUSCOUS_ASSEMBLER 1
 #endif
 
 #include "couscous.h"
