@@ -1383,47 +1383,6 @@ ExecuteInstruction(machine* M, instruction Instruction)
   });
 }
 
-u16
-MapCharToKeyIndex(char Key)
-{
-  u16 Result = (u16)-1;
-
-  switch(Key)
-  {
-    case '0': Result =  0; break;
-    case '1': Result =  1; break;
-    case '2': Result =  2; break;
-    case '3': Result =  3; break;
-    case '4': Result =  4; break;
-    case '5': Result =  5; break;
-    case '6': Result =  6; break;
-    case '7': Result =  7; break;
-    case '8': Result =  8; break;
-    case '9': Result =  9; break;
-    case 'A': Result = 10; break;
-    case 'B': Result = 11; break;
-    case 'C': Result = 12; break;
-    case 'D': Result = 13; break;
-    case 'E': Result = 14; break;
-    case 'F': Result = 15; break;
-    default: break;
-  }
-
-  return Result;
-}
-
-char
-MapKeyIndexToChar(u16 KeyIndex)
-{
-  char Result = 0;
-  if(KeyIndex < 16)
-  {
-    char const* Map = "0123456789ABCDEF";
-    Result = Map[KeyIndex];
-  }
-  return Result;
-}
-
 bool
 IsKeyDown(u16 InputState, u16 KeyIndex)
 {

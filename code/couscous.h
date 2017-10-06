@@ -220,12 +220,6 @@ EncodeInstruction(instruction Instruction);
 static void
 ExecuteInstruction(machine* M, instruction Instruction);
 
-static u16
-MapCharToKeyIndex(char Key);
-
-static char
-MapKeyIndexToChar(u16 KeyIndex);
-
 static bool
 IsKeyDown(u16 InputState, u16 KeyIndex);
 

@@ -294,71 +294,67 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
           // Message == WM_INPUT
   )
   {
-    if(Message != WM_CHAR) // Char messages are ignored (for now).)
+    if(Message == WM_KEYDOWN || Message == WM_SYSKEYUP)
     {
       u32 VKCode = (u32)WParam;
       bool KeyWasDown = mtb_IsBitSet((u64)LParam, 30);
       bool KeyIsDown = !mtb_IsBitSet((u64)LParam, 31);
       bool KeyWasPressed = !KeyWasDown && KeyIsDown;
-      // bool KeyWasReleased = KeyWasDown && !KeyIsDown;
-      bool IsInitialKeyAction = KeyWasDown != KeyIsDown;
+      //bool KeyWasReleased = KeyWasDown && !KeyIsDown;
+      //bool KeyWasToggled = KeyWasDown != KeyIsDown;
 
       bool AltKeyModifier = false;
-      if(Message == WM_SYSKEYDOWN || Message == WM_SYSKEYUP)
+      if (Message == WM_SYSKEYDOWN || Message == WM_SYSKEYUP)
         AltKeyModifier = mtb_IsBitSet((u64)LParam, 29);
 
-      if(KeyWasPressed)
+      if (KeyWasPressed)
       {
-        if(VKCode == VK_ESCAPE)
+        if (VKCode == VK_ESCAPE)
         {
           PostQuitMessage(0);
         }
 
-        if(AltKeyModifier && VKCode == VK_F4)
+        if (AltKeyModifier && VKCode == VK_F4)
         {
           PostQuitMessage(0);
         }
 
-        if(AltKeyModifier && VKCode == VK_RETURN)
+        if (AltKeyModifier && VKCode == VK_RETURN)
         {
           Win32ToggleFullscreenWindow(WindowHandle);
         }
-
       }
 
-      if(IsInitialKeyAction)
+      char VKCodeAsChar = (char)VKCode;
+      int KeyIndex = -1;
+      // Keyboard mapping / key bindings
+      switch (VKCodeAsChar)
       {
-        char VKCodeAsChar = (char)VKCode;
-        char KeyChar = 0;
-        // Keyboard mapping / key bindings
-        switch(VKCodeAsChar)
-        {
-          case '1': KeyChar = '1'; break;
-          case '2': KeyChar = '2'; break;
-          case '3': KeyChar = '3'; break;
-          case '4': KeyChar = 'C'; break;
-          case 'Q': KeyChar = '4'; break;
-          case 'W': KeyChar = '5'; break;
-          case 'E': KeyChar = '6'; break;
-          case 'R': KeyChar = 'D'; break;
-          case 'A': KeyChar = '7'; break;
-          case 'S': KeyChar = '8'; break;
-          case 'D': KeyChar = '9'; break;
-          case 'F': KeyChar = 'E'; break;
-          case 'Z': KeyChar = 'A'; break;
-          case 'X': KeyChar = '0'; break;
-          case 'C': KeyChar = 'B'; break;
-          case 'V': KeyChar = 'F'; break;
-          default: break;
-        }
+        case '1': KeyIndex = 0x1; break;
+        case '2': KeyIndex = 0x2; break;
+        case '3': KeyIndex = 0x3; break;
+        case '4': KeyIndex = 0xC; break;
+        case 'Q': KeyIndex = 0x4; break;
+        case 'W': KeyIndex = 0x5; break;
+        case 'E': KeyIndex = 0x6; break;
+        case 'R': KeyIndex = 0xD; break;
+        case 'A': KeyIndex = 0x7; break;
+        case 'S': KeyIndex = 0x8; break;
+        case 'D': KeyIndex = 0x9; break;
+        case 'F': KeyIndex = 0xE; break;
+        case 'Z': KeyIndex = 0xA; break;
+        case 'X': KeyIndex = 0x0; break;
+        case 'C': KeyIndex = 0xB; break;
+        case 'V': KeyIndex = 0xF; break;
+        default: break;
+      }
 
-        if(KeyChar > 0)
-        {
-          u16 KeyIndex = MapCharToKeyIndex(KeyChar);
-          u16 OldState = Window->InputState;
-          u16 NewState = SetKeyDown(OldState, KeyIndex, KeyIsDown);
-          Window->InputState = NewState;
-        }
+      if (KeyIndex >= 0)
+      {
+        //u16 KeyIndex_ = MapCharToKeyIndex(KeyIndex);
+        u16 OldState = Window->InputState;
+        u16 NewState = SetKeyDown(OldState, (u16)KeyIndex, KeyIsDown);
+        Window->InputState = NewState;
       }
     }
   }
@@ -506,7 +502,7 @@ struct win32_timestamp
 };
 
 static win32_timestamp
-Win32Timestamp()
+Win32Now()
 {
   win32_timestamp Result;
   QueryPerformanceCounter(&Result.Timestamp);
@@ -514,10 +510,10 @@ Win32Timestamp()
 }
 
 static f64
-Win32DeltaTime(win32_clock* Clock, win32_timestamp* End, win32_timestamp* Start)
+Win32DeltaSeconds(win32_clock* Clock, win32_timestamp End, win32_timestamp Start)
 {
-  LONGLONG EndInt = End->Timestamp.QuadPart;
-  LONGLONG StartInt = Start->Timestamp.QuadPart;
+  LONGLONG EndInt = End.Timestamp.QuadPart;
+  LONGLONG StartInt = Start.Timestamp.QuadPart;
   LONGLONG FrequencyInt = Clock->Frequency.QuadPart;
 
   LONGLONG Delta = EndInt - StartInt;
@@ -636,24 +632,30 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       // Clock setup.
       //
       win32_clock Clock = Win32CreateClock();
-      win32_timestamp LastTickTime = Win32Timestamp();
+
+      f64 const FrameTargetDuration = 1.0 / 55.0; // 55Hz
+      int const TicksPerFrame = 15;
+
+      f64 LastFrameDuration = FrameTargetDuration;
+      int PendingTicks = 0;
 
       while(true)
       {
-        f64 const TickDuration = 1.0 / 60.0;
+        win32_timestamp FrameStartTime = Win32Now();
+        f64 WaitTimeThisFrame = FrameTargetDuration - LastFrameDuration;
+        PendingTicks += TicksPerFrame;
 
-        f64 DeltaTime{};
-        win32_timestamp CurrentTime;
+        // Pump messages while also waiting to be in sync with last frame.
         while(true)
         {
           Win32MessagePump(&Window);
-          CurrentTime = Win32Timestamp();
-          DeltaTime = Win32DeltaTime(&Clock, &CurrentTime, &LastTickTime);
 
-          if(DeltaTime >= TickDuration)
+          f64 SecondsSinceFrameStart = Win32DeltaSeconds(&Clock, Win32Now(), FrameStartTime);
+          WaitTimeThisFrame -= SecondsSinceFrameStart;
+
+          if (WaitTimeThisFrame <= 0)
             break;
         }
-        LastTickTime = CurrentTime;
 
         // Apply input.
         u16 OldInputState = M->InputState;
@@ -662,12 +664,12 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
         // See if input is required in order to continue execution.
         bool CanTick = true;
-        if(M->RequiredInputRegisterIndexPlusOne)
+        if (M->RequiredInputRegisterIndexPlusOne)
         {
           CanTick = false;
-          for(u16 KeyIndex = 0; KeyIndex < 16; ++KeyIndex)
+          for (u16 KeyIndex = 0; KeyIndex < 16; ++KeyIndex)
           {
-            if(!mtb_IsBitSet(OldInputState, KeyIndex) && mtb_IsBitSet(NewInputState, KeyIndex))
+            if (!mtb_IsBitSet(OldInputState, KeyIndex) && mtb_IsBitSet(NewInputState, KeyIndex))
             {
               u8* Reg = M->V + (M->RequiredInputRegisterIndexPlusOne - 1);
               MTB_AssertDebug((u16)(u8)KeyIndex == KeyIndex);
@@ -678,17 +680,29 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
           }
         }
 
-        if(CanTick)
+        if (CanTick)
         {
-          tick_result TickResult = Tick(M);
-          if(!TickResult.Continue)
+          while (PendingTicks > 0)
           {
-            break;
+            tick_result TickResult = Tick(M);
+            --PendingTicks;
+
+            if (!TickResult.Continue)
+            {
+              PostQuitMessage(0);
+              break;
+            }
+
+            f64 SecondsSinceFrameStart = Win32DeltaSeconds(&Clock, Win32Now(), FrameStartTime);
+            if (SecondsSinceFrameStart >= FrameTargetDuration)
+              break;
           }
 
           Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
           Win32Present(Window.Handle, &Window.FrontBuffer);
         }
+
+        LastFrameDuration = Win32DeltaSeconds(&Clock, Win32Now(), FrameStartTime);
       }
 
       // PostQuitMessage(0);
@@ -700,6 +714,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     else
     {
       // TODO: Logging?
+      MTB_Fail("Unable to open window.");
+      return 2;
     }
   }
   else
