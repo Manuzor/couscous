@@ -25,7 +25,7 @@
   #include "testprogram.cpp"
 #endif
 
-struct colorRGB8
+struct colorRGBA8
 {
   union
   {
@@ -34,9 +34,10 @@ struct colorRGB8
       u8 R;
       u8 G;
       u8 B;
+      u8 A;
     };
 
-    u8 Data[3];
+    u8 Data[4];
   };
 };
 
@@ -145,27 +146,27 @@ struct win32_front_buffer
 {
   BITMAPINFO BitmapInfo;
 
-  colorRGB8* Pixels;
+  colorRGBA8* Pixels;
   DWORD Width;
   DWORD Height;
   DWORD Pitch;
   DWORD BytesPerPixel;
 
-  colorRGB8 PixelColorOn;
-  colorRGB8 PixelColorOff;
+  colorRGBA8 PixelColorOn;
+  colorRGBA8 PixelColorOff;
 };
 
 static void
 Win32SwapBuffers(bool32* ScreenPixels, win32_front_buffer* Front)
 {
-  colorRGB8* FrontPixel = Front->Pixels;
+  colorRGBA8* FrontPixel = Front->Pixels;
   bool32* ScreenPixel = ScreenPixels;
 
   for(size_t Y = 0; Y < SCREEN_HEIGHT; ++Y)
   {
     for(size_t X = 0; X < SCREEN_WIDTH; ++X, ++ScreenPixel, ++FrontPixel)
     {
-      colorRGB8 NewColor;
+      colorRGBA8 NewColor;
       if(*ScreenPixel) NewColor = Front->PixelColorOn;
       else             NewColor = Front->PixelColorOff;
       *FrontPixel = NewColor;
@@ -192,7 +193,7 @@ static void
 Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
 {
   HDC DC = GetDC(WindowHandle);
-  colorRGB8* Pixels = FrontBuffer->Pixels;
+  colorRGBA8* Pixels = FrontBuffer->Pixels;
 
   // TODO: Keep aspect ratio of screen.
   rect_s32 SourceRect{};
@@ -600,7 +601,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       // Initialize the front buffer.
       //
       win32_front_buffer* FrontBuffer = &Window.FrontBuffer;
-      FrontBuffer->BytesPerPixel = 3;
+      FrontBuffer->BytesPerPixel = 4;
       FrontBuffer->Width = SCREEN_WIDTH;
       FrontBuffer->Height = SCREEN_HEIGHT;
       FrontBuffer->Pitch = FrontBuffer->Width * FrontBuffer->BytesPerPixel;
@@ -611,8 +612,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       FrontBuffer->BitmapInfo.bmiHeader.biBitCount = (WORD)(FrontBuffer->BytesPerPixel * 8);
       FrontBuffer->BitmapInfo.bmiHeader.biCompression = BI_RGB;
       FrontBuffer->Pixels = (decltype(FrontBuffer->Pixels))PushBytes(&MemStack, FrontBuffer->Width * FrontBuffer->Height * FrontBuffer->BytesPerPixel);
-      FrontBuffer->PixelColorOff = { 16, 64, 16 };
-      FrontBuffer->PixelColorOn = { 8, 16, 8 };
+      FrontBuffer->PixelColorOff = { 16, 64, 16, 255 };
+      FrontBuffer->PixelColorOn = { 8, 16, 8, 255 };
 
       // Init swap to ensure properly cleared buffers.
       Win32SwapBuffers(M->Screen, FrontBuffer);
