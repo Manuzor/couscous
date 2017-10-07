@@ -414,7 +414,7 @@
 
 VSSolution( '$MySolutionName$' )
 {
-  .SolutionOutput = '$MyVisualStudioRoot$/$MySolutionName$.sln'
+  .SolutionOutput = '$RepoRoot$/$MySolutionName$.sln'
   .SolutionVisualStudioVersion = .VSVersion
   //TODO: .SolutionBuildProject = 'Application-Proj'
   // Note: Use .ExtraFiles to add a .natvis file, for example.

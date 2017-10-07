@@ -3,3 +3,7 @@ _*/
 
 # FASTBuild database
 *.fdb
+
+# Visual Studio stuff.
+.vs/
+*.sln
