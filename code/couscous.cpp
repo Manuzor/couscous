@@ -54,7 +54,6 @@ MakeArgumentTypeFromString(size_t CodeLen, char const* Code)
       case 'B': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(B);        break;
       case 'A': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(ATI);      break;
       case 'C': MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(CONSTANT); break;
-      default: break;
     }
   }
   return Result;
@@ -71,6 +70,7 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
 {
   // Note(Manuzor): Use with care, this function is not tested...
 
+  MTB_AssertDebug(BufferSize >= 5);
   size_t Result = 0;
 
   if(BufferSize > 0) switch(Argument.Type)
@@ -142,24 +142,27 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
 
     case argument_type::CONSTANT:
     {
+      Buffer[0] = '0';
+      Buffer[1] = 'x';
+
       if(Argument.Value < 10)
       {
-        Buffer[0] = '0' + (char)Argument.Value;
-        Result = 1;
+        Buffer[2] = '0' + (char)Argument.Value;
+        Result = 3;
       }
       else if(Argument.Value < 100)
       {
-        Buffer[0] = '0' + (char)(Argument.Value % 10);
-        Buffer[1] = '0' + (char)(Argument.Value / 10);
-        Result = 2;
+        Buffer[2] = '0' + (char)(Argument.Value % 10);
+        Buffer[3] = '0' + (char)(Argument.Value / 10);
+        Result = 4;
       }
       else
       {
         MTB_AssertDebug(Argument.Value < 1000);
-        Buffer[0] = '0' + (char)(Argument.Value % 10);
-        Buffer[1] = '0' + (char)((Argument.Value / 10) % 10);
-        Buffer[2] = '0' + (char)((Argument.Value / 10) / 10);
-        Result = 3;
+        Buffer[2] = '0' + (char)(Argument.Value % 10);
+        Buffer[3] = '0' + (char)((Argument.Value / 10) % 10);
+        Buffer[4] = '0' + (char)((Argument.Value / 10) / 10);
+        Result = 5;
       }
     } break;
 
@@ -171,20 +174,21 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
   return Result;
 }
 
+// Note: The caller must guarantee that Code is uppercase.
 argument
 MakeArgumentFromString(size_t CodeLen, char const* Code)
 {
   argument Result{};
 
-  if(CodeLen > 0)
+  if (CodeLen > 0)
   {
-    switch(Code[0])
+    switch (Code[0])
     {
       case 'V':
       {
-        if(CodeLen == 2)
+        if (CodeLen == 2)
         {
-          switch(Code[1])
+          switch (Code[1])
           {
             case '0': Result.Value = 0x0; break;
             case '1': Result.Value = 0x1; break;
@@ -210,83 +214,83 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
 
       case 'I':
       {
-        if(CodeLen == 1)
+        if (CodeLen == 1)
           Result.Type = argument_type::I;
         break;
       }
 
       case 'D':
       {
-        if(CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "DT", Code))
+        if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "DT", Code))
           Result.Type = argument_type::DT;
         break;
       }
 
       case 'S':
       {
-        if(CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "ST", Code))
+        if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "ST", Code))
           Result.Type = argument_type::ST;
         break;
       }
 
       case 'K':
       {
-        if(CodeLen == 1)
+        if (CodeLen == 1)
           Result.Type = argument_type::K;
         break;
       }
 
       case 'F':
       {
-        if(CodeLen == 1)
+        if (CodeLen == 1)
           Result.Type = argument_type::F;
         break;
       }
 
       case 'B':
       {
-        if(CodeLen == 1)
+        if (CodeLen == 1)
           Result.Type = argument_type::B;
         break;
       }
 
       case '[':
       {
-        if(CodeLen == 3)
+        if (CodeLen == 3)
         {
-          if(mtb_StringsAreEqual(CodeLen, "[I]", Code))
+          if (mtb_StringsAreEqual(CodeLen, "[I]", Code))
             Result.Type = argument_type::ATI;
         }
         break;
       }
 
-        default: // 0x123
+      default: // 0x123
+      {
+        Result.Type = argument_type::CONSTANT;
+
+        unsigned int Value = 0;
+        if (Code[0] == '0')
         {
-          Result.Type = argument_type::CONSTANT;
-
-          unsigned int Value = 0;
-          if(Code[0] == '0')
+          switch (Code[1])
           {
-            switch(Code[1])
-            {
-              case 'X': sscanf(Code + 2, "%3X", &Value); break;
-              case 'B': MTB_NOT_IMPLEMENTED;
-              case 'D': sscanf(Code + 2, "%3d", &Value);; break;
-              default:  sscanf(Code + 1, "%3d", &Value);; break;
-            }
+            case 'X': sscanf(Code + 2, "%3X", &Value); break;
+            case 'B': MTB_NOT_IMPLEMENTED; break;
+            case 'D': sscanf(Code + 2, "%3d", &Value); break;
+            default: sscanf(Code + 1, "%3d", &Value); break;
           }
-          else
-          {
-            sscanf(Code, "%3d", &Value);
-          }
-
-          Result.Value = (u16)Value;
         }
-        break;
-      }
-    }
+        else
+        {
+          sscanf(Code, "%3d", &Value);
+        }
 
-    return Result;
+        Result.Value = (u16)Value;
+      }
+      break;
+    }
+  }
+
+  return Result;
 }
 
 
@@ -330,6 +334,7 @@ GetInstructionTypeAsString(instruction_type Value)
 }
 
 
+// Note: The caller must guarantee that Code is uppercase.
 instruction_type
 MakeInstructionTypeFromString(size_t CodeLen, char const* Code)
 {
@@ -352,9 +357,6 @@ MakeInstructionTypeFromString(size_t CodeLen, char const* Code)
               break;
 
     case 'D': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(DRW);
-              break;
-
-    case 'I': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(INVALID);
               break;
 
     case 'J': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(JP);
@@ -394,15 +396,11 @@ MakeInstructionTypeFromString(size_t CodeLen, char const* Code)
 
         case 'Y': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SYS);
                   break;
-
-        default: break;
       }
     } break;
 
     case 'X': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(XOR);
               break;
-
-    default: break;
   }
 
   return Result;
@@ -637,7 +635,7 @@ DecodeInstruction(instruction_decoder Decoder)
     }
     case 0xB: // Bnnn - JP V0, addr
     {
-      Result.Type = inst::LD;
+      Result.Type = inst::JP;
       Result.Args[0].Type = arg::V;
       Result.Args[0].Value = 0;
       Result.Args[1].Type = arg::CONSTANT;
@@ -774,11 +772,13 @@ EncodeInstruction(instruction Instruction)
       Decoder.Data = 0x00E0;
       break;
     }
+
     case instruction_type::RET:
     {
       Decoder.Data = 0x00EE;
       break;
     }
+
     case instruction_type::SYS:
     {
       switch(Instruction.Args[0].Type)
@@ -791,105 +791,496 @@ EncodeInstruction(instruction Instruction)
       }
       break;
     }
+
     case instruction_type::JP:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          Decoder.Group = 0xB;
+          Decoder.Address = Instruction.Args[0].Value;
+          break;
+        }
+        case argument_type::CONSTANT:
+        {
+          Decoder.Group = 0x1;
+          Decoder.Address = Instruction.Args[0].Value;
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::CALL:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::CONSTANT:
+        {
+          Decoder.Group = 0x2;
+          Decoder.Address = Instruction.Args[0].Value;
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::SE:
     {
-      // TODO
-      break;
-    }
-    case instruction_type::SNE:
-    {
-      // TODO
-      break;
-    }
-    case instruction_type::LD:
-    {
-      switch(Instruction.Args[0].Type)
+      switch (Instruction.Args[0].Type)
       {
-        case argument_type::I:
+        case argument_type::V:
         {
-          switch(Instruction.Args[1].Type)
+          Decoder.X = Instruction.Args[0].Value;
+          switch (Instruction.Args[1].Type)
           {
+            case argument_type::V:
+            {
+              Decoder.Group = 0x5;
+              Decoder.Y = Instruction.Args[1].Value;
+              break;
+            }
             case argument_type::CONSTANT:
             {
-              Decoder.Data = Instruction.Args[1].Value;
-              Decoder.MSN = 0xA;
+              Decoder.Group = 0x3;
+              Decoder.LSB = (u8)Instruction.Args[1].Value;
               break;
             }
           }
           break;
         }
       }
-      // TODO
       break;
     }
+
+    case instruction_type::SNE:
+    {
+      MTB_AssertDebug(Instruction.Args[0].Type == argument_type::V);
+      Decoder.X = Instruction.Args[0].Value;
+      switch (Instruction.Args[1].Type)
+      {
+        case argument_type::V:
+        {
+          Decoder.Group = 0x9;
+          Decoder.Y = Instruction.Args[1].Value;
+          break;
+        }
+        case argument_type::CONSTANT:
+        {
+          Decoder.Group = 0x4;
+          Decoder.LSB = (u8)Instruction.Args[1].Value;
+          break;
+        }
+      }
+      break;
+    }
+
+    case instruction_type::LD:
+    {
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::ATI:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[1].Value;
+              Decoder.LSB = 0x55;
+              break;
+            }
+          }
+          break;
+        }
+        case argument_type::B:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[1].Value;
+              Decoder.LSB = 0x33;
+              break;
+            }
+          }
+          break;
+        }
+        case argument_type::DT:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[1].Value;
+              Decoder.LSB = 0x15;
+              break;
+            }
+          }
+          break;
+        }
+        case argument_type::F:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[1].Value;
+              Decoder.LSB = 0x29;
+              break;
+            }
+          }
+          break;
+        }
+        case argument_type::I:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::CONSTANT:
+            {
+              Decoder.Group = 0xA;
+              Decoder.Address = Instruction.Args[1].Value;
+              break;
+            }
+          }
+          break;
+        }
+        case argument_type::ST:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[1].Value;
+              Decoder.LSB = 0x18;
+              break;
+            }
+          }
+          break;
+        }
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::ATI:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.LSB = 0x65;
+              break;
+            }
+            case argument_type::CONSTANT:
+            {
+              Decoder.Group = 0x6;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.LSB = Instruction.Args[1].Value;
+              break;
+            }
+            case argument_type::DT:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.LSB = 0x07;
+              break;
+            }
+            case argument_type::K:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.LSB = 0x0A;
+              break;
+            }
+            case argument_type::V:
+            {
+              Decoder.Group = 0x8;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.Y = Instruction.Args[1].Value;
+              break;
+            }
+          }
+          break;
+        }
+      }
+      break;
+    }
+
     case instruction_type::ADD:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::I:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0xF;
+              Decoder.X = Instruction.Args[1].Value;
+              Decoder.LSB = 0x1E;
+              break;
+            }
+          }
+          break;
+        }
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::CONSTANT:
+            {
+              Decoder.Group = 0x7;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.LSB = Instruction.Args[1].Value;
+              break;
+            }
+            case argument_type::V:
+            {
+              Decoder.Group = 0x8;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.Y = Instruction.Args[1].Value;
+              Decoder.LSN = 0x4;
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::OR:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0x8;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.Y = Instruction.Args[1].Value;
+              Decoder.LSN = 0x1;
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::AND:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0x8;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.Y = Instruction.Args[1].Value;
+              Decoder.LSN = 0x2;
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::XOR:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0x8;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.Y = Instruction.Args[1].Value;
+              Decoder.LSN = 0x3;
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::SUB:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0x8;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.Y = Instruction.Args[1].Value;
+              Decoder.LSN = 0x5;
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::SHR:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          Decoder.Group = 0x8;
+          Decoder.X = Instruction.Args[0].Value;
+          if (Instruction.Args[1].Type == argument_type::V)
+            Decoder.Y = Instruction.Args[1].Value;
+          Decoder.LSN = 0x6;
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::SUBN:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              Decoder.Group = 0x8;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.Y = Instruction.Args[1].Value;
+              Decoder.LSN = 0x7;
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::SHL:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          Decoder.Group = 0x8;
+          Decoder.X = Instruction.Args[0].Value;
+          if (Instruction.Args[1].Type == argument_type::V)
+            Decoder.Y = Instruction.Args[1].Value;
+          Decoder.LSN = 0xE;
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::RND:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::CONSTANT:
+            {
+              Decoder.Group = 0xC;
+              Decoder.X = Instruction.Args[0].Value;
+              Decoder.LSB = Instruction.Args[1].Value;
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::DRW:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          switch (Instruction.Args[1].Type)
+          {
+            case argument_type::V:
+            {
+              switch (Instruction.Args[2].Type)
+              {
+                case argument_type::CONSTANT:
+                {
+                  Decoder.Group = 0xD;
+                  Decoder.X = Instruction.Args[0].Value;
+                  Decoder.Y = Instruction.Args[1].Value;
+                  Decoder.LSN = Instruction.Args[2].Value;
+                  break;
+                }
+              }
+              break;
+            }
+          }
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::SKP:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          Decoder.Group = 0xE;
+          Decoder.X = Instruction.Args[0].Value;
+          Decoder.LSB = 0x9E;
+          break;
+        }
+      }
       break;
     }
+
     case instruction_type::SKNP:
     {
-      // TODO
+      switch (Instruction.Args[0].Type)
+      {
+        case argument_type::V:
+        {
+          Decoder.Group = 0xE;
+          Decoder.X = Instruction.Args[0].Value;
+          Decoder.LSB = 0xA1;
+          break;
+        }
+      }
       break;
     }
   }
@@ -1242,8 +1633,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
         case argument_type::V:
         {
           u8* RegA = M->V + Instruction.Args[0].Value;
-          M->V[0xF] = *RegA & 0b0000'0001;
-          *RegA /= 2;
+          u8* RegB = M->V + Instruction.Args[1].Value;
+          M->V[0xF] = *RegB & 0b0000'0001;
+          *RegB >>= 1;
+          *RegA = *RegB;
         } return;
       }
     } break;
@@ -1275,8 +1668,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
         case argument_type::V:
         {
           u8* RegA = M->V + Instruction.Args[0].Value;
-          M->V[0xF] = *RegA & 0b1000'0000;
-          *RegA *= 2;
+          u8* RegB = M->V + Instruction.Args[1].Value;
+          M->V[0xF] = *RegB & 0b0000'0001;
+          *RegB <<= 1;
+          *RegA = *RegB;
         } return;
       }
     } break;
@@ -1358,8 +1753,6 @@ ExecuteInstruction(machine* M, instruction Instruction)
         } return;
       }
     } break;
-
-    default: break;
   }
 
   MTB_INTERNAL_CODE({
@@ -1380,7 +1773,6 @@ u16
 SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
 {
   u16 Result;
-  // TODO: Check this code.
   if(IsDown) Result = mtb_SetBit(InputState, KeyIndex);
   else       Result = mtb_UnsetBit(InputState, KeyIndex);
 
@@ -1392,14 +1784,13 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
   AssembleInstruction(assembler_code Code)
   {
     // Assume we are parsing "ABC D, E, F"
-
     instruction Result{};
 
     // Make it all uppercase.
-    for(size_t CharIndex = 0; CharIndex < Code.Size; ++CharIndex)
+    for (size_t CharIndex = 0; CharIndex < Code.Size; ++CharIndex)
     {
       char Char = Code.Data[CharIndex];
-      if(Char >= 'a' && Char <= 'z')
+      if (Char >= 'a' && Char <= 'z')
         Char -= 0x20;
       Code.Data[CharIndex] = Char;
     }
