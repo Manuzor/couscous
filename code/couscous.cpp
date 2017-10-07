@@ -502,21 +502,6 @@ Tick(machine* M)
 
     // Execute the fetched instruction.
     ExecuteInstruction(M, Instruction);
-
-    // Update the timer slots.
-    if(M->DT > 0)
-      --M->DT;
-    if(M->ST > 0)
-      --M->ST;
-
-    if(M->ST)
-    {
-      // TODO: Make some noise!
-    }
-    else
-    {
-      // TODO: Stop the noise...
-    }
   }
   else
   {

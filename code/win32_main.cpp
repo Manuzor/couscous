@@ -521,6 +521,31 @@ Win32DeltaSeconds(win32_clock* Clock, win32_timestamp End, win32_timestamp Start
   return Result;
 }
 
+// See if input is required in order to continue execution.
+static bool
+Win32CanTick(machine* M, u16 OldInputState, u16 NewInputState)
+{
+  // See if input is required in order to continue execution.
+  bool CanTick = true;
+  if (M->RequiredInputRegisterIndexPlusOne)
+  {
+    CanTick = false;
+    for (u16 KeyIndex = 0; KeyIndex < 16; ++KeyIndex)
+    {
+      if (!mtb_IsBitSet(OldInputState, KeyIndex) && mtb_IsBitSet(NewInputState, KeyIndex))
+      {
+        u8* Reg = M->V + (M->RequiredInputRegisterIndexPlusOne - 1);
+        MTB_AssertDebug((u16)(u8)KeyIndex == KeyIndex);
+        *Reg = (u8)KeyIndex;
+        M->RequiredInputRegisterIndexPlusOne = 0;
+        CanTick = true;
+      }
+    }
+  }
+
+  return CanTick;
+}
+
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         LPSTR CommandLine, int ShowCode)
@@ -633,16 +658,15 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
       //
       win32_clock Clock = Win32CreateClock();
 
-      f64 const FrameTargetDuration = 1.0 / 55.0; // 55Hz
+      f64 const FrameTargetSeconds = 1.0 / 55.0; // 55Hz
       int const TicksPerFrame = 15;
 
-      f64 LastFrameDuration = FrameTargetDuration;
+      win32_timestamp EndOfLastFrame = Win32Now();
+
       int PendingTicks = 0;
 
       while(true)
       {
-        win32_timestamp FrameStartTime = Win32Now();
-        f64 WaitTimeThisFrame = FrameTargetDuration - LastFrameDuration;
         PendingTicks += TicksPerFrame;
 
         // Pump messages while also waiting to be in sync with last frame.
@@ -650,11 +674,12 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         {
           Win32MessagePump(&Window);
 
-          f64 SecondsSinceFrameStart = Win32DeltaSeconds(&Clock, Win32Now(), FrameStartTime);
-          WaitTimeThisFrame -= SecondsSinceFrameStart;
-
-          if (WaitTimeThisFrame <= 0)
+          // TODO: Replace this spin-lock with something less wasteful?
+          f64 SecondsSinceLastFrameEnd = Win32DeltaSeconds(&Clock, Win32Now(), EndOfLastFrame);
+          if (SecondsSinceLastFrameEnd >= FrameTargetSeconds)
+          {
             break;
+          }
         }
 
         // Apply input.
@@ -662,24 +687,11 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         u16 NewInputState = Window.InputState;
         M->InputState = NewInputState;
 
-        // See if input is required in order to continue execution.
-        bool CanTick = true;
-        if (M->RequiredInputRegisterIndexPlusOne)
-        {
-          CanTick = false;
-          for (u16 KeyIndex = 0; KeyIndex < 16; ++KeyIndex)
-          {
-            if (!mtb_IsBitSet(OldInputState, KeyIndex) && mtb_IsBitSet(NewInputState, KeyIndex))
-            {
-              u8* Reg = M->V + (M->RequiredInputRegisterIndexPlusOne - 1);
-              MTB_AssertDebug((u16)(u8)KeyIndex == KeyIndex);
-              *Reg = (u8)KeyIndex;
-              M->RequiredInputRegisterIndexPlusOne = 0;
-              CanTick = true;
-            }
-          }
-        }
+        // TODO: Does this belong inside the CanTick-brackets?
+        if (M->DT > 0)
+          M->DT -= 1;
 
+        bool CanTick = Win32CanTick(M, OldInputState, NewInputState);
         if (CanTick)
         {
           while (PendingTicks > 0)
@@ -692,20 +704,15 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
               PostQuitMessage(0);
               break;
             }
-
-            f64 SecondsSinceFrameStart = Win32DeltaSeconds(&Clock, Win32Now(), FrameStartTime);
-            if (SecondsSinceFrameStart >= FrameTargetDuration)
-              break;
           }
-
-          Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
-          Win32Present(Window.Handle, &Window.FrontBuffer);
         }
 
-        LastFrameDuration = Win32DeltaSeconds(&Clock, Win32Now(), FrameStartTime);
+        Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
+        Win32Present(Window.Handle, &Window.FrontBuffer);
+
+        EndOfLastFrame = Win32Now();
       }
 
-      // PostQuitMessage(0);
       while(true)
       {
         Win32MessagePump(&Window);
