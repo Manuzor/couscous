@@ -1756,7 +1756,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
   }
 
   MTB_INTERNAL_CODE({
-    assembler_code Disassembly = DisassembleInstruction(Instruction);
+    text Disassembly = DisassembleInstruction(Instruction);
     printf("%*s: Invalid instruction to execute.\n", (int)Disassembly.Size, &Disassembly.Data[0]);
   });
 }
@@ -1780,66 +1780,92 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
 }
 
 #if COUSCOUS_ASSEMBLER
-  static instruction
-  AssembleInstruction(assembler_code Code)
+  static void
+  ToUpper(int Size, char* String)
   {
-    // Assume we are parsing "ABC D, E, F"
-    instruction Result{};
-
-    // Make it all uppercase.
-    for (size_t CharIndex = 0; CharIndex < Code.Size; ++CharIndex)
+    for (int Index = 0;
+      Index < Size;
+      ++Index)
     {
-      char Char = Code.Data[CharIndex];
-      if (Char >= 'a' && Char <= 'z')
-        Char -= 0x20;
-      Code.Data[CharIndex] = Char;
+      if (String[Index] >= 'a' && String[Index] <= 'z')
+      {
+        char Offset = String[Index] - 'a';
+        String[Index] = 'A' + Offset;
+      }
     }
+  }
+
+  static assembler_tokens
+  Tokenize(text Code)
+  {
+    assembler_tokens Result{};
 
     char* Current = Code.Data;
     char* OnePastLast = Current + Code.Size;
+    char* TokenStart = Current;
 
-    // Skip whitespace
-    while(Current < OnePastLast && mtb_IsWhitespace(*Current))
-      ++Current;
-
-    // Parse "ABC"
-    char* NameStart = Current;
-    while(Current < OnePastLast && !mtb_IsWhitespace(*Current))
-      ++Current;
-    char* NameOnePastLast = Current;
-
-    Result.Type = MakeInstructionTypeFromString(NameOnePastLast - NameStart, NameStart);
-
-    int CurrentArgumentPos = 0;
-    while(true)
+    while (Current < OnePastLast)
     {
       // Skip whitespace
-      while(Current < OnePastLast && mtb_IsWhitespace(*Current))
+      while (Current < OnePastLast && mtb_IsWhitespace(Current[0]))
         ++Current;
 
-      // Parse "D", then "E", then "F"
-      char* ArgumentStart = Current;
-      while(Current < OnePastLast && !mtb_IsWhitespace(*Current) && *Current != ',')
-        ++Current;
-      char* ArgumentOnePastLast = Current;
-      Result.Args[CurrentArgumentPos] = MakeArgumentFromString(ArgumentOnePastLast - ArgumentStart, ArgumentStart);
+      TokenStart = Current;
 
-      if(Current == OnePastLast)
-        break;
-
-      if(*Current == ',')
+      // Search for whitespace or a comma.
+      while (Current < OnePastLast && !mtb_IsWhitespace(Current[0]) && Current[0] != ',')
         ++Current;
 
-      ++CurrentArgumentPos;
+      token* Token = Result.Tokens + Result.NumTokens++;
+      Token->Size = (int)(Current - TokenStart);
+      mtb_CopyBytes(Token->Size, Token->Data, TokenStart);
+
+      *Token = Trim(*Token);
+      ToUpper(Token->Size, Token->Data);
+
+      // Skip the current whitespace or comma.
+      ++Current;
     }
 
     return Result;
   }
 
-  static assembler_code
+  static instruction
+  AssembleInstruction(text Code)
+  {
+    assembler_tokens Tokens = Tokenize(Code);
+    instruction Result = AssembleInstruction(Tokens);
+
+    return Result;
+  }
+
+  static instruction
+  AssembleInstruction(assembler_tokens Tokens)
+  {
+    instruction Result{};
+
+    if (Tokens.NumTokens > 0)
+    {
+      Result.Type = MakeInstructionTypeFromString(Tokens.Tokens[0].Size, Tokens.Tokens[0].Data);
+
+      for (int TokenIndex = 1;
+        TokenIndex < Tokens.NumTokens;
+        ++TokenIndex)
+      {
+        token* Token = Tokens.Tokens + TokenIndex;
+        int ArgumentIndex = TokenIndex - 1;
+        Result.Args[ArgumentIndex] = MakeArgumentFromString(Token->Size, Token->Data);
+
+      }
+    }
+
+    return Result;
+  }
+
+  static text
   DisassembleInstruction(instruction Instruction)
   {
-    assembler_code Result{};
+    text Result{};
     if(Instruction.Type != instruction_type::INVALID)
     {
       char* BufferBegin = &Result.Data[0];
@@ -1883,18 +1909,63 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
 
       MTB_AssertDebug(BufferBegin < BufferOnePastLast);
 
-      Result.Size = BufferBegin - &Result.Data[0];
+      Result.Size = (int)(BufferBegin - &Result.Data[0]);
     }
     else
     {
       u16 RawInstruction = Instruction.Args[0].Value;
       int NumCharsWritten = snprintf(Result.Data, mtb_ArrayLengthOf(Result.Data), "<0x%04X>", RawInstruction);
       MTB_AssertDebug(NumCharsWritten == 3 + 4 + 1);
-      Result.Size = (size_t)NumCharsWritten;
+      Result.Size = NumCharsWritten;
     }
 
     return Result;
   }
+
+  template<typename T>
+  T
+  _TrimStringlike(T Text)
+  {
+    int Front = 0;
+    for (size_t Index = 0; Index < Text.Size; ++Index)
+    {
+      if (!mtb_IsWhitespace(Text.Data[Index]))
+        break;
+
+      ++Front;
+    }
+
+    int Back = 0;
+    for (size_t IndexPlusOne = Text.Size; IndexPlusOne > 0; --IndexPlusOne)
+    {
+      size_t Index = IndexPlusOne - 1;
+      if (!mtb_IsWhitespace(Text.Data[Index]))
+        break;
+
+      ++Back;
+    }
+
+    T Result{};
+    if (Front > 0 || Back > 0)
+    {
+      int NewLength = Text.Size - Front - Back;
+      if (Result.Size > 0)
+      {
+        Result.Size = NewLength;
+        mtb_CopyBytes(NewLength, Result.Data, Text.Data + Front);
+      }
+    }
+    else
+    {
+      Result = Text;
+    }
+
+    return Result;
+  }
+
+  static text Trim(text Text) { return _TrimStringlike(Text); }
+  static token Trim(token Token) { return _TrimStringlike(Token); }
+
 #endif // COUSCOUS_ASSEMBLER
 
 #if defined(COUSCOUS_TESTS)

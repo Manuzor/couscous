@@ -238,15 +238,39 @@ IsKeyDown(machine* M, char Key);
 
 
 #if COUSCOUS_ASSEMBLER
-  struct assembler_code
+  struct text
   {
-    size_t Size;
+    int Size;
+    char Data[128];
+  };
+
+  struct token
+  {
+    int Size;
     char Data[32];
   };
 
-  static instruction
-  AssembleInstruction(assembler_code Code);
+  struct assembler_tokens
+  {
+    int NumTokens;
+    token Tokens[4];
+  };
 
-  static assembler_code
+  static assembler_tokens
+  Tokenize(text Code);
+
+  static instruction
+  AssembleInstruction(text Code);
+
+  static instruction
+  AssembleInstruction(assembler_tokens Tokens);
+
+  static text
   DisassembleInstruction(instruction Instruction);
+
+  static text
+  Trim(text Text);
+
+  static token
+  Trim(token Token);
 #endif // COUSCOUS_ASSEMBLER

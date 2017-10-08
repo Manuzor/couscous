@@ -93,11 +93,11 @@ struct instruction_array
 };
 
 void
-Add(instruction_array* Array, instruction Instruction)
+Add(instruction_array* Array, instruction Item)
 {
   raw_array Raw = ToRawArray(Array);
   instruction* Free = (instruction*)Add(&Raw);
-  *Free = Instruction;
+  *Free = Item;
   *Array = FromRawArray<instruction_array>(&Raw);
 }
 
@@ -117,58 +117,113 @@ Deallocate(instruction_array* Array)
   *Array = {};
 }
 
-struct text
+struct label
 {
-  int Length;
-  char Data[128];
+  text Text;
+  int InstructionIndex;
 };
 
-text
-Trim(text Text)
+struct label_array
 {
-  int Front = 0;
-  for (size_t Index = 0; Index < Text.Length; ++Index)
+  int NumElements;
+  int Capacity;
+  label* Data;
+};
+
+void
+Add(label_array* Array, label Item)
+{
+  raw_array Raw = ToRawArray(Array);
+  label* Free = (label*)Add(&Raw);
+  *Free = Item;
+  *Array = FromRawArray<label_array>(&Raw);
+}
+
+label*
+At(label_array* Array, int Index)
+{
+  MTB_AssertDebug(Index >= 0);
+  MTB_AssertDebug(Index < Array->NumElements);
+  return Array->Data + Index;
+}
+
+void
+Deallocate(label_array* Array)
+{
+  raw_array Raw = ToRawArray(Array);
+  Deallocate(&Raw);
+  *Array = {};
+}
+
+struct patch
+{
+  token LabelName;
+  int InstructionIndex;
+  int ArgumentIndex;
+};
+
+struct patch_array
+{
+  int NumElements;
+  int Capacity;
+  patch* Data;
+};
+
+void
+Add(patch_array* Array, patch Item)
+{
+  raw_array Raw = ToRawArray(Array);
+  patch* Free = (patch*)Add(&Raw);
+  *Free = Item;
+  *Array = FromRawArray<patch_array>(&Raw);
+}
+
+patch*
+At(patch_array* Array, int Index)
+{
+  MTB_AssertDebug(Index >= 0);
+  MTB_AssertDebug(Index < Array->NumElements);
+  return Array->Data + Index;
+}
+
+void
+Deallocate(patch_array* Array)
+{
+  raw_array Raw = ToRawArray(Array);
+  Deallocate(&Raw);
+  *Array = {};
+}
+
+static char*
+SkipWhitespaceAndComments(char* Begin, char* End)
+{
+  while (true)
   {
-    if (mtb_IsWhitespace(Text.Data[Index]))
+    while (Begin < End && mtb_IsWhitespace(Begin[0]))
+      ++Begin;
+
+    // Comments
+    if (Begin < End && Begin[0] == '#')
     {
-      ++Front;
+      while (Begin < End && Begin[0] != '\n')
+        ++Begin;
+
+      continue;
     }
-    else
-    {
-      break;
-    }
+
+    break;
   }
 
-  int Back = 0;
-  for (size_t IndexPlusOne = Text.Length; IndexPlusOne > 0; --IndexPlusOne)
-  {
-    size_t Index = IndexPlusOne - 1;
-    if (mtb_IsWhitespace(Text.Data[Index]))
-    {
-      ++Back;
-    }
-    else
-    {
-      break;
-    }
-  }
+  return Begin;
+}
 
-  text Result{};
-  if (Front > 0 || Back > 0)
-  {
-    int NewLength = Text.Length - Front - Back;
-    if (Result.Length > 0)
-    {
-      Result.Length = NewLength;
-      mtb_CopyBytes(NewLength, Result.Data, Text.Data + Front);
-    }
-  }
-  else
-  {
-    Result = Text;
-  }
+static char*
+ParseLine(char* Begin, char* End)
+{
+  while (Begin < End && Begin[0] != '\n' && Begin[0] != '#')
+    ++Begin;
 
-  return Result;
+  return Begin;
 }
 
 static void
@@ -299,62 +354,119 @@ int main(int NumArgs, char const* Args[])
       instruction_array Instructions{};
       MTB_DEFER[&]{ Deallocate(&Instructions); };
 
-      assembler_code Test{};
-      Test.Size = 4;
-      instruction Foo = AssembleInstruction(Test);
+      label_array Labels{};
+      MTB_DEFER[&]{ Deallocate(&Labels); };
+
+      patch_array Patches{};
+      MTB_DEFER[&]{ Deallocate(&Patches); };
 
       while(true)
       {
+        Current = SkipWhitespaceAndComments(Current, ContentsOnePastLast);
+        if (Current >= ContentsOnePastLast)
+          goto EndOfContentParsing;
+
         char* LineStart = Current;
-        while (Current[0] != '\n' && Current[0] != '#')
-        {
-          ++Current;
-            if (Current >= ContentsOnePastLast)
-              goto EndOfContentParsing;
-        }
 
-        char* LineOnePastLast = Current;
-
-        if (Current[0] == '\n')
-        {
-          ++Current;
-        }
-        else if (Current[0] == '#')
-        {
-          // Skip comments.
-          while (Current[0] != '\n')
-          {
-            ++Current;
-            if (Current >= ContentsOnePastLast)
-              goto EndOfContentParsing;
-          }
-        }
-        else
-        {
-          MTB_Fail("Unknown character.");
-        }
+        Current = ParseLine(Current, ContentsOnePastLast);
 
         text Text{};
-        Text.Length = (int)(LineOnePastLast - LineStart);
-        mtb_CopyBytes(Text.Length, Text.Data, LineStart);
+        Text.Size = (int)(Current - LineStart);
+        mtb_CopyBytes(Text.Size, Text.Data, LineStart);
         Text = Trim(Text);
 
-        if (Text.Data[Text.Length - 1] == ':')
+        if (Text.Data[Text.Size - 1] == ':')
         {
           // We found a label!
-          // TODO: Continue here!
+          label Label{};
+          // Copy without the trailing colon
+          Label.Text.Size = Text.Size - 1;
+          mtb_CopyBytes(Label.Text.Size, Label.Text.Data, Text.Data);
+          Label.InstructionIndex = Instructions.NumElements;
+
+          Add(&Labels, Label);
         }
-        else if(Text.Length <= 32)
+        else if (Text.Size <= 32)
         {
-          assembler_code Code{};
-          Code.Size = Text.Length;
+          text Code{};
+          Code.Size = Text.Size;
           mtb_CopyBytes(Code.Size, Code.Data, Text.Data);
 
-          instruction Instruction = AssembleInstruction(Code);
+          assembler_tokens Tokens = Tokenize(Code);
+          instruction Instruction = AssembleInstruction(Tokens);
+
+          patch Patch{};
+          Patch.InstructionIndex = Instructions.NumElements;
+          switch (Instruction.Type)
+          {
+            case instruction_type::JP:
+            {
+              if (Instruction.Args[0].Type == argument_type::NONE && Instruction.Args[0].Type == argument_type::NONE)
+              {
+                Patch.LabelName = Tokens.Tokens[1];
+                Patch.ArgumentIndex = 0;
+              }
+              else if (Instruction.Args[1].Type == argument_type::NONE)
+              {
+                Patch.LabelName = Tokens.Tokens[2];
+                Patch.ArgumentIndex = 1;
+              }
+
+              break;
+            }
+
+            case instruction_type::CALL:
+            {
+              if (Instruction.Args[0].Type == argument_type::NONE)
+              {
+                Patch.LabelName = Tokens.Tokens[1];
+                Patch.ArgumentIndex = 0;
+              }
+
+              break;
+            }
+          }
+
+          if (Patch.LabelName.Size)
+            Add(&Patches, Patch);
+
           Add(&Instructions, Instruction);
         }
       }
       EndOfContentParsing:
+
+      // Apply patches
+      for (int PatchIndex = 0;
+        PatchIndex < Patches.NumElements;
+        ++PatchIndex)
+      {
+        patch* Patch = Patches.Data + PatchIndex;
+
+        bool Found = false;
+        for (int LabelIndex = 0;
+          LabelIndex < Labels.NumElements;
+          ++LabelIndex)
+        {
+          label* Label = Labels.Data + LabelIndex;
+          if (mtb_StringsAreEqual(Label->Text.Size, Label->Text.Data, Patch->LabelName.Size, Patch->LabelName.Data))
+          {
+            instruction* Instruction = At(&Instructions, Patch->InstructionIndex);
+            argument* Argument = Instruction->Args + Patch->ArgumentIndex;
+
+            u16 PC = 0x200 + (u16)Label->InstructionIndex * 2;
+            Argument->Type = argument_type::CONSTANT;
+            Argument->Value = PC;
+
+            Found = true;
+            break;
+          }
+        }
+
+        if (!Found)
+        {
+          // TODO: Diagnostics?
+        }
+      }
 
       for (int InstructionIndex = 0;
         InstructionIndex < Instructions.NumElements;
@@ -380,7 +492,7 @@ int main(int NumArgs, char const* Args[])
         MTB_AssertDebug(Current <= ContentsOnePastLast);
 
         instruction Instruction = DecodeInstruction(Decoder);
-        assembler_code Code = DisassembleInstruction(Instruction);
+        text Code = DisassembleInstruction(Instruction);
         fprintf(OutFile, "%*s\n", (int)Code.Size, Code.Data);
       }
     }
