@@ -5,155 +5,13 @@
 
 #define COUSCOUS_ASSEMBLER 1
 #include "couscous.h"
-#include "couscous.cpp"
-
-struct raw_array
-{
-  int ElementSize;
-  int NumElements;
-  int Capacity;
-  void* Data;
-};
-
-void
-Deallocate(raw_array* Array)
-{
-  if (Array->Data)
-  {
-    free(Array->Data);
-  }
-
-  *Array = {};
-}
-
-void*
-Add(raw_array* Array, int NumToAdd = 1)
-{
-  MTB_AssertDebug(NumToAdd > 0);
-  int RequiredCapacity = Array->NumElements + NumToAdd;
-  if (RequiredCapacity > Array->Capacity)
-  {
-    int NewCapacity = 32;
-
-    if (Array->Capacity > 0)
-      NewCapacity = Array->Capacity;
-
-    while (NewCapacity < RequiredCapacity)
-      NewCapacity *= 2;
-
-    void* OldData = Array->Data;
-    void* NewData = (instruction*)malloc(NewCapacity * Array->ElementSize);
-
-    if (OldData)
-    {
-      mtb_CopyBytes(Array->NumElements * Array->ElementSize, NewData, OldData);
-      free(OldData);
-    }
-
-    Array->Data = NewData;
-    Array->Capacity = NewCapacity;
-  }
-
-  void* Result = ((u8*)Array->Data) + Array->NumElements * Array->ElementSize;
-  Array->NumElements += NumToAdd;
-
-  return Result;
-}
-
-template<typename T>
-raw_array
-ToRawArray(T* Array)
-{
-  raw_array Result{};
-  Result.ElementSize = sizeof((*Array->Data));
-  Result.NumElements = Array->NumElements;
-  Result.Capacity = Array->Capacity;
-  Result.Data = Array->Data;
-
-  return Result;
-}
-
-template<typename T>
-T
-FromRawArray(raw_array* Array)
-{
-  T Result{};
-  Result.NumElements = Array->NumElements;
-  Result.Capacity = Array->Capacity;
-  Result.Data = (decltype(Result.Data))Array->Data;
-
-  return Result;
-}
-
-struct instruction_array
-{
-  int NumElements;
-  int Capacity;
-  instruction* Data;
-};
-
-void
-Add(instruction_array* Array, instruction Item)
-{
-  raw_array Raw = ToRawArray(Array);
-  instruction* Free = (instruction*)Add(&Raw);
-  *Free = Item;
-  *Array = FromRawArray<instruction_array>(&Raw);
-}
-
-instruction*
-At(instruction_array* Array, int Index)
-{
-  MTB_AssertDebug(Index >= 0);
-  MTB_AssertDebug(Index < Array->NumElements);
-  return Array->Data + Index;
-}
-
-void
-Deallocate(instruction_array* Array)
-{
-  raw_array Raw = ToRawArray(Array);
-  Deallocate(&Raw);
-  *Array = {};
-}
+#include "_generated/arrays.h"
 
 struct label
 {
   text Text;
   int InstructionIndex;
 };
-
-struct label_array
-{
-  int NumElements;
-  int Capacity;
-  label* Data;
-};
-
-void
-Add(label_array* Array, label Item)
-{
-  raw_array Raw = ToRawArray(Array);
-  label* Free = (label*)Add(&Raw);
-  *Free = Item;
-  *Array = FromRawArray<label_array>(&Raw);
-}
-
-label*
-At(label_array* Array, int Index)
-{
-  MTB_AssertDebug(Index >= 0);
-  MTB_AssertDebug(Index < Array->NumElements);
-  return Array->Data + Index;
-}
-
-void
-Deallocate(label_array* Array)
-{
-  raw_array Raw = ToRawArray(Array);
-  Deallocate(&Raw);
-  *Array = {};
-}
 
 struct patch
 {
@@ -162,37 +20,8 @@ struct patch
   int ArgumentIndex;
 };
 
-struct patch_array
-{
-  int NumElements;
-  int Capacity;
-  patch* Data;
-};
-
-void
-Add(patch_array* Array, patch Item)
-{
-  raw_array Raw = ToRawArray(Array);
-  patch* Free = (patch*)Add(&Raw);
-  *Free = Item;
-  *Array = FromRawArray<patch_array>(&Raw);
-}
-
-patch*
-At(patch_array* Array, int Index)
-{
-  MTB_AssertDebug(Index >= 0);
-  MTB_AssertDebug(Index < Array->NumElements);
-  return Array->Data + Index;
-}
-
-void
-Deallocate(patch_array* Array)
-{
-  raw_array Raw = ToRawArray(Array);
-  Deallocate(&Raw);
-  *Array = {};
-}
+#include "couscous.cpp"
+#include "_generated/arrays.cpp"
 
 static char*
 SkipWhitespaceAndComments(char* Begin, char* End)
@@ -384,7 +213,7 @@ int main(int NumArgs, char const* Args[])
           mtb_CopyBytes(Label.Text.Size, Label.Text.Data, Text.Data);
           Label.InstructionIndex = Instructions.NumElements;
 
-          Add(&Labels, Label);
+          *Add(&Labels) = Label;
         }
         else if (Text.Size <= 32)
         {
@@ -428,9 +257,9 @@ int main(int NumArgs, char const* Args[])
           }
 
           if (Patch.LabelName.Size)
-            Add(&Patches, Patch);
+            *Add(&Patches) = Patch;
 
-          Add(&Instructions, Instruction);
+          *Add(&Instructions) = Instruction;
         }
       }
       EndOfContentParsing:
@@ -468,15 +297,19 @@ int main(int NumArgs, char const* Args[])
         }
       }
 
+      u16_array ByteCode{};
+      MTB_DEFER[&]{ Deallocate(&ByteCode); };
+
       for (int InstructionIndex = 0;
         InstructionIndex < Instructions.NumElements;
         ++InstructionIndex)
       {
         instruction* Instruction = At(&Instructions, InstructionIndex);
         u16 EncodedInstruction = EncodeInstruction(*Instruction);
-        MTB_DEBUG_CODE(int NumPrintedChars =) fprintf(OutFile, "%04X", EncodedInstruction);
-        MTB_AssertDebug(NumPrintedChars == 4);
+        WriteWord(Add(&ByteCode), EncodedInstruction);
       }
+
+      fwrite(ByteCode.Data, ByteCode.NumElements * sizeof(*ByteCode.Data), 1, OutFile);
     }
     else
     {
