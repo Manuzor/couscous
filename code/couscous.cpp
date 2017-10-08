@@ -1949,10 +1949,10 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
     if (Front > 0 || Back > 0)
     {
       int NewLength = Text.Size - Front - Back;
-      if (Result.Size > 0)
+      if (NewLength > 0)
       {
         Result.Size = NewLength;
-        mtb_CopyBytes(NewLength, Result.Data, Text.Data + Front);
+        mtb_CopyBytes(Result.Size, Result.Data, Text.Data + Front);
       }
     }
     else
