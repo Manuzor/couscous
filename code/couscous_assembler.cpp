@@ -5,23 +5,13 @@
 
 #define COUSCOUS_ASSEMBLER 1
 #include "couscous.h"
-#include "_generated/arrays.h"
-
-struct label
-{
-  text Text;
-  int InstructionIndex;
-};
-
-struct patch
-{
-  token LabelName;
-  int InstructionIndex;
-  int ArgumentIndex;
-};
+#include "_generated/instruction_array.h"
+#include "_generated/label_array.h"
+#include "_generated/patch_array.h"
+#include "_generated/u16_array.h"
 
 #include "couscous.cpp"
-#include "_generated/arrays.cpp"
+#include "_generated/all_generated.cpp"
 
 static char*
 SkipWhitespaceAndComments(char* Begin, char* End)
@@ -157,18 +147,17 @@ int main(int NumArgs, char const* Args[])
   //
   char* ContentsBegin = nullptr;
   char* ContentsOnePastLast = nullptr;
-  {
-    FILE* InFile = fopen(Files[0], "rb");
-    fseek(InFile, 0, SEEK_END);
-    int InFileSize = ftell(InFile);
-    fseek(InFile, 0, SEEK_SET);
 
-    ContentsBegin = (char*)malloc(InFileSize);
-    ContentsOnePastLast = ContentsBegin + InFileSize;
-    fread(ContentsBegin, InFileSize, 1, InFile);
+  FILE* InFile = fopen(Files[0], "rb");
+  fseek(InFile, 0, SEEK_END);
+  int InFileSize = ftell(InFile);
+  fseek(InFile, 0, SEEK_SET);
 
-    fclose(InFile);
-  }
+  ContentsBegin = (char*)malloc(InFileSize);
+  ContentsOnePastLast = ContentsBegin + InFileSize;
+  fread(ContentsBegin, InFileSize, 1, InFile);
+
+  fclose(InFile);
 
   {
     FILE* OutFile = nullptr;
@@ -311,10 +300,8 @@ int main(int NumArgs, char const* Args[])
 
       fwrite(ByteCode.Data, ByteCode.NumElements * sizeof(*ByteCode.Data), 1, OutFile);
     }
-    else
+    else if(Mode == commandline_mode::Disassemble)
     {
-      MTB_AssertDebug(Mode == commandline_mode::Disassemble);
-
       while(Current < ContentsOnePastLast)
       {
         instruction_decoder Decoder{};
@@ -326,8 +313,12 @@ int main(int NumArgs, char const* Args[])
 
         instruction Instruction = DecodeInstruction(Decoder);
         text Code = DisassembleInstruction(Instruction);
-        fprintf(OutFile, "%*s\n", (int)Code.Size, Code.Data);
+        fprintf(OutFile, "%*s\n", Code.Size, Code.Data);
       }
+    }
+    else
+    {
+      MTB_INVALID_CODE_PATH;
     }
 
     if(OutFile != stdout)

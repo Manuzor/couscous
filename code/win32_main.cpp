@@ -8,7 +8,10 @@
 #endif
 
 #include "couscous.h"
+
 #include "couscous.cpp"
+#include "_generated/text.cpp"
+#include "_generated/token.cpp"
 
 #include <Windows.h>
 

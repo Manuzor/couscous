@@ -65,6 +65,20 @@ MakeArgumentTypeFromString(size_t CodeLen, char const* Code)
 //
 // argument
 //
+static char
+ToHexChar(u16 Value)
+{
+  MTB_AssertDebug(Value <= 0xF);
+
+  char Result;
+  if (Value < 10)
+    Result = '0' + (char)Value;
+  else
+    Result = 'A' + (char)(Value - 10);
+
+  return Result;
+}
+
 size_t
 GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
 {
@@ -142,27 +156,18 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
 
     case argument_type::CONSTANT:
     {
-      Buffer[0] = '0';
-      Buffer[1] = 'x';
-
-      if(Argument.Value < 10)
+      if(Argument.Value <= 0xFFF)
       {
-        Buffer[2] = '0' + (char)Argument.Value;
-        Result = 3;
-      }
-      else if(Argument.Value < 100)
-      {
-        Buffer[2] = '0' + (char)(Argument.Value % 10);
-        Buffer[3] = '0' + (char)(Argument.Value / 10);
-        Result = 4;
+        Buffer[0] = '0';
+        Buffer[1] = 'x';
+        Buffer[2] = ToHexChar((Argument.Value >> 8) & 0xF);
+        Buffer[3] = ToHexChar((Argument.Value >> 4) & 0xF);
+        Buffer[4] = ToHexChar((Argument.Value >> 0) & 0xF);
+        Result = 5;
       }
       else
       {
-        MTB_AssertDebug(Argument.Value < 1000);
-        Buffer[2] = '0' + (char)(Argument.Value % 10);
-        Buffer[3] = '0' + (char)((Argument.Value / 10) % 10);
-        Buffer[4] = '0' + (char)((Argument.Value / 10) / 10);
-        Result = 5;
+        MTB_INVALID_CODE_PATH;
       }
     } break;
 
@@ -188,6 +193,7 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
       {
         if (CodeLen == 2)
         {
+          Result.Type = argument_type::V;
           switch (Code[1])
           {
             case '0': Result.Value = 0x0; break;
@@ -258,7 +264,7 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
       {
         if (CodeLen == 3)
         {
-          if (mtb_StringsAreEqual(CodeLen, "[I]", Code))
+          if (mtb_StringsAreEqual(3, "[I]", 3, Code))
             Result.Type = argument_type::ATI;
         }
         break;
@@ -1830,6 +1836,35 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
     return Result;
   }
 
+
+  static text
+  Detokenize(assembler_tokens Tokens)
+  {
+    text Result{};
+
+    char* Separator = "";
+
+    for (int TokenIndex = 0;
+      TokenIndex < Tokens.NumTokens;
+      ++TokenIndex)
+    {
+      Append(&Result, Separator);
+      Separator = " ";
+
+      if (Result.Size >= mtb_ArrayLengthOf(Result.Data))
+        break;
+
+      token* Token = Tokens.Tokens + TokenIndex;
+
+      Append(&Result, Token->Size, Token->Data);
+
+      if (Result.Size >= mtb_ArrayLengthOf(Result.Data))
+        break;
+    }
+
+    return Result;
+  }
+
   static instruction
   AssembleInstruction(text Code)
   {
@@ -1865,107 +1900,43 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
   static text
   DisassembleInstruction(instruction Instruction)
   {
-    text Result{};
-    if(Instruction.Type != instruction_type::INVALID)
+    assembler_tokens Tokens = DisassembleInstructionTokens(Instruction);
+    text Result = Detokenize(Tokens);
+
+    return Result;
+  }
+
+  static assembler_tokens
+  DisassembleInstructionTokens(instruction Instruction)
+  {
+    assembler_tokens Result{};
+    if (Instruction.Type != instruction_type::INVALID)
     {
-      char* BufferBegin = &Result.Data[0];
-      char* BufferOnePastLast = BufferBegin + mtb_ArrayLengthOf(Result.Data);
-
-      MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-      BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", GetInstructionTypeAsString(Instruction.Type));
-
-      char const* Joiner = " ";
-      for(argument& Arg : Instruction.Args)
       {
-        if(Arg.Type == argument_type::NONE)
-          break;
-
-        MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-        BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "%s", Joiner);
-        Joiner = ", ";
-
-        MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-        switch(Arg.Type)
-        {
-          case argument_type::V: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "V%X", Arg.Value); break; }
-
-          case argument_type::CONSTANT: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "0x%X", Arg.Value); break; }
-
-          case argument_type::I: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "I");   break; }
-          case argument_type::DT: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "DT");  break; }
-          case argument_type::ST: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "ST");  break; }
-          case argument_type::K: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "K");   break; }
-          case argument_type::F: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "F");   break; }
-          case argument_type::B: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "B");   break; }
-          case argument_type::ATI: { BufferBegin += snprintf(BufferBegin, BufferOnePastLast - BufferBegin, "[I]"); break; }
-
-          default:
-          {
-            MTB_INVALID_CODE_PATH;
-            break;
-          }
-        }
+        char const* TypeString = GetInstructionTypeAsString(Instruction.Type);
+        token* Token = Result.Tokens + Result.NumTokens++;
+        Append(Token, TypeString);
       }
 
-      MTB_AssertDebug(BufferBegin < BufferOnePastLast);
-
-      Result.Size = (int)(BufferBegin - &Result.Data[0]);
+      for (int ArgIndex = 0;
+        ArgIndex < mtb_ArrayLengthOf(Instruction.Args) && Instruction.Args[ArgIndex].Type != argument_type::NONE;
+        ++ArgIndex)
+      {
+        token* Token = Result.Tokens + Result.NumTokens++;
+        Token->Size = (int)GetArgumentAsString(Instruction.Args[ArgIndex], mtb_ArrayLengthOf(Token->Data), (u8*)Token->Data);
+      }
     }
     else
     {
       u16 RawInstruction = Instruction.Args[0].Value;
-      int NumCharsWritten = snprintf(Result.Data, mtb_ArrayLengthOf(Result.Data), "<0x%04X>", RawInstruction);
+      token* Token = Result.Tokens + Result.NumTokens++;
+      int NumCharsWritten = snprintf(Token->Data, mtb_ArrayLengthOf(Token->Data), "<0x%04X>", RawInstruction);
       MTB_AssertDebug(NumCharsWritten == 3 + 4 + 1);
-      Result.Size = NumCharsWritten;
+      Token->Size = NumCharsWritten;
     }
 
     return Result;
   }
-
-  template<typename T>
-  T
-  _TrimStringlike(T Text)
-  {
-    int Front = 0;
-    for (size_t Index = 0; Index < Text.Size; ++Index)
-    {
-      if (!mtb_IsWhitespace(Text.Data[Index]))
-        break;
-
-      ++Front;
-    }
-
-    int Back = 0;
-    for (size_t IndexPlusOne = Text.Size; IndexPlusOne > 0; --IndexPlusOne)
-    {
-      size_t Index = IndexPlusOne - 1;
-      if (!mtb_IsWhitespace(Text.Data[Index]))
-        break;
-
-      ++Back;
-    }
-
-    T Result{};
-    if (Front > 0 || Back > 0)
-    {
-      int NewLength = Text.Size - Front - Back;
-      if (NewLength > 0)
-      {
-        Result.Size = NewLength;
-        mtb_CopyBytes(Result.Size, Result.Data, Text.Data + Front);
-      }
-    }
-    else
-    {
-      Result = Text;
-    }
-
-    return Result;
-  }
-
-  static text Trim(text Text) { return _TrimStringlike(Text); }
-  static token Trim(token Token) { return _TrimStringlike(Token); }
-
 #endif // COUSCOUS_ASSEMBLER
 
 #if defined(COUSCOUS_TESTS)

@@ -238,16 +238,20 @@ IsKeyDown(machine* M, char Key);
 
 
 #if COUSCOUS_ASSEMBLER
-  struct text
+  #include "_generated/text.h"
+  #include "_generated/token.h"
+
+  struct label
   {
-    int Size;
-    char Data[128];
+    text Text;
+    int InstructionIndex;
   };
 
-  struct token
+  struct patch
   {
-    int Size;
-    char Data[32];
+    token LabelName;
+    int InstructionIndex;
+    int ArgumentIndex;
   };
 
   struct assembler_tokens
@@ -259,18 +263,18 @@ IsKeyDown(machine* M, char Key);
   static assembler_tokens
   Tokenize(text Code);
 
+  static text
+  Detokenize(assembler_tokens Tokens);
+
   static instruction
   AssembleInstruction(text Code);
 
   static instruction
   AssembleInstruction(assembler_tokens Tokens);
 
+  static assembler_tokens
+  DisassembleInstructionTokens(instruction Instruction);
+
   static text
   DisassembleInstruction(instruction Instruction);
-
-  static text
-  Trim(text Text);
-
-  static token
-  Trim(token Token);
 #endif // COUSCOUS_ASSEMBLER

@@ -2,10 +2,21 @@ param(
   [string]$RepoRoot = "$PSScriptRoot/..",
   [string]$OutDir = "$RepoRoot/code/_generated",
   [string]$StaticFunctions = $true
-  )
+)
+
+$ErrorActionPreference = "Stop"
 
 $OutDir = mkdir -Force $OutDir
 
+$UmbrellaHeaderIncludes = @()
+$UmbrellaIncludes = @()
+
+$FunctionQualifiers = "$(if($StaticFunctions) { "static " })"
+$DateStamp = Get-Date -f "yyyy-MM-dd HH:mm:ss"
+
+#
+# Arrays
+#
 $Arrays = @(
   @{ Name = "instruction_array"; Type = "instruction"; ForwardDeclareType = $true };
   @{ Name = "label_array"; Type = "label"; ForwardDeclareType = $true };
@@ -13,14 +24,12 @@ $Arrays = @(
   @{ Name = "u16_array"; Type = "u16"; ForwardDeclareType = $false };
 )
 
-$ArraysUmbrellaHeaderIncludes = @()
-$ArraysUmbrellaIncludes = @()
-
-$FunctionQualifiers = "$(if($StaticFunctions) { "static " })"
-
 foreach($Array in $Arrays)
 {
   $HeaderContent = @"
+// Generated on $DateStamp
+#pragma once
+
 $(if($Array.ForwardDeclareType) { "struct $($Array.Type);" })
 
 struct $($Array.Name)
@@ -43,10 +52,12 @@ ${FunctionQualifiers}void
 Deallocate($($Array.Name)* Array);
 "@
   $HeaderFilePath = "$OutDir/$($Array.Name).h"
-  $ArraysUmbrellaHeaderIncludes += $HeaderFilePath
+  $UmbrellaHeaderIncludes += $HeaderFilePath
   Set-Content $HeaderFilePath $HeaderContent
 
   $Content = @"
+// Generated on $DateStamp
+
 ${FunctionQualifiers}void
 Reserve($($Array.Name)* Array, int RequiredCapacity)
 {
@@ -103,20 +114,127 @@ Deallocate($($Array.Name)* Array)
 }
 "@
   $FilePath = "$OutDir/$($Array.Name).cpp"
-  $ArraysUmbrellaIncludes += $FilePath
+  $UmbrellaIncludes += $FilePath
   Set-Content $FilePath $Content
 }
 
-$ArraysUmbrellaBaseFilePath = "$OutDir/arrays"
+#
+# TextTypes
+#
+$TextTypes = @(
+  @{ Name = "text"; FixedCapacity = "128" };
+  @{ Name = "token"; FixedCapacity = "128" };
+)
 
-$ArraysUmbrellaHeaderContent = @"
-// Generated on $(Get-Date -f "yyyy-MM-dd HH:mm:ss")
-$($ArraysUmbrellaHeaderIncludes | % { "#include <$_>`n" })
-"@
-Set-Content "$ArraysUmbrellaBaseFilePath.h" $ArraysUmbrellaHeaderContent
+foreach($Text in $TextTypes)
+{
+  $HeaderContent = @"
+// Generated on $DateStamp
+#pragma once
 
-$ArraysUmbrellaContent = @"
-// Generated on $(Get-Date -f "yyyy-MM-dd HH:mm:ss")
-$($ArraysUmbrellaIncludes | % { "#include <$_>`n" })
+struct $($Text.Name)
+{
+  int Size;
+  char Data[$($Text.FixedCapacity)];
+};
+
+${FunctionQualifiers}$($Text.Name)
+Trim($($Text.Name) Text);
+
+${FunctionQualifiers}int
+Append($($Text.Name)* Text, char const* String);
+
+${FunctionQualifiers}int
+Append($($Text.Name)* Text, size_t StringLength, char const* String);
 "@
-Set-Content "$ArraysUmbrellaBaseFilePath.cpp" $ArraysUmbrellaContent
+  $HeaderFilePath = "$OutDir/$($Text.Name).h"
+  $UmbrellaHeaderIncludes += $HeaderFilePath
+  Set-Content $HeaderFilePath $HeaderContent
+
+  $Content = @"
+// Generated on $DateStamp
+
+#include "$($Text.Name).h"
+
+$($Text.Name)
+Trim($($Text.Name) Text)
+{
+  int Front = 0;
+  for (size_t Index = 0; Index < Text.Size; ++Index)
+  {
+    if (!mtb_IsWhitespace(Text.Data[Index]))
+      break;
+
+    ++Front;
+  }
+
+  int Back = 0;
+  for (size_t IndexPlusOne = Text.Size; IndexPlusOne > 0; --IndexPlusOne)
+  {
+    size_t Index = IndexPlusOne - 1;
+    if (!mtb_IsWhitespace(Text.Data[Index]))
+      break;
+
+    ++Back;
+  }
+
+  $($Text.Name) Result{};
+  if (Front > 0 || Back > 0)
+  {
+    int NewLength = Text.Size - Front - Back;
+    if (NewLength > 0)
+    {
+      Result.Size = NewLength;
+      mtb_CopyBytes(Result.Size, Result.Data, Text.Data + Front);
+    }
+  }
+  else
+  {
+    Result = Text;
+  }
+
+  return Result;
+}
+
+${FunctionQualifiers}int
+Append($($Text.Name)* Text, char const* String)
+{
+  size_t StringLength = mtb_StringLengthOf(String);
+  return Append(Text, StringLength, String);
+}
+
+${FunctionQualifiers}int
+Append($($Text.Name)* Text, size_t StringLength, char const* String)
+{
+  int NewSize = Text->Size + (int)StringLength;
+  if (NewSize > $($Text.FixedCapacity))
+    NewSize = $($Text.FixedCapacity);
+
+  int NumCopies = NewSize - Text->Size;
+  mtb_CopyBytes(NumCopies, Text->Data + Text->Size, String);
+  Text->Size = NewSize;
+
+  return NumCopies;
+}
+"@
+  $FilePath = "$OutDir/$($Text.Name).cpp"
+  $UmbrellaIncludes += $FilePath
+  Set-Content $FilePath $Content
+}
+
+#
+# Write the umbrella files
+#
+$UmbrellaBaseFilePath = "$OutDir/all_generated"
+
+$UmbrellaHeaderContent = @"
+// Generated on $DateStamp
+$($UmbrellaHeaderIncludes | % { "#include <$_>`n" })
+"@
+Set-Content "$UmbrellaBaseFilePath.h" $UmbrellaHeaderContent
+
+$UmbrellaContent = @"
+// Generated on $DateStamp
+$($UmbrellaIncludes | % { "#include <$_>`n" })
+"@
+Set-Content "$UmbrellaBaseFilePath.cpp" $UmbrellaContent
