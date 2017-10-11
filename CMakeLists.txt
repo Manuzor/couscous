@@ -38,8 +38,10 @@ if(MSVC)
     string(APPEND CMAKE_CXX_FLAGS_RELEASE " /MT")
 endif()
 
+file(GLOB_RECURSE COUSCOUS_CODE_FILES "${CMAKE_SOURCE_DIR}/code/*.*")
+
 # generated_code
-set(GENERATED_CODE_DIR "${CMAKE_BINARY_DIR}/code/_generated/")
+set(GENERATED_CODE_DIR "${CMAKE_SOURCE_DIR}/code/_generated/")
 add_custom_command(OUTPUT "${GENERATED_CODE_DIR}/all_generated.cpp"
                    COMMAND powershell "${CMAKE_SOURCE_DIR}/tools/generate_code.ps1" -RepoRoot "${CMAKE_SOURCE_DIR}" -OutDir "${GENERATED_CODE_DIR}")
 add_custom_target(generate_code
@@ -47,7 +49,7 @@ add_custom_target(generate_code
                   SOURCES "${CMAKE_SOURCE_DIR}/tools/generate_code.ps1")
 
 # couscous
-include_directories("${CMAKE_SOURCE_DIR}/code" ${CMAKE_BINARY_DIR})
+include_directories("${CMAKE_SOURCE_DIR}/code")
 add_executable(couscous WIN32 "${CMAKE_SOURCE_DIR}/code/win32_main.cpp")
 add_dependencies(couscous generate_code)
 if(MSVC)
@@ -55,7 +57,7 @@ if(MSVC)
 endif()
 
 # couscous_assembler
-include_directories("${CMAKE_SOURCE_DIR}/code" ${CMAKE_BINARY_DIR})
+include_directories("${CMAKE_SOURCE_DIR}/code")
 add_executable(couscous_assembler "${CMAKE_SOURCE_DIR}/code/couscous_assembler.cpp")
 add_dependencies(couscous_assembler generate_code)
 if(MSVC)
