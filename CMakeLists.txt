@@ -38,7 +38,10 @@ if(MSVC)
     string(APPEND CMAKE_CXX_FLAGS_RELEASE " /MT")
 endif()
 
-file(GLOB_RECURSE COUSCOUS_CODE_FILES "${CMAKE_SOURCE_DIR}/code/*.*")
+file(GLOB_RECURSE COUSCOUS_CPP_FILES
+     "${CMAKE_SOURCE_DIR}/code/*.h"
+     "${CMAKE_SOURCE_DIR}/code/*.cpp")
+set_source_files_properties(${COUSCOUS_CPP_FILES} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 # generated_code
 set(GENERATED_CODE_DIR "${CMAKE_SOURCE_DIR}/code/_generated/")
@@ -55,6 +58,7 @@ add_dependencies(couscous generate_code)
 if(MSVC)
     set_target_properties(couscous PROPERTIES LINK_FLAGS "/INCREMENTAL:NO")
 endif()
+target_sources(couscous PUBLIC ${COUSCOUS_CPP_FILES})
 
 # couscous_assembler
 include_directories("${CMAKE_SOURCE_DIR}/code")
@@ -63,3 +67,4 @@ add_dependencies(couscous_assembler generate_code)
 if(MSVC)
     set_target_properties(couscous_assembler PROPERTIES LINK_FLAGS "/INCREMENTAL:NO")
 endif()
+target_sources(couscous_assembler PUBLIC ${COUSCOUS_CPP_FILES})
