@@ -139,6 +139,12 @@ struct $($Text.Name)
 };
 
 ${FunctionQualifiers}$($Text.Name)
+Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(char const* String);
+
+${FunctionQualifiers}$($Text.Name)
+Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(size_t StringLength, char const* String);
+
+${FunctionQualifiers}$($Text.Name)
 Trim($($Text.Name) Text);
 
 ${FunctionQualifiers}int
@@ -155,6 +161,21 @@ Append($($Text.Name)* Text, size_t StringLength, char const* String);
 // Generated on $DateStamp
 
 #include "$($Text.Name).h"
+
+${FunctionQualifiers}$($Text.Name)
+Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(char const* String)
+{
+  size_t StringLength = mtb_StringLengthOf(String);
+  return Text(Text, StringLength, String);
+}
+
+${FunctionQualifiers}$($Text.Name)
+Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(size_t StringLength, char const* String)
+{
+    text Result{};
+    Append(&Result, StringLength, String);
+    return Result;
+}
 
 $($Text.Name)
 Trim($($Text.Name) Text)
@@ -207,8 +228,11 @@ ${FunctionQualifiers}int
 Append($($Text.Name)* Text, size_t StringLength, char const* String)
 {
   int NewSize = Text->Size + (int)StringLength;
+  MTB_AssertDebug(NewSize < $($Text.FixedCapacity), `"Result would be too long to append`");
   if (NewSize > $($Text.FixedCapacity))
+  {
     NewSize = $($Text.FixedCapacity);
+  }
 
   int NumCopies = NewSize - Text->Size;
   mtb_CopyBytes(NumCopies, Text->Data + Text->Size, String);

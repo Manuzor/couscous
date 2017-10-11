@@ -244,14 +244,13 @@ IsKeyDown(machine* M, char Key);
   struct label
   {
     text Text;
-    int InstructionIndex;
+    u16 MemoryOffset;
   };
 
   struct patch
   {
     token LabelName;
-    int InstructionIndex;
-    int ArgumentIndex;
+    u16 InstructionMemoryOffset;
   };
 
   struct assembler_tokens

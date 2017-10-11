@@ -1823,9 +1823,7 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
         ++Current;
 
       token* Token = Result.Tokens + Result.NumTokens++;
-      Token->Size = (int)(Current - TokenStart);
-      mtb_CopyBytes(Token->Size, Token->Data, TokenStart);
-
+      *Token = CreateToken((int)(Current - TokenStart), TokenStart);
       *Token = Trim(*Token);
       ToUpper(Token->Size, Token->Data);
 
@@ -1835,7 +1833,6 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
 
     return Result;
   }
-
 
   static text
   Detokenize(assembler_tokens Tokens)
