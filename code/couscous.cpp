@@ -287,7 +287,7 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
         }
         else
         {
-          sscanf(Code, "%3d", &Value);
+            sscanf(Code, "%3d", &Value);
         }
 
         Result.Value = (u16)Value;

@@ -5,10 +5,9 @@
 
 #define COUSCOUS_ASSEMBLER 1
 #include "couscous.h"
-#include "_generated/instruction_array.h"
 #include "_generated/label_array.h"
 #include "_generated/patch_array.h"
-#include "_generated/u16_array.h"
+#include "_generated/u8_array.h"
 
 #include "couscous.cpp"
 #include "_generated/all_generated.cpp"
@@ -178,7 +177,7 @@ int main(int NumArgs, char const* Args[])
             patch_array Patches{};
             MTB_DEFER[&]{ Deallocate(&Patches); };
 
-            u16_array ByteCode{};
+            u8_array ByteCode{};
             MTB_DEFER[&]{ Deallocate(&ByteCode); };
 
             while (true)
@@ -191,9 +190,7 @@ int main(int NumArgs, char const* Args[])
 
                 Current = ParseLine(Current, ContentsOnePastLast);
 
-                text Text{};
-                Append(&Text, (int)(Current - LineStart), LineStart);
-                Text = Trim(Text);
+                text Text = Trim(CreateText((int)(Current - LineStart), LineStart));
 
                 if (Text.Data[Text.Size - 1] == ':')
                 {
@@ -243,8 +240,6 @@ int main(int NumArgs, char const* Args[])
                                 goto EndOfContentParsing;
                             }
 
-                            CurrentMemoryOffset += DataSectionSize / 8;
-
                             u8 Byte = 0;
                             int NumShifts = 0;
                             while (DataCurrent < DataEnd)
@@ -260,6 +255,8 @@ int main(int NumArgs, char const* Args[])
                                     ++CurrentMemoryOffset;
                                 }
                             }
+
+                            MTB_NOT_IMPLEMENTED;
                         } break;
 
                         case 'x':
@@ -272,7 +269,8 @@ int main(int NumArgs, char const* Args[])
                                 goto EndOfContentParsing;
                             }
 
-                            CurrentMemoryOffset += DataSectionSize / 4;
+
+                            MTB_NOT_IMPLEMENTED;
                         } break;
 
                         default:
@@ -282,9 +280,7 @@ int main(int NumArgs, char const* Args[])
                 }
                 else
                 {
-                    text Code = CreateText(Text.Size, Text.Data);
-
-                    assembler_tokens Tokens = Tokenize(Code);
+                    assembler_tokens Tokens = Tokenize(Text);
                     instruction Instruction = AssembleInstruction(Tokens);
 
                     patch Patch{};
@@ -293,13 +289,13 @@ int main(int NumArgs, char const* Args[])
                     {
                         case instruction_type::JP:
                         {
-                            if (Instruction.Args[0].Type == argument_type::NONE)
+                            if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
                             {
                                 // e.g. JP 0x234
                                 Patch.LabelName = Tokens.Tokens[1];
                             }
                             else if (Instruction.Args[0].Type == argument_type::V && Instruction.Args[0].Value == 0 &&
-                                     Instruction.Args[1].Type == argument_type::NONE)
+                                Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
                             {
                                 // e.g. JP V0 0x234
                                 Patch.LabelName = Tokens.Tokens[2];
@@ -308,7 +304,7 @@ int main(int NumArgs, char const* Args[])
 
                         case instruction_type::CALL:
                         {
-                            if (Instruction.Args[0].Type == argument_type::NONE)
+                            if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
                             {
                                 // e.g. CALL 0x234
                                 Patch.LabelName = Tokens.Tokens[1];
@@ -318,7 +314,7 @@ int main(int NumArgs, char const* Args[])
                         case instruction_type::LD:
                         {
                             if (Instruction.Args[0].Type == argument_type::I &&
-                                Instruction.Args[1].Type == argument_type::NONE)
+                                Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
                             {
                                 // e.g. LD I 0x234
                                 Patch.LabelName = Tokens.Tokens[2];
@@ -330,7 +326,7 @@ int main(int NumArgs, char const* Args[])
                         *Add(&Patches) = Patch;
 
                     u16 EncodedInstruction = EncodeInstruction(Instruction);
-                    u16* NewWord = Add(&ByteCode);
+                    u16* NewWord = (u16*)Add(&ByteCode, 2);
                     WriteWord(NewWord, EncodedInstruction);
 
                     CurrentMemoryOffset += 2;
@@ -353,7 +349,9 @@ int main(int NumArgs, char const* Args[])
                     label* Label = Labels.Data + LabelIndex;
                     if (mtb_StringsAreEqual(Label->Text.Size, Label->Text.Data, Patch->LabelName.Size, Patch->LabelName.Data))
                     {
-                        u16* InstructionLocation = At(&ByteCode, Patch->InstructionMemoryOffset);
+                        MTB_AssertDebug(Patch->InstructionMemoryOffset >= BaseMemoryOffset);
+                        u16 MemoryIndex = Patch->InstructionMemoryOffset - BaseMemoryOffset;
+                        u16* InstructionLocation = (u16*)At(&ByteCode, MemoryIndex);
                         u16 EncodedInstruction = ReadWord(InstructionLocation);
                         EncodedInstruction |= (Label->MemoryOffset & 0x0FFF);
                         WriteWord(InstructionLocation, EncodedInstruction);

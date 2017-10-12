@@ -18,10 +18,10 @@ $DateStamp = Get-Date -f "yyyy-MM-dd HH:mm:ss"
 # Arrays
 #
 $Arrays = @(
-  @{ Name = "instruction_array"; Type = "instruction"; ForwardDeclareType = $true };
+  # @{ Name = "instruction_array"; Type = "instruction"; ForwardDeclareType = $true };
   @{ Name = "label_array"; Type = "label"; ForwardDeclareType = $true };
   @{ Name = "patch_array"; Type = "patch"; ForwardDeclareType = $true };
-  @{ Name = "u16_array"; Type = "u16"; ForwardDeclareType = $false };
+  @{ Name = "u8_array"; Type = "u8"; ForwardDeclareType = $false };
 )
 
 foreach($Array in $Arrays)
@@ -128,6 +128,7 @@ $TextTypes = @(
 
 foreach($Text in $TextTypes)
 {
+  $CtorName = "Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))"
   $HeaderContent = @"
 // Generated on $DateStamp
 #pragma once
@@ -139,10 +140,10 @@ struct $($Text.Name)
 };
 
 ${FunctionQualifiers}$($Text.Name)
-Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(char const* String);
+$($CtorName)(char const* String);
 
 ${FunctionQualifiers}$($Text.Name)
-Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(size_t StringLength, char const* String);
+$($CtorName)(size_t StringLength, char const* String);
 
 ${FunctionQualifiers}$($Text.Name)
 Trim($($Text.Name) Text);
@@ -163,16 +164,16 @@ Append($($Text.Name)* Text, size_t StringLength, char const* String);
 #include "$($Text.Name).h"
 
 ${FunctionQualifiers}$($Text.Name)
-Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(char const* String)
+$($CtorName)(char const* String)
 {
   size_t StringLength = mtb_StringLengthOf(String);
-  return Text(Text, StringLength, String);
+  return $($CtorName)(StringLength, String);
 }
 
 ${FunctionQualifiers}$($Text.Name)
-Create$([char]::ToUpper($Text.Name[0]) + $Text.Name.Substring(1))(size_t StringLength, char const* String)
+$($CtorName)(size_t StringLength, char const* String)
 {
-    text Result{};
+    $($Text.Name) Result{};
     Append(&Result, StringLength, String);
     return Result;
 }
