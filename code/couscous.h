@@ -43,6 +43,7 @@ struct machine
     bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
 
     mtb_rng RNG;
+    u64 CurrentCycle;
 };
 
 

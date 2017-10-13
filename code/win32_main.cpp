@@ -257,6 +257,12 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
     ReleaseDC(WindowHandle, DC);
 }
 
+struct win32_client_input
+{
+    int Pause;
+    int SingleStep;
+};
+
 struct win32_window
 {
     HWND Handle;
@@ -267,6 +273,7 @@ struct win32_window
 
     win32_front_buffer FrontBuffer;
     u16 InputState;
+    win32_client_input ClientInput;
 };
 
 static void
@@ -318,18 +325,30 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
         // Message == WM_INPUT
         )
     {
-        if (Message == WM_KEYDOWN || Message == WM_SYSKEYUP)
+        if (Message == WM_KEYDOWN || Message == WM_KEYUP)
         {
             u32 VKCode = (u32)WParam;
             bool KeyWasDown = mtb_IsBitSet((u64)LParam, 30);
             bool KeyIsDown = !mtb_IsBitSet((u64)LParam, 31);
+            bool KeyWasReleased = KeyWasDown && !KeyIsDown;
             bool KeyWasPressed = !KeyWasDown && KeyIsDown;
-            //bool KeyWasReleased = KeyWasDown && !KeyIsDown;
-            //bool KeyWasToggled = KeyWasDown != KeyIsDown;
 
             bool AltKeyModifier = false;
             if (Message == WM_SYSKEYDOWN || Message == WM_SYSKEYUP)
                 AltKeyModifier = mtb_IsBitSet((u64)LParam, 29);
+
+            if (VKCode == VK_SPACE)
+            {
+                if (KeyWasReleased)
+                    Window->ClientInput.Pause = 0;
+                if (KeyIsDown)
+                    ++Window->ClientInput.Pause;
+            }
+
+            if (VKCode == VK_F5)
+            {
+                Window->ClientInput.SingleStep = KeyWasPressed;
+            }
 
             if (KeyWasPressed)
             {
@@ -607,6 +626,16 @@ StringEndsWith(size_t StringLength, char const* String, char const* End)
     return StringEndsWith(StringLength, String, EndLength, End);
 }
 
+static void
+Win32MakeWindowTitle(text1024* Text, char const* FileName, double CyclesPerSecond)
+{
+    *Text = {};
+    Append(Text, "Couscous CHIP-8 | ");
+    Append(Text, FileName);
+    Append(Text, " | ");
+    snprintf(Text->Data + Text->Size, mtb_ArrayLengthOf(Text->Data) - Text->Size, "%f c/s", CyclesPerSecond);
+}
+
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     LPSTR CommandLine, int ShowCode)
@@ -671,15 +700,14 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     if (RomLoaded)
     {
         win32_window Window;
+        text1024 WindowTitle{};
+        Win32MakeWindowTitle(&WindowTitle, FileName, 0.0);
 
         {
-            char WindowTitle[512]{};
-            mtb_ConcatStrings("Couscous CHIP-8 // ", FileName, mtb_ArrayLengthOf(WindowTitle), WindowTitle);
-
             const int ScreenWidth = SCREEN_WIDTH;
             const int ScreenHeight = SCREEN_HEIGHT;
             const int SizeOfPixelInWindow = 16;
-            Window = Win32CreateWindow(ProcessHandle, WindowTitle,
+            Window = Win32CreateWindow(ProcessHandle, WindowTitle.Data,
                 ScreenWidth * SizeOfPixelInWindow,
                 ScreenHeight * SizeOfPixelInWindow);
         }
@@ -724,6 +752,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             // Clock setup.
             //
             win32_clock Clock = Win32CreateClock();
+            win32_timestamp BigBang = Win32Now();
 
             f64 const FrameTargetSeconds = 1.0 / 55.0; // 55Hz
             int const TicksPerFrame = 15;
@@ -754,27 +783,61 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 u16 NewInputState = Window.InputState;
                 M->InputState = NewInputState;
 
-                // TODO: Does this belong inside the CanTick-brackets?
                 if (M->DT > 0)
-                    M->DT -= 1;
+                    --M->DT;
 
-                bool CanTick = Win32CanTick(M, OldInputState, NewInputState);
-                if (CanTick)
+                u8 OldST = M->ST;
+                if (M->ST > 0)
+                    --M->ST;
+
+                int TicksThisFrame = PendingTicks;
+                if (Window.ClientInput.Pause > 0)
                 {
-                    while (PendingTicks > 0)
-                    {
-                        tick_result TickResult = Tick(M);
-                        --PendingTicks;
+                    TicksThisFrame = 0;
+                    if (Window.ClientInput.SingleStep == 1)
+                        TicksThisFrame = 1;
+                }
 
-                        if (!TickResult.Continue)
-                        {
-                            M->ProgramCounter = InitialProgramCounter;
-                        }
+                if (!Win32CanTick(M, OldInputState, NewInputState))
+                {
+                    TicksThisFrame = 0;
+                }
+
+                while (TicksThisFrame > 0)
+                {
+                    ++M->CurrentCycle;
+
+                    tick_result TickResult = Tick(M);
+
+                    --TicksThisFrame;
+                    --PendingTicks;
+
+                    if (!TickResult.Continue)
+                    {
+                        M->ProgramCounter = InitialProgramCounter;
                     }
                 }
 
                 Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
                 Win32Present(Window.Handle, &Window.FrontBuffer);
+
+                if (OldST == 0 && M->ST != 0)
+                {
+                    // TODO: Start the sound
+                }
+                else if (OldST > 0 && M->ST == 0)
+                {
+                    // TODO: Stop the sound
+                }
+
+
+                f64 SecondsSinceBigBang = Win32DeltaSeconds(&Clock, Win32Now(), BigBang);
+                if (SecondsSinceBigBang > 0)
+                {
+                    f64 CyclesPerSecond = M->CurrentCycle / SecondsSinceBigBang;
+                    Win32MakeWindowTitle(&WindowTitle, FileName, CyclesPerSecond);
+                    SetWindowText(Window.Handle, WindowTitle.Data);
+                }
 
                 EndOfLastFrame = Win32Now();
             }

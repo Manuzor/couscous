@@ -492,10 +492,9 @@ Tick(machine* M)
     instruction_decoder Decoder;
     Decoder.Data = ReadWord(M->Memory + M->ProgramCounter);
     instruction Instruction = DecodeInstruction(Decoder);
-#if 0
-    disassembled_instruction DisInst = DisassembleInstruction(Instruction);
-    printf("0x%04X => %s\n", Decoder.Data, DisInst.Code);
-    instruction AssInst = AssembleInstruction(DisInst.Size, DisInst.Code);
+#if 1
+    text DisassembledInstruction = DisassembleInstruction(Instruction);
+    printf("[%llu] %*s (0x%04X)\n", M->CurrentCycle, (int)DisassembledInstruction.Size, (char*)DisassembledInstruction.Data, Decoder.Data);
 #endif
 
     if (Instruction.Type != instruction_type::INVALID)
@@ -1380,18 +1379,24 @@ ExecuteInstruction(machine* M, instruction Instruction)
             {
                 case argument_type::V:
                 {
-                    u8 Lhs = M->V[Instruction.Args[0].Value];
-                    u8 Rhs = M->V[Instruction.Args[1].Value];
-                    if (Lhs != Rhs)
-                        M->ProgramCounter += 2;
-                } return;
+                    switch (Instruction.Args[1].Type)
+                    {
+                        case argument_type::V:
+                        {
+                            u8 Lhs = M->V[Instruction.Args[0].Value];
+                            u8 Rhs = M->V[Instruction.Args[1].Value];
+                            if (Lhs != Rhs)
+                                M->ProgramCounter += 2;
+                        } return;
 
-                case argument_type::CONSTANT:
-                {
-                    u8 Lhs = M->V[Instruction.Args[0].Value];
-                    u8 Rhs = (u8)Instruction.Args[1].Value;
-                    if (Lhs != Rhs)
-                        M->ProgramCounter += 2;
+                        case argument_type::CONSTANT:
+                        {
+                            u8 Lhs = M->V[Instruction.Args[0].Value];
+                            u8 Rhs = (u8)Instruction.Args[1].Value;
+                            if (Lhs != Rhs)
+                                M->ProgramCounter += 2;
+                        } return;
+                    }
                 } return;
             }
         } break;
@@ -1767,7 +1772,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
 
     MTB_INTERNAL_CODE({
       text Disassembly = DisassembleInstruction(Instruction);
-      printf("%*s: Invalid instruction to execute.\n", (int)Disassembly.Size, &Disassembly.Data[0]);
+      printf("%*s: Invalid instruction to execute.\n", (int)Disassembly.Size, (char*)Disassembly.Data);
     });
 }
 
@@ -2128,6 +2133,8 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                 *Add(&Patches) = Patch;
 
             u16 EncodedInstruction = EncodeInstruction(Instruction);
+            MTB_AssertDebug(EncodedInstruction != 0);
+
             u16* NewWord = (u16*)Add(ByteCode, 2);
             WriteWord(NewWord, EncodedInstruction);
 

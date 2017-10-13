@@ -124,7 +124,8 @@ Deallocate($($Array.Name)* Array)
 #
 $TextTypes = @(
   @{ Name = "text"; FixedCapacity = "128" };
-  @{ Name = "token"; FixedCapacity = "128" };
+  @{ Name = "token"; FixedCapacity = "32" };
+  @{ Name = "text1024"; FixedCapacity = "1024" };
 )
 
 foreach($Text in $TextTypes)
