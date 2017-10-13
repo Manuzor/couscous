@@ -528,6 +528,8 @@ DecodeInstruction(instruction_decoder Decoder)
         {
             switch (Decoder.Data)
             {
+                case 0x0000: // NULL instruction?
+                    break;
                 case 0x00E0: // 00E0 - CLS
                     Result.Type = inst::CLS;
                     break;
@@ -1305,7 +1307,10 @@ ExecuteInstruction(machine* M, instruction Instruction)
 
         case instruction_type::RET:
         {
-            M->ProgramCounter = M->Stack[--M->StackPointer];
+            if (M->StackPointer > 0)
+            {
+                M->ProgramCounter = M->Stack[--M->StackPointer];
+            }
         } return;
 
         case instruction_type::SYS:
@@ -1887,7 +1892,6 @@ AssembleInstruction(assembler_tokens Tokens)
             token* Token = Tokens.Tokens + TokenIndex;
             int ArgumentIndex = TokenIndex - 1;
             Result.Args[ArgumentIndex] = MakeArgumentFromString(Token->Size, Token->Data);
-
         }
     }
 
@@ -1969,8 +1973,20 @@ SkipWhitespaceAndComments(char* Begin, char* End)
 static char*
 ParseLine(char* Begin, char* End)
 {
-    while (Begin < End && Begin[0] != '\n' && Begin[0] != '#')
+    while (Begin < End)
+    {
+        if (Begin[0] == '\n' || Begin[0] == '#')
+        {
+            break;
+        }
+        else if (Begin[0] == ':')
+        {
+            ++Begin;
+            break;
+        }
+
         ++Begin;
+    }
 
     return Begin;
 }

@@ -717,9 +717,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
             mtb_CopyBytes(mtb_ArrayByteSizeOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
 
-            M->ProgramCounter = (u16)((u8*)M->ProgramMemory - (u8*)M->InterpreterMemory);
-            MTB_AssertDebug(M->ProgramCounter == 0x200);
-
+            u16 InitialProgramCounter = 0x200;
+            M->ProgramCounter = InitialProgramCounter;
 
             //
             // Clock setup.
@@ -769,8 +768,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
                         if (!TickResult.Continue)
                         {
-                            PostQuitMessage(0);
-                            break;
+                            M->ProgramCounter = InitialProgramCounter;
                         }
                     }
                 }
