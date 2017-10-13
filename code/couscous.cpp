@@ -270,20 +270,23 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
         break;
       }
 
-      default: // 0x123
-      {
+      break;
+    }
+
+    if(Result.Type == argument_type::NONE)
+    {
         Result.Type = argument_type::CONSTANT;
 
         unsigned int Value = 0;
         if (Code[0] == '0')
         {
-          switch (Code[1])
-          {
-            case 'X': sscanf(Code + 2, "%3X", &Value); break;
-            case 'B': MTB_NOT_IMPLEMENTED; break;
-            case 'D': sscanf(Code + 2, "%3d", &Value); break;
-            default: sscanf(Code + 1, "%3d", &Value); break;
-          }
+            switch (Code[1])
+            {
+                case 'X': sscanf(Code + 2, "%3X", &Value); break;
+                case 'B': MTB_NOT_IMPLEMENTED; break;
+                case 'D': sscanf(Code + 2, "%3d", &Value); break;
+                default: sscanf(Code + 1, "%3d", &Value); break;
+            }
         }
         else
         {
@@ -291,8 +294,6 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
         }
 
         Result.Value = (u16)Value;
-      }
-      break;
     }
   }
 
