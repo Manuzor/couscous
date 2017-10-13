@@ -1,7 +1,8 @@
 param(
   [string]$RepoRoot = "$PSScriptRoot/..",
   [string]$OutDir = "$RepoRoot/code/_generated",
-  [string]$StaticFunctions = $true
+  [switch]$StaticFunctions = $true,
+  [string]$PragmaOnce
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,7 +29,7 @@ foreach($Array in $Arrays)
 {
   $HeaderContent = @"
 // Generated on $DateStamp
-#pragma once
+$(if($PragmaOnce) { "#pragma once" })
 
 $(if($Array.ForwardDeclareType) { "struct $($Array.Type);" })
 

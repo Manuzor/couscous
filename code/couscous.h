@@ -1,65 +1,48 @@
-#include "mtb.h"
-
-using u8  = mtb_u08;
-using u16 = mtb_u16;
-using u32 = mtb_u32;
-using u64 = mtb_u64;
-using s8  = mtb_s08;
-using s16 = mtb_s16;
-using s32 = mtb_s32;
-using s64 = mtb_s64;
-
-using f32 = mtb_f32;
-using f64 = mtb_f64;
-
-using uint = unsigned int;
-using bool32 = int;
-
 enum
 {
-  CHAR_MEMORY_OFFSET = 0,
-  SCREEN_WIDTH = 64,
-  SCREEN_HEIGHT = 32,
+    CHAR_MEMORY_OFFSET = 0,
+    SCREEN_WIDTH = 64,
+    SCREEN_HEIGHT = 32,
 };
 
 struct sprite
 {
-  int Length;
-  u8* Pixels;
+    int Length;
+    u8* Pixels;
 };
 
 struct machine
 {
-  u8 V[16];
+    u8 V[16];
 
-  u16 I;
+    u16 I;
 
-  u8 DT;
-  u8 ST;
+    u8 DT;
+    u8 ST;
 
-  // RAM
-  union
-  {
-    u8 Memory[4096];
-
-    struct
+    // RAM
+    union
     {
-      u8 InterpreterMemory[0x200];
-      u8 ProgramMemory[4096 - 0x200];
+        u8 Memory[4096];
+
+        struct
+        {
+            u8 InterpreterMemory[0x200];
+            u8 ProgramMemory[4096 - 0x200];
+        };
     };
-  };
 
-  u8 StackPointer;
-  u16 Stack[16];
+    u8 StackPointer;
+    u16 Stack[16];
 
-  u16 ProgramCounter;
+    u16 ProgramCounter;
 
-  u16 InputState;
-  u8 RequiredInputRegisterIndexPlusOne; // "PlusOne" so it can be 0 by default.
+    u16 InputState;
+    u8 RequiredInputRegisterIndexPlusOne; // "PlusOne" so it can be 0 by default.
 
-  bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
+    bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
 
-  mtb_rng RNG;
+    mtb_rng RNG;
 };
 
 
@@ -69,19 +52,19 @@ struct machine
 
 enum struct argument_type
 {
-  NONE,
+    NONE,
 
-  V,
-  I,
-  DT,
-  ST,
+    V,
+    I,
+    DT,
+    ST,
 
-  K,
-  F,
-  B,
-  ATI, // [I], "at I"
+    K,
+    F,
+    B,
+    ATI, // [I], "at I"
 
-  CONSTANT,
+    CONSTANT,
 };
 
 static char const*
@@ -97,8 +80,8 @@ MakeArgumentTypeFromString(size_t CodeLen, char const* Code);
 
 struct argument
 {
-  argument_type Type;
-  u16 Value; // Interpretation depends on Type.
+    argument_type Type;
+    u16 Value; // Interpretation depends on Type.
 };
 
 static size_t
@@ -114,28 +97,28 @@ MakeArgumentFromString(size_t CodeLen, char const* Code);
 
 enum struct instruction_type
 {
-  INVALID,
+    INVALID,
 
-  CLS,
-  RET,
-  SYS,
-  JP,
-  CALL,
-  SE,
-  SNE,
-  LD,
-  ADD,
-  OR,
-  AND,
-  XOR,
-  SUB,
-  SHR,
-  SUBN,
-  SHL,
-  RND,
-  DRW,
-  SKP,
-  SKNP,
+    CLS,
+    RET,
+    SYS,
+    JP,
+    CALL,
+    SE,
+    SNE,
+    LD,
+    ADD,
+    OR,
+    AND,
+    XOR,
+    SUB,
+    SHR,
+    SUBN,
+    SHL,
+    RND,
+    DRW,
+    SKP,
+    SKNP,
 };
 
 static char const*
@@ -147,42 +130,39 @@ MakeInstructionTypeFromString(size_t CodeLen, char const* Code);
 
 struct instruction
 {
-  instruction_type Type;
-  argument Args[3];
+    instruction_type Type;
+    argument Args[3];
 };
 
 union instruction_decoder
 {
-  u16 Data; // xxxx
+    u16 Data; // xxxx
 
-  struct
-  {
-    u16 Address : 12; // 0xxx
-    u16 Group   : 4;  // x000
-  };
+    struct
+    {
+        u16 Address : 12; // 0xxx
+        u16 Group : 4;  // x000
+    };
 
-  struct
-  {
-    u16 LSN : 4; // 000x (Least significant nibble)
-    u16 Y   : 4; // 00x0
-    u16 X   : 4; // 0x00
-    u16 MSN : 4; // x000 (Most significant nibble)
-  };
+    struct
+    {
+        u16 LSN : 4; // 000x (Least significant nibble)
+        u16 Y : 4; // 00x0
+        u16 X : 4; // 0x00
+        u16 MSN : 4; // x000 (Most significant nibble)
+    };
 
-  struct
-  {
-    u16 LSB : 8; // 00xx (Least significant byte)
-    u16 MSB : 8; // xx00 (Most significant byte)
-  };
+    struct
+    {
+        u16 LSB : 8; // 00xx (Least significant byte)
+        u16 MSB : 8; // xx00 (Most significant byte)
+    };
 };
 
 static_assert(sizeof(instruction_decoder) == sizeof(u16), "Invalid size for `instruction`.");
 
 static u16
 GetDigitSpriteAddress(machine* M, u8 Digit);
-
-static sprite
-GetCharacterSprite(machine* M, char Character);
 
 static void
 DrawSprite(machine* M, int X, int Y, sprite Sprite);
@@ -202,14 +182,11 @@ WriteWord(void* Ptr, u16 Value);
 
 struct tick_result
 {
-  bool Continue;
+    bool Continue;
 };
 
 static tick_result
 Tick(machine* M);
-
-static u16
-FetchInstruction(machine* M);
 
 static instruction
 DecodeInstruction(instruction_decoder Decoder);
@@ -226,54 +203,43 @@ IsKeyDown(u16 InputState, u16 KeyIndex);
 static u16
 SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown);
 
-// Assumed keyboard layout:
-//   1 2 3 C
-//   4 5 6 D
-//   7 8 9 E
-//   A 0 B F
-//
-// Usage: IsKeyDown(M, 'A');
-static bool32
-IsKeyDown(machine* M, char Key);
-
 
 #if COUSCOUS_ASSEMBLER
-  #include "_generated/text.h"
-  #include "_generated/token.h"
 
-  struct label
-  {
+struct label
+{
     text Text;
     u16 MemoryOffset;
-  };
+};
 
-  struct patch
-  {
+struct patch
+{
     token LabelName;
     u16 InstructionMemoryOffset;
-  };
+};
 
-  struct assembler_tokens
-  {
+struct assembler_tokens
+{
     int NumTokens;
     token Tokens[4];
-  };
+};
 
-  static assembler_tokens
-  Tokenize(text Code);
+static assembler_tokens
+Tokenize(text Code);
 
-  static text
-  Detokenize(assembler_tokens Tokens);
+static text
+Detokenize(assembler_tokens Tokens);
 
-  static instruction
-  AssembleInstruction(text Code);
+static instruction
+AssembleInstruction(text Code);
 
-  static instruction
-  AssembleInstruction(assembler_tokens Tokens);
+static instruction
+AssembleInstruction(assembler_tokens Tokens);
 
-  static assembler_tokens
-  DisassembleInstructionTokens(instruction Instruction);
+static assembler_tokens
+DisassembleInstructionTokens(instruction Instruction);
 
-  static text
-  DisassembleInstruction(instruction Instruction);
+static text
+DisassembleInstruction(instruction Instruction);
+
 #endif // COUSCOUS_ASSEMBLER

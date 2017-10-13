@@ -4,53 +4,32 @@
 #include <stdio.h>
 
 #define COUSCOUS_ASSEMBLER 1
-#include "couscous.h"
+
+#include "mtb.h"
+using u8 = mtb_u08;
+using u16 = mtb_u16;
+using u32 = mtb_u32;
+using u64 = mtb_u64;
+using s8 = mtb_s08;
+using s16 = mtb_s16;
+using s32 = mtb_s32;
+using s64 = mtb_s64;
+
+using f32 = mtb_f32;
+using f64 = mtb_f64;
+
+using uint = unsigned int;
+using bool32 = int;
+
+#include "_generated/text.h"
+#include "_generated/token.h"
 #include "_generated/label_array.h"
 #include "_generated/patch_array.h"
 #include "_generated/u8_array.h"
+#include "couscous.h"
 
 #include "couscous.cpp"
 #include "_generated/all_generated.cpp"
-
-static char*
-SkipWhitespace(char* Begin, char* End)
-{
-    while (Begin < End && mtb_IsWhitespace(Begin[0]))
-        ++Begin;
-
-    return Begin;
-}
-
-static char*
-SkipWhitespaceAndComments(char* Begin, char* End)
-{
-    while (true)
-    {
-        Begin = SkipWhitespace(Begin, End);
-
-        // Comments
-        if (Begin < End && Begin[0] == '#')
-        {
-            while (Begin < End && Begin[0] != '\n')
-                ++Begin;
-
-            continue;
-        }
-
-        break;
-    }
-
-    return Begin;
-}
-
-static char*
-ParseLine(char* Begin, char* End)
-{
-    while (Begin < End && Begin[0] != '\n' && Begin[0] != '#')
-        ++Begin;
-
-    return Begin;
-}
 
 static void
 PrintHelp(FILE* OutFile)
@@ -176,180 +155,10 @@ int main(int NumArgs, char const* Args[])
         char* Current = ContentsBegin;
         if (Mode == commandline_mode::Assemble)
         {
-            u16 BaseMemoryOffset = 0x200u;
-            u16 CurrentMemoryOffset = BaseMemoryOffset;
-
-            label_array Labels{};
-            MTB_DEFER[&]{ Deallocate(&Labels); };
-
-            patch_array Patches{};
-            MTB_DEFER[&]{ Deallocate(&Patches); };
-
             u8_array ByteCode{};
             MTB_DEFER[&]{ Deallocate(&ByteCode); };
 
-            while (true)
-            {
-                Current = SkipWhitespaceAndComments(Current, ContentsOnePastLast);
-                if (Current >= ContentsOnePastLast)
-                    goto EndOfContentParsing;
-
-                char* LineStart = Current;
-
-                Current = ParseLine(Current, ContentsOnePastLast);
-
-                text Text = Trim(CreateText((int)(Current - LineStart), LineStart));
-
-                if (Text.Data[Text.Size - 1] == ':')
-                {
-                    // TODO: Continue here! Debug why it won't accept "LOOP:" as a valid label.
-
-                    // We found a label!
-                    label Label{};
-                    // Copy without the trailing colon
-                    Label.Text = CreateText(Text.Size - 1, Text.Data);
-                    Label.MemoryOffset = CurrentMemoryOffset;
-
-                    *Add(&Labels) = Label;
-                }
-                else if (Text.Data[0] == '[' && Text.Data[Text.Size - 1] == ']' && Text.Size >= 3)
-                {
-                    // We found a data section.
-
-                    char* DataBegin = Text.Data + 1;
-                    char* DataEnd = Text.Data + Text.Size - 1;
-                    char* DataCurrent = DataBegin;
-
-                    char DataType = *DataCurrent;
-                    DataCurrent = SkipWhitespaceAndComments(DataCurrent + 1, DataEnd);
-
-                    // TODO: Complete the implementation below.
-                    switch (DataType)
-                    {
-                        case 'b':
-                        case 'B':
-                        {
-                            while (DataCurrent < DataEnd)
-                            {
-                                u8 Byte = 0;
-                                for (u8 BitIndex = 7; BitIndex >= 0; --BitIndex)
-                                {
-                                    DataCurrent = SkipWhitespace(DataCurrent, DataEnd);
-                                    if (DataCurrent >= DataEnd)
-                                        break;
-
-                                    if (DataCurrent[0] == '1')
-                                        Byte |= (u8)(1u << (u8)BitIndex);
-
-                                    ++DataCurrent;
-                                }
-
-                                *Add(&ByteCode) = Byte;
-                                ++CurrentMemoryOffset;
-                            }
-                        } break;
-
-                        case 'x':
-                        case 'X':
-                        {
-                            MTB_NOT_IMPLEMENTED;
-                        } break;
-
-                        default:
-                        {
-                            MTB_AssertDebug("Unsupported data type in data section. Must be either of [b] or [x] (case insensitive).");
-                        } break;
-                    }
-                }
-                else
-                {
-                    assembler_tokens Tokens = Tokenize(Text);
-                    instruction Instruction = AssembleInstruction(Tokens);
-
-                    patch Patch{};
-                    Patch.InstructionMemoryOffset = CurrentMemoryOffset;
-                    switch (Instruction.Type)
-                    {
-                        case instruction_type::JP:
-                        {
-                            if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
-                            {
-                                // e.g. JP 0x234
-                                Patch.LabelName = Tokens.Tokens[1];
-                            }
-                            else if (Instruction.Args[0].Type == argument_type::V && Instruction.Args[0].Value == 0 &&
-                                Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
-                            {
-                                // e.g. JP V0 0x234
-                                Patch.LabelName = Tokens.Tokens[2];
-                            }
-                        } break;
-
-                        case instruction_type::CALL:
-                        {
-                            if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
-                            {
-                                // e.g. CALL 0x234
-                                Patch.LabelName = Tokens.Tokens[1];
-                            }
-                        } break;
-
-                        case instruction_type::LD:
-                        {
-                            if (Instruction.Args[0].Type == argument_type::I &&
-                                Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
-                            {
-                                // e.g. LD I 0x234
-                                Patch.LabelName = Tokens.Tokens[2];
-                            }
-                        } break;
-                    }
-
-                    if (Patch.LabelName.Size)
-                        *Add(&Patches) = Patch;
-
-                    u16 EncodedInstruction = EncodeInstruction(Instruction);
-                    u16* NewWord = (u16*)Add(&ByteCode, 2);
-                    WriteWord(NewWord, EncodedInstruction);
-
-                    CurrentMemoryOffset += 2;
-                }
-            }
-            EndOfContentParsing:
-
-            // Apply patches
-            for (int PatchIndex = 0;
-                PatchIndex < Patches.NumElements;
-                ++PatchIndex)
-            {
-                patch* Patch = Patches.Data + PatchIndex;
-
-                bool Found = false;
-                for (int LabelIndex = 0;
-                    LabelIndex < Labels.NumElements;
-                    ++LabelIndex)
-                {
-                    label* Label = Labels.Data + LabelIndex;
-                    if (mtb_StringsAreEqual(Label->Text.Size, Label->Text.Data, Patch->LabelName.Size, Patch->LabelName.Data))
-                    {
-                        MTB_AssertDebug(Patch->InstructionMemoryOffset >= BaseMemoryOffset);
-                        u16 MemoryIndex = Patch->InstructionMemoryOffset - BaseMemoryOffset;
-                        u16* InstructionLocation = (u16*)At(&ByteCode, MemoryIndex);
-                        u16 EncodedInstruction = ReadWord(InstructionLocation);
-                        EncodedInstruction |= (Label->MemoryOffset & 0x0FFF);
-                        WriteWord(InstructionLocation, EncodedInstruction);
-
-                        Found = true;
-                        break;
-                    }
-                }
-
-                if (!Found)
-                {
-                    MTB_Fail("Unknown label");
-                    // TODO: Diagnostics?
-                }
-            }
+            AssembleCode(ContentsBegin, ContentsOnePastLast, &ByteCode);
 
             // Write the result!
             fwrite(ByteCode.Data, ByteCode.NumElements * sizeof(*ByteCode.Data), 1, OutFile);
