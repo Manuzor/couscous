@@ -13,12 +13,20 @@
 #include "_generated/all_generated.cpp"
 
 static char*
+SkipWhitespace(char* Begin, char* End)
+{
+    while (Begin < End && mtb_IsWhitespace(Begin[0]))
+        ++Begin;
+
+    return Begin;
+}
+
+static char*
 SkipWhitespaceAndComments(char* Begin, char* End)
 {
     while (true)
     {
-        while (Begin < End && mtb_IsWhitespace(Begin[0]))
-            ++Begin;
+        Begin = SkipWhitespace(Begin, End);
 
         // Comments
         if (Begin < End && Begin[0] == '#')
@@ -208,24 +216,12 @@ int main(int NumArgs, char const* Args[])
                 {
                     // We found a data section.
 
-                    char* DataBegin = Text.Data;
-                    char* DataEnd = DataBegin + Text.Size - 1;
-
-                    char* DataCurrent = SkipWhitespaceAndComments(DataBegin, DataEnd);
-                    if (DataCurrent >= DataEnd)
-                        goto EndOfContentParsing;
+                    char* DataBegin = Text.Data + 1;
+                    char* DataEnd = Text.Data + Text.Size - 1;
+                    char* DataCurrent = DataBegin;
 
                     char DataType = *DataCurrent;
-                    DataCurrent++;
-                    DataCurrent = SkipWhitespaceAndComments(DataBegin, DataEnd);
-
-                    if (DataCurrent >= DataEnd)
-                    {
-                        MTB_AssertDebug(false, "Unexpected end of data section.");
-                        goto EndOfContentParsing;
-                    }
-
-                    int DataSectionSize = (int)(DataEnd - DataCurrent);
+                    DataCurrent = SkipWhitespaceAndComments(DataCurrent + 1, DataEnd);
 
                     // TODO: Complete the implementation below.
                     switch (DataType)
@@ -233,49 +229,36 @@ int main(int NumArgs, char const* Args[])
                         case 'b':
                         case 'B':
                         {
-                            bool IsMultipleOf8 = (DataSectionSize & 0b0111) == 0;
-                            if (!IsMultipleOf8)
-                            {
-                                MTB_AssertDebug(false, "Data section must represent full bytes!");
-                                goto EndOfContentParsing;
-                            }
-
-                            u8 Byte = 0;
-                            int NumShifts = 0;
                             while (DataCurrent < DataEnd)
                             {
-                                if (DataCurrent[0] == '1')
-                                    Byte |= 1;
-
-                                Byte <<= 1;
-                                ++NumShifts;
-                                if (NumShifts >= 8)
+                                u8 Byte = 0;
+                                for (u8 BitIndex = 7; BitIndex >= 0; --BitIndex)
                                 {
-                                    NumShifts = 0;
-                                    ++CurrentMemoryOffset;
-                                }
-                            }
+                                    DataCurrent = SkipWhitespace(DataCurrent, DataEnd);
+                                    if (DataCurrent >= DataEnd)
+                                        break;
 
-                            MTB_NOT_IMPLEMENTED;
+                                    if (DataCurrent[0] == '1')
+                                        Byte |= (u8)(1u << (u8)BitIndex);
+
+                                    ++DataCurrent;
+                                }
+
+                                *Add(&ByteCode) = Byte;
+                                ++CurrentMemoryOffset;
+                            }
                         } break;
 
                         case 'x':
                         case 'X':
                         {
-                            bool IsMultipleOf4 = (DataSectionSize & 0b0011) == 0;
-                            if (!IsMultipleOf4)
-                            {
-                                MTB_AssertDebug(false, "Data section must represent full bytes!");
-                                goto EndOfContentParsing;
-                            }
-
-
                             MTB_NOT_IMPLEMENTED;
                         } break;
 
                         default:
-                            MTB_AssertDebug("Unsupported data type in data section. Must be either of [b] or [x].");
-                            break;
+                        {
+                            MTB_AssertDebug("Unsupported data type in data section. Must be either of [b] or [x] (case insensitive).");
+                        } break;
                     }
                 }
                 else
