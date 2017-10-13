@@ -779,10 +779,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 EndOfLastFrame = Win32Now();
             }
 
-            while (true)
-            {
-                Win32MessagePump(&Window);
-            }
+            // The loop above is supposed to loop forever.
+            MTB_INVALID_CODE_PATH;
         }
         else
         {
