@@ -2022,17 +2022,26 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
 
         if (Text.Data[Text.Size - 1] == ':')
         {
-            // We found a label!
+            // We have a label!
             label Label{};
             // Copy without the trailing colon
             Label.Text = CreateText(Text.Size - 1, Text.Data);
             Label.MemoryOffset = CurrentMemoryOffset;
 
-            *Add(&Labels) = Label;
+            if (Find(&Labels, [&](label* L) { return AreEqual(&L->Text, &Label.Text); }))
+            {
+                // TODO: Diagnostics
+                MTB_Fail("Duplicate label.");
+            }
+            else
+            {
+                *Add(&Labels) = Label;
+            }
+
         }
         else if (Text.Data[0] == '[' && Text.Data[Text.Size - 1] == ']' && Text.Size >= 3)
         {
-            // We found a data section.
+            // We have a data section.
 
             char* DataBegin = Text.Data + 1;
             char* DataEnd = Text.Data + Text.Size - 1;

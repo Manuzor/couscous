@@ -51,6 +51,23 @@ At($($Array.Name)* Array, int Index);
 
 ${FunctionQualifiers}void
 Deallocate($($Array.Name)* Array);
+
+template<typename predicate>
+${FunctionQualifiers}$($Array.Type)*
+Find($($Array.Name)* Array, predicate Predicate)
+{
+    for (int Index = 0; Index < Array->NumElements; ++Index)
+    {
+        $($Array.Type)* Item = Array->Data + Index;
+        if (Predicate(Item))
+        {
+            return Item;
+        }
+    }
+
+    return nullptr;
+}
+
 "@
   $HeaderFilePath = "$OutDir/$($Array.Name).h"
   $UmbrellaHeaderIncludes += $HeaderFilePath
@@ -113,6 +130,7 @@ Deallocate($($Array.Name)* Array)
   }
   *Array = {};
 }
+
 "@
   $FilePath = "$OutDir/$($Array.Name).cpp"
   $UmbrellaIncludes += $FilePath
@@ -151,6 +169,11 @@ ${FunctionQualifiers}$($Text.Name) Trim($($Text.Name) Text);
 // Append
 ${FunctionQualifiers}int Append($($Text.Name)* Text, char const* String);
 ${FunctionQualifiers}int Append($($Text.Name)* Text, size_t StringLength, char const* String);
+
+// Comparison
+${FunctionQualifiers}int Compare($($Text.Name)* A, $($Text.Name)* B);
+${FunctionQualifiers}bool AreEqual($($Text.Name)* A, $($Text.Name)* B);
+
 "@
   $HeaderFilePath = "$OutDir/$($Text.Name).h"
   $UmbrellaHeaderIncludes += $HeaderFilePath
@@ -239,6 +262,21 @@ Append($($Text.Name)* Text, size_t StringLength, char const* String)
 
   return NumCopies;
 }
+
+${FunctionQualifiers}int Compare($($Text.Name)* A, $($Text.Name)* B)
+{
+  int Result = mtb_StringCompare(A->Size, A->Data, B->Size, B->Data);
+
+  return Result;
+}
+
+${FunctionQualifiers}bool AreEqual($($Text.Name)* A, $($Text.Name)* B)
+{
+  int ComparisonResult = Compare(A, B);
+
+  return ComparisonResult == 0;
+}
+
 "@
   $FilePath = "$OutDir/$($Text.Name).cpp"
   $UmbrellaIncludes += $FilePath
