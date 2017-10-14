@@ -141,20 +141,16 @@ struct $($Text.Name)
   char Data[$($Text.FixedCapacity)];
 };
 
-${FunctionQualifiers}$($Text.Name)
-$($CtorName)(char const* String);
+// "Constructor"
+${FunctionQualifiers}$($Text.Name) $($CtorName)(char const* String);
+${FunctionQualifiers}$($Text.Name) $($CtorName)(size_t StringLength, char const* String);
 
-${FunctionQualifiers}$($Text.Name)
-$($CtorName)(size_t StringLength, char const* String);
+// Trim
+${FunctionQualifiers}$($Text.Name) Trim($($Text.Name) Text);
 
-${FunctionQualifiers}$($Text.Name)
-Trim($($Text.Name) Text);
-
-${FunctionQualifiers}int
-Append($($Text.Name)* Text, char const* String);
-
-${FunctionQualifiers}int
-Append($($Text.Name)* Text, size_t StringLength, char const* String);
+// Append
+${FunctionQualifiers}int Append($($Text.Name)* Text, char const* String);
+${FunctionQualifiers}int Append($($Text.Name)* Text, size_t StringLength, char const* String);
 "@
   $HeaderFilePath = "$OutDir/$($Text.Name).h"
   $UmbrellaHeaderIncludes += $HeaderFilePath

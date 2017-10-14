@@ -1997,7 +1997,7 @@ ParseLine(char* Begin, char* End)
 }
 
 static void
-AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 BaseMemoryOffset = 0x200u)
+AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 BaseMemoryOffset)
 {
     char* Contents = ContentsBegin;
     u16 CurrentMemoryOffset = BaseMemoryOffset;
@@ -2041,7 +2041,6 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
             char DataType = *DataCurrent;
             DataCurrent = SkipWhitespaceAndComments(DataCurrent + 1, DataEnd);
 
-            // TODO: Complete the implementation below.
             switch (DataType)
             {
                 case 'b':
@@ -2057,7 +2056,7 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                                 break;
 
                             if (DataCurrent[0] == '1')
-                                Byte |= (u8)(1u << (u8)BitIndex);
+                                Byte |= (u8)(1u << BitIndex);
 
                             ++DataCurrent;
                         }
@@ -2070,6 +2069,49 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                 case 'x':
                 case 'X':
                 {
+                    while (DataCurrent < DataEnd)
+                    {
+                        u8 Byte = 0;
+                        for (u8 NibbleIndex = 1; NibbleIndex >= 0; --NibbleIndex)
+                        {
+                            DataCurrent = SkipWhitespace(DataCurrent, DataEnd);
+                            if (DataCurrent >= DataEnd)
+                                break;
+
+                            unsigned Shift = 4 * NibbleIndex;
+
+                            char Char = DataCurrent[0];
+                            switch (Char)
+                            {
+                                case '1': Byte |= (u8)(1u << Shift); break;
+                                case '2': Byte |= (u8)(2u << Shift); break;
+                                case '3': Byte |= (u8)(3u << Shift); break;
+                                case '4': Byte |= (u8)(4u << Shift); break;
+                                case '5': Byte |= (u8)(5u << Shift); break;
+                                case '6': Byte |= (u8)(6u << Shift); break;
+                                case '7': Byte |= (u8)(7u << Shift); break;
+                                case '8': Byte |= (u8)(8u << Shift); break;
+                                case '9': Byte |= (u8)(9u << Shift); break;
+                                case 'A':
+                                case 'a': Byte |= (u8)(0xAu << Shift); break;
+                                case 'B':
+                                case 'b': Byte |= (u8)(0xBu << Shift); break;
+                                case 'C':
+                                case 'c': Byte |= (u8)(0xCu << Shift); break;
+                                case 'D':
+                                case 'd': Byte |= (u8)(0xDu << Shift); break;
+                                case 'E':
+                                case 'e': Byte |= (u8)(0xEu << Shift); break;
+                                case 'F':
+                                case 'f': Byte |= (u8)(0xFu << Shift); break;
+                            }
+
+                            ++DataCurrent;
+                        }
+
+                        *Add(ByteCode) = Byte;
+                        ++CurrentMemoryOffset;
+                    }
                     MTB_NOT_IMPLEMENTED;
                 } break;
 

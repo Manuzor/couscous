@@ -189,7 +189,7 @@
         .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
 
         .ProjectBuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide'
-        .ProjectRebuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide -clean'
+        .ProjectRebuildCommand   = '$MyBuildExecutable$ all -ide -clean'
         // TODO(Manuzor): Find a way to clean.
         // .ProjectCleanCommand   = '"$RepoRoot$\build.ps1" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
         .Output = '$MyBuildRoot$/$MyVsBuildId$/$MyOutputName$$MyOutputExtension$'
@@ -355,7 +355,7 @@
         .ProjectOutput = '$MyVisualStudioRoot$/$MyName$.vcxproj'
 
         .ProjectBuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide'
-        .ProjectRebuildCommand   = '$MyBuildExecutable$ ^$(ProjectName)-^$(Configuration) -ide -clean'
+        .ProjectRebuildCommand   = '$MyBuildExecutable$ all -ide -clean'
         // TODO(Manuzor): Find a way to clean.
         // .ProjectCleanCommand   = '"$RepoRoot$\build.ps1" ^$(ProjectName)-^$(Configuration)-clean -ide -clean'
         .Output = '$MyBuildRoot$/$MyVsBuildId$/$MyOutputName$$MyOutputExtension$'

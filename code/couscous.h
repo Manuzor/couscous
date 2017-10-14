@@ -243,4 +243,7 @@ DisassembleInstructionTokens(instruction Instruction);
 static text
 DisassembleInstruction(instruction Instruction);
 
+static void
+AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 BaseMemoryOffset = 0x200u);
+
 #endif // COUSCOUS_ASSEMBLER
