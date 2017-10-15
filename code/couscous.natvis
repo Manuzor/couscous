@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+    <Type Name="str">
+        <DisplayString>{Data,[Size]s8}</DisplayString>
+        <StringView>Data,[Size]s8</StringView>
+    </Type>
+
+    <Type Name="parser_cursor">
+        <DisplayString>[{NumLineBreaks + 1},{LinePos + 1}] {Begin,[End-Begin]s8}</DisplayString>
+        <StringView>Begin,[End-Begin]s8</StringView>
+        <Expand>
+            <Item Condition="Begin != 0" Name="Previous Char">Begin[-1]</Item>
+            <Item Condition="Begin != 0" Name="Current Char">Begin[0]</Item>
+            <Item Name="Contents">Begin,[End-Begin]s8</Item>
+            <Item Name="NumLineBreaks">NumLineBreaks</Item>
+            <Item Name="LinePos">LinePos</Item>
+        </Expand>
+    </Type>
+</AutoVisualizer>

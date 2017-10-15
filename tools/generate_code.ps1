@@ -19,10 +19,12 @@ $DateStamp = Get-Date -f "yyyy-MM-dd HH:mm:ss"
 # Arrays
 #
 $Arrays = @(
-  # @{ Name = "instruction_array"; Type = "instruction"; ForwardDeclareType = $true };
-  @{ Name = "label_array"; Type = "label"; ForwardDeclareType = $true };
-  @{ Name = "patch_array"; Type = "patch"; ForwardDeclareType = $true };
-  @{ Name = "u8_array"; Type = "u8"; ForwardDeclareType = $false };
+  # @{ Name = "instruction_array"; Type = "instruction" };
+  @{ Name = "label_array"; Type = "label"; FixedCapacity = 32 };
+  @{ Name = "patch_array"; Type = "patch"; FixedCapacity = 32 };
+  @{ Name = "u8_array"; Type = "u8"; FixedCapacity = 32 };
+  @{ Name = "str_array"; Type = "str"; FixedCapacity = 32 };
+  @{ Name = "token_array"; Type = "token"; FixedCapacity = 8 };
 )
 
 foreach($Array in $Arrays)
@@ -31,13 +33,16 @@ foreach($Array in $Arrays)
 // Generated on $DateStamp
 $(if($PragmaOnce) { "#pragma once" })
 
-$(if($Array.ForwardDeclareType) { "struct $($Array.Type);" })
-
 struct $($Array.Name)
 {
   int NumElements;
   int Capacity;
-  $($Array.Type)* Data;
+  $($Array.Type)* _Data;
+
+  enum { FixedCapacity = $($Array.FixedCapacity) };
+  $($Array.Type) _Fixed[FixedCapacity];
+
+  $($Array.Type)* Data() { return _Data ? _Data : _Fixed; }
 };
 
 ${FunctionQualifiers}void
@@ -58,7 +63,7 @@ Find($($Array.Name)* Array, predicate Predicate)
 {
     for (int Index = 0; Index < Array->NumElements; ++Index)
     {
-        $($Array.Type)* Item = Array->Data + Index;
+        $($Array.Type)* Item = Array->Data() + Index;
         if (Predicate(Item))
         {
             return Item;
@@ -79,9 +84,15 @@ Find($($Array.Name)* Array, predicate Predicate)
 ${FunctionQualifiers}void
 Reserve($($Array.Name)* Array, int RequiredCapacity)
 {
+  if (Array->_Data == nullptr || Array->Capacity == 0)
+  {
+    Array->Capacity = Array->FixedCapacity;
+    Array->_Data = nullptr;
+  }
+
   if (RequiredCapacity > Array->Capacity)
   {
-    int NewCapacity = 32;
+    int NewCapacity = 2 * $($Array.Name)::FixedCapacity;
 
     if (Array->Capacity > 0)
       NewCapacity = Array->Capacity;
@@ -89,7 +100,7 @@ Reserve($($Array.Name)* Array, int RequiredCapacity)
     while (NewCapacity < RequiredCapacity)
       NewCapacity *= 2;
 
-    void* OldData = Array->Data;
+    void* OldData = Array->_Data;
     void* NewData = malloc(NewCapacity * sizeof($($Array.Type)));
 
     if (OldData)
@@ -98,7 +109,7 @@ Reserve($($Array.Name)* Array, int RequiredCapacity)
       free(OldData);
     }
 
-    Array->Data = ($($Array.Type)*)NewData;
+    Array->_Data = ($($Array.Type)*)NewData;
     Array->Capacity = NewCapacity;
   }
 }
@@ -107,7 +118,7 @@ ${FunctionQualifiers}$($Array.Type)*
 Add($($Array.Name)* Array, int NumToAdd)
 {
   Reserve(Array, Array->NumElements + NumToAdd);
-  $($Array.Type)* Result = Array->Data + Array->NumElements;
+  $($Array.Type)* Result = Array->Data() + Array->NumElements;
   Array->NumElements += NumToAdd;
 
   return Result;
@@ -118,15 +129,15 @@ At($($Array.Name)* Array, int Index)
 {
   MTB_AssertDebug(Index >= 0);
   MTB_AssertDebug(Index < Array->NumElements);
-  return Array->Data + Index;
+  return Array->Data() + Index;
 }
 
 ${FunctionQualifiers}void
 Deallocate($($Array.Name)* Array)
 {
-  if (Array->Data)
+  if (Array->_Data)
   {
-    free(Array->Data);
+    free(Array->_Data);
   }
   *Array = {};
 }
@@ -155,20 +166,23 @@ foreach($Text in $TextTypes)
 
 struct $($Text.Name)
 {
+  enum { Capacity = $($Text.FixedCapacity) };
+
   int Size;
-  char Data[$($Text.FixedCapacity)];
+  char Data[Capacity];
 };
 
 // "Constructor"
-${FunctionQualifiers}$($Text.Name) $($CtorName)(char const* String);
-${FunctionQualifiers}$($Text.Name) $($CtorName)(size_t StringLength, char const* String);
+${FunctionQualifiers}$($Text.Name) $($CtorName)(strc String);
+
+// To str
+${FunctionQualifiers}str Str($($Text.Name)* Text);
 
 // Trim
 ${FunctionQualifiers}$($Text.Name) Trim($($Text.Name) Text);
 
 // Append
-${FunctionQualifiers}int Append($($Text.Name)* Text, char const* String);
-${FunctionQualifiers}int Append($($Text.Name)* Text, size_t StringLength, char const* String);
+${FunctionQualifiers}int Append($($Text.Name)* Text, strc String);
 
 // Comparison
 ${FunctionQualifiers}int Compare($($Text.Name)* A, $($Text.Name)* B);
@@ -185,80 +199,43 @@ ${FunctionQualifiers}bool AreEqual($($Text.Name)* A, $($Text.Name)* B);
 #include "$($Text.Name).h"
 
 ${FunctionQualifiers}$($Text.Name)
-$($CtorName)(char const* String)
-{
-  size_t StringLength = mtb_StringLengthOf(String);
-  return $($CtorName)(StringLength, String);
-}
-
-${FunctionQualifiers}$($Text.Name)
-$($CtorName)(size_t StringLength, char const* String)
+$($CtorName)(strc String)
 {
     $($Text.Name) Result{};
-    Append(&Result, StringLength, String);
+    Append(&Result, String);
     return Result;
+}
+
+${FunctionQualifiers}str
+Str($($Text.Name)* Text)
+{
+  str Result{ (size_t)Text->Size, Text->Data };
+
+  return Result;
 }
 
 $($Text.Name)
 Trim($($Text.Name) Text)
 {
-  int Front = 0;
-  for (size_t Index = 0; Index < Text.Size; ++Index)
-  {
-    if (!mtb_IsWhitespace(Text.Data[Index]))
-      break;
-
-    ++Front;
-  }
-
-  int Back = 0;
-  for (size_t IndexPlusOne = Text.Size; IndexPlusOne > 0; --IndexPlusOne)
-  {
-    size_t Index = IndexPlusOne - 1;
-    if (!mtb_IsWhitespace(Text.Data[Index]))
-      break;
-
-    ++Back;
-  }
-
-  $($Text.Name) Result{};
-  if (Front > 0 || Back > 0)
-  {
-    int NewLength = Text.Size - Front - Back;
-    if (NewLength > 0)
-    {
-      Result.Size = NewLength;
-      mtb_CopyBytes(Result.Size, Result.Data, Text.Data + Front);
-    }
-  }
-  else
-  {
-    Result = Text;
-  }
+  str Trimmed = Trim(Str(&Text));
+  $($Text.Name) Result = $($CtorName)(Trimmed);
 
   return Result;
 }
 
 ${FunctionQualifiers}int
-Append($($Text.Name)* Text, char const* String)
+Append($($Text.Name)* Text, strc String)
 {
-  size_t StringLength = mtb_StringLengthOf(String);
-  return Append(Text, StringLength, String);
-}
-
-${FunctionQualifiers}int
-Append($($Text.Name)* Text, size_t StringLength, char const* String)
-{
-  int NewSize = Text->Size + (int)StringLength;
-  MTB_AssertDebug(NewSize < $($Text.FixedCapacity), `"Result would be too long to append`");
-  if (NewSize > $($Text.FixedCapacity))
+  size_t NewSize = Text->Size + String.Size;
+  MTB_AssertDebug(NewSize < Text->Capacity, `"Result would be too long to append`");
+  if (NewSize > Text->Capacity)
   {
-    NewSize = $($Text.FixedCapacity);
+    NewSize = Text->Capacity;
   }
 
-  int NumCopies = NewSize - Text->Size;
-  mtb_CopyBytes(NumCopies, Text->Data + Text->Size, String);
-  Text->Size = NewSize;
+  int NumCopies = (int)NewSize - Text->Size;
+  mtb_CopyBytes(NumCopies, Text->Data + Text->Size, String.Data);
+  Text->Size = (int)NewSize;
 
   return NumCopies;
 }

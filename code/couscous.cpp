@@ -280,15 +280,15 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
             {
                 switch (Code[1])
                 {
-                    case 'X': sscanf(Code + 2, "%3X", &Value); break;
+                    case 'X': sscanf(Code + 2, "%X", &Value); break;
                     case 'B': MTB_NOT_IMPLEMENTED; break;
-                    case 'D': sscanf(Code + 2, "%3d", &Value); break;
-                    default: sscanf(Code + 1, "%3d", &Value); break;
+                    case 'D': sscanf(Code + 2, "%d", &Value); break;
+                    default: sscanf(Code + 1, "%d", &Value); break;
                 }
             }
             else
             {
-                sscanf(Code, "%3d", &Value);
+                sscanf(Code, "%d", &Value);
             }
 
             Result.Value = (u16)Value;
@@ -1796,25 +1796,87 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
 
 #if COUSCOUSC
 
+str Trim(str Text)
+{
+    str Result = Text;
+
+    while (Result.Size > 0)
+    {
+        if (!mtb_IsWhitespace(Result.Data[0]))
+            break;
+
+        ++Result.Data;
+        --Result.Size;
+    }
+
+    while (Result.Size > 0)
+    {
+        if (!mtb_IsWhitespace(Result.Data[Result.Size - 1]))
+            break;
+
+        --Result.Size;
+    }
+
+    return Result;
+}
+
+str Str(char* Stringz)
+{
+    str Result{ mtb_StringLengthOf(Stringz), Stringz };
+
+    return Result;
+}
+
+strc Str(char const* Stringz)
+{
+    strc Result{ mtb_StringLengthOf(Stringz), Stringz };
+
+    return Result;
+}
+
+strc StrConst(char* Stringz)
+{
+    return Str((char const*)Stringz);
+}
+
+str StrNoConst(char const* Stringz)
+{
+    return Str((char*)Stringz);
+}
+
+int Compare(str A, str B)
+{
+    int Result = mtb_StringCompare(A.Size, A.Data, B.Size, B.Data);
+
+    return Result;
+}
+
+bool AreEqual(str A, str B)
+{
+    int ComparisonResult = Compare(A, B);
+
+    return ComparisonResult == 0;
+}
+
 static void
-ToUpper(int Size, char* String)
+ToUpper(str String)
 {
     for (int Index = 0;
-        Index < Size;
+        Index < String.Size;
         ++Index)
     {
-        if (String[Index] >= 'a' && String[Index] <= 'z')
+        if (String.Data[Index] >= 'a' && String.Data[Index] <= 'z')
         {
-            char Offset = String[Index] - 'a';
-            String[Index] = 'A' + Offset;
+            char Offset = String.Data[Index] - 'a';
+            String.Data[Index] = 'A' + Offset;
         }
     }
 }
 
-static assembler_tokens
-Tokenize(text Code)
+static str_array
+Tokenize(str Code)
 {
-    assembler_tokens Result{};
+    str_array Tokens{};
 
     char* Current = Code.Data;
     char* OnePastLast = Current + Code.Size;
@@ -1832,40 +1894,40 @@ Tokenize(text Code)
         while (Current < OnePastLast && !mtb_IsWhitespace(Current[0]) && Current[0] != ',')
             ++Current;
 
-        token* Token = Result.Tokens + Result.NumTokens++;
-        *Token = CreateToken((int)(Current - TokenStart), TokenStart);
+        str* Token = Add(&Tokens);
+        *Token = { (size_t)(Current - TokenStart), TokenStart };
         *Token = Trim(*Token);
-        ToUpper(Token->Size, Token->Data);
+        ToUpper(*Token);
 
         // Skip the current whitespace or comma.
         ++Current;
     }
 
-    return Result;
+    return Tokens;
 }
 
 static text
-Detokenize(assembler_tokens Tokens)
+Detokenize(int NumTokens, str* Tokens)
 {
     text Result{};
 
-    char* Separator = "";
+    strc TokenSeparator = Str(" ");
+    strc Sep = Str("");
 
     for (int TokenIndex = 0;
-        TokenIndex < Tokens.NumTokens;
+        TokenIndex < NumTokens;
         ++TokenIndex)
     {
-        Append(&Result, Separator);
-        Separator = " ";
+        Append(&Result, Sep);
+        Sep = TokenSeparator;
 
-        if (Result.Size >= mtb_ArrayLengthOf(Result.Data))
+        if (Result.Size >= Result.Capacity)
             break;
 
-        token* Token = Tokens.Tokens + TokenIndex;
+        str* Token = Tokens + TokenIndex;
+        Append(&Result, *Token);
 
-        Append(&Result, Token->Size, Token->Data);
-
-        if (Result.Size >= mtb_ArrayLengthOf(Result.Data))
+        if (Result.Size >= Result.Capacity)
             break;
     }
 
@@ -1873,28 +1935,29 @@ Detokenize(assembler_tokens Tokens)
 }
 
 static instruction
-AssembleInstruction(text Code)
+AssembleInstruction(str Code)
 {
-    assembler_tokens Tokens = Tokenize(Code);
-    instruction Result = AssembleInstruction(Tokens);
+    str_array Tokens = Tokenize(Code);
+    instruction Result = AssembleInstruction(Tokens.NumElements, Tokens.Data());
+    Deallocate(&Tokens);
 
     return Result;
 }
 
 static instruction
-AssembleInstruction(assembler_tokens Tokens)
+AssembleInstruction(int NumTokens, str* Tokens)
 {
     instruction Result{};
 
-    if (Tokens.NumTokens > 0)
+    if (NumTokens > 0)
     {
-        Result.Type = MakeInstructionTypeFromString(Tokens.Tokens[0].Size, Tokens.Tokens[0].Data);
+        Result.Type = MakeInstructionTypeFromString(Tokens[0].Size, Tokens[0].Data);
 
         for (int TokenIndex = 1;
-            TokenIndex < Tokens.NumTokens;
+            TokenIndex < NumTokens;
             ++TokenIndex)
         {
-            token* Token = Tokens.Tokens + TokenIndex;
+            str* Token = Tokens + TokenIndex;
             int ArgumentIndex = TokenIndex - 1;
             Result.Args[ArgumentIndex] = MakeArgumentFromString(Token->Size, Token->Data);
         }
@@ -1906,37 +1969,48 @@ AssembleInstruction(assembler_tokens Tokens)
 static text
 DisassembleInstruction(instruction Instruction)
 {
-    assembler_tokens Tokens = DisassembleInstructionTokens(Instruction);
-    text Result = Detokenize(Tokens);
+    token_array Tokens = DisassembleInstructionTokens(Instruction);
+    MTB_DEFER[&]{ Deallocate(&Tokens); };
+
+    str_array TokenStrings{};
+    MTB_DEFER[&]{ Deallocate(&TokenStrings); };
+
+    for (int TokenIndex = 0;
+        TokenIndex < Tokens.NumElements;
+        ++TokenIndex)
+    {
+        *Add(&TokenStrings) = Str(Tokens.Data() + TokenIndex);
+    }
+
+    text Result = Detokenize(Tokens.NumElements, TokenStrings.Data());
 
     return Result;
 }
 
-static assembler_tokens
+static token_array
 DisassembleInstructionTokens(instruction Instruction)
 {
-    assembler_tokens Result{};
+    token_array Result{};
     if (Instruction.Type != instruction_type::INVALID)
     {
         {
-            char const* TypeString = GetInstructionTypeAsString(Instruction.Type);
-            token* Token = Result.Tokens + Result.NumTokens++;
-            Append(Token, TypeString);
+            strc TypeString = Str(GetInstructionTypeAsString(Instruction.Type));
+            *Add(&Result) = CreateToken(TypeString);
         }
 
         for (int ArgIndex = 0;
             ArgIndex < mtb_ArrayLengthOf(Instruction.Args) && Instruction.Args[ArgIndex].Type != argument_type::NONE;
             ++ArgIndex)
         {
-            token* Token = Result.Tokens + Result.NumTokens++;
-            Token->Size = (int)GetArgumentAsString(Instruction.Args[ArgIndex], mtb_ArrayLengthOf(Token->Data), (u8*)Token->Data);
+            token* Token = Add(&Result);
+            Token->Size = (int)GetArgumentAsString(Instruction.Args[ArgIndex], Token->Capacity, (u8*)Token->Data);
         }
     }
     else
     {
         u16 RawInstruction = Instruction.Args[0].Value;
-        token* Token = Result.Tokens + Result.NumTokens++;
-        int NumCharsWritten = snprintf(Token->Data, mtb_ArrayLengthOf(Token->Data), "<0x%04X>", RawInstruction);
+        token* Token = Add(&Result);
+        int NumCharsWritten = snprintf(Token->Data, Token->Capacity, "<0x%04X>", RawInstruction);
         MTB_AssertDebug(NumCharsWritten == 3 + 4 + 1);
         Token->Size = NumCharsWritten;
     }
@@ -1944,27 +2018,58 @@ DisassembleInstructionTokens(instruction Instruction)
     return Result;
 }
 
-static char*
-SkipWhitespace(char* Begin, char* End)
+struct parser_cursor
 {
-    while (Begin < End && mtb_IsWhitespace(Begin[0]))
-        ++Begin;
+    char* Begin;
+    char* End;
+    int NumLineBreaks;
+    int LinePos;
+};
 
-    return Begin;
+static bool
+IsValid(parser_cursor Cursor)
+{
+    return Cursor.Begin < Cursor.End;
 }
 
-static char*
-SkipWhitespaceAndComments(char* Begin, char* End)
+static parser_cursor
+Advance(parser_cursor Cursor)
+{
+    if (IsValid(Cursor))
+    {
+        ++Cursor.LinePos;
+        if (Cursor.Begin[0] == '\n')
+        {
+            ++Cursor.NumLineBreaks;
+            Cursor.LinePos = 0;
+        }
+        ++Cursor.Begin;
+    }
+
+    return Cursor;
+}
+
+static parser_cursor
+SkipWhitespace(parser_cursor Cursor)
+{
+    while (IsValid(Cursor) && mtb_IsWhitespace(Cursor.Begin[0]))
+        Cursor = Advance(Cursor);
+
+    return Cursor;
+}
+
+static parser_cursor
+SkipWhitespaceAndComments(parser_cursor Cursor)
 {
     while (true)
     {
-        Begin = SkipWhitespace(Begin, End);
+        Cursor = SkipWhitespace(Cursor);
 
         // Comments
-        if (Begin < End && Begin[0] == '#')
+        if (IsValid(Cursor) && Cursor.Begin[0] == '#')
         {
-            while (Begin < End && Begin[0] != '\n')
-                ++Begin;
+            while (IsValid(Cursor) && Cursor.Begin[0] != '\n')
+                Cursor = Advance(Cursor);
 
             continue;
         }
@@ -1972,35 +2077,36 @@ SkipWhitespaceAndComments(char* Begin, char* End)
         break;
     }
 
-    return Begin;
+    return Cursor;
 }
 
-static char*
-ParseLine(char* Begin, char* End)
+static parser_cursor
+ParseLine(parser_cursor Cursor)
 {
-    while (Begin < End)
+    while (IsValid(Cursor))
     {
-        if (Begin[0] == '\n' || Begin[0] == '#')
+        if (Cursor.Begin[0] == '\n' || Cursor.Begin[0] == '#')
         {
             break;
         }
-        else if (Begin[0] == ':')
+        else if (Cursor.Begin[0] == ':')
         {
-            ++Begin;
+            Cursor = Advance(Cursor);
             break;
         }
 
-        ++Begin;
+        Cursor = Advance(Cursor);
     }
 
-    return Begin;
+    return Cursor;
 }
 
 static void
-AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 BaseMemoryOffset)
+AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_settings Settings)
 {
-    char* Contents = ContentsBegin;
-    u16 CurrentMemoryOffset = BaseMemoryOffset;
+    parser_cursor Cursor{ ContentsBegin, ContentsEnd };
+
+    u16 CurrentMemoryOffset = Settings.BaseMemoryOffset;
 
     label_array Labels{};
     MTB_DEFER[&]{ Deallocate(&Labels); };
@@ -2010,25 +2116,24 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
 
     while (true)
     {
-        Contents = SkipWhitespaceAndComments(Contents, ContentsEnd);
-        if (Contents >= ContentsEnd)
+        Cursor = SkipWhitespaceAndComments(Cursor);
+        if (!IsValid(Cursor))
             goto EndOfContentParsing;
 
-        char* LineStart = Contents;
+        parser_cursor LineStart = Cursor;
+        Cursor = ParseLine(Cursor);
 
-        Contents = ParseLine(Contents, ContentsEnd);
-
-        text Text = Trim(CreateText((int)(Contents - LineStart), LineStart));
+        str Text = Trim(str{ (size_t)(Cursor.Begin - LineStart.Begin), LineStart.Begin });
 
         if (Text.Data[Text.Size - 1] == ':')
         {
             // We have a label!
             label Label{};
             // Copy without the trailing colon
-            Label.Text = CreateText(Text.Size - 1, Text.Data);
+            Label.Name = str{ Text.Size - 1, Text.Data };
             Label.MemoryOffset = CurrentMemoryOffset;
 
-            if (Find(&Labels, [&](label* L) { return AreEqual(&L->Text, &Label.Text); }))
+            if (Find(&Labels, [&](label* L) { return AreEqual(L->Name, Label.Name); }))
             {
                 // TODO: Diagnostics
                 MTB_Fail("Duplicate label.");
@@ -2043,31 +2148,35 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
         {
             // We have a data section.
 
-            char* DataBegin = Text.Data + 1;
-            char* DataEnd = Text.Data + Text.Size - 1;
-            char* DataCurrent = DataBegin;
+            // Skip the opening bracket.
+            parser_cursor DataCursor = Advance(LineStart);
 
-            char DataType = *DataCurrent;
-            DataCurrent = SkipWhitespaceAndComments(DataCurrent + 1, DataEnd);
+            // Ignore the closing bracket.
+            --DataCursor.End;
+
+            MTB_AssertDebug(DataCursor.End - DataCursor.Begin > 0);
+
+            char DataType = DataCursor.Begin[0];
+            DataCursor = SkipWhitespaceAndComments(DataCursor);
 
             switch (DataType)
             {
                 case 'b':
                 case 'B':
                 {
-                    while (DataCurrent < DataEnd)
+                    while (IsValid(DataCursor))
                     {
                         u8 Byte = 0;
                         for (u8 BitIndex = 7; BitIndex >= 0; --BitIndex)
                         {
-                            DataCurrent = SkipWhitespace(DataCurrent, DataEnd);
-                            if (DataCurrent >= DataEnd)
+                            DataCursor = SkipWhitespace(DataCursor);
+                            if (!IsValid(DataCursor))
                                 break;
 
-                            if (DataCurrent[0] == '1')
+                            if (DataCursor.Begin[0] == '1')
                                 Byte |= (u8)(1u << BitIndex);
 
-                            ++DataCurrent;
+                            DataCursor = Advance(DataCursor);
                         }
 
                         *Add(ByteCode) = Byte;
@@ -2078,18 +2187,18 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                 case 'x':
                 case 'X':
                 {
-                    while (DataCurrent < DataEnd)
+                    while (IsValid(DataCursor))
                     {
                         u8 Byte = 0;
                         for (u8 NibbleIndex = 1; NibbleIndex >= 0; --NibbleIndex)
                         {
-                            DataCurrent = SkipWhitespace(DataCurrent, DataEnd);
-                            if (DataCurrent >= DataEnd)
+                            DataCursor = SkipWhitespace(DataCursor);
+                            if (!IsValid(DataCursor))
                                 break;
 
                             unsigned Shift = 4 * NibbleIndex;
 
-                            char Char = DataCurrent[0];
+                            char Char = DataCursor.Begin[0];
                             switch (Char)
                             {
                                 case '1': Byte |= (u8)(1u << Shift); break;
@@ -2115,7 +2224,7 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                                 case 'f': Byte |= (u8)(0xFu << Shift); break;
                             }
 
-                            ++DataCurrent;
+                            DataCursor = Advance(DataCursor);
                         }
 
                         *Add(ByteCode) = Byte;
@@ -2132,8 +2241,10 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
         }
         else
         {
-            assembler_tokens Tokens = Tokenize(Text);
-            instruction Instruction = AssembleInstruction(Tokens);
+            str_array Tokens = Tokenize(Text);
+            MTB_DEFER[&]{ Deallocate(&Tokens); };
+
+            instruction Instruction = AssembleInstruction(Tokens.NumElements, Tokens.Data());
 
             if (Instruction.Type == instruction_type::INVALID)
             {
@@ -2150,13 +2261,13 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                     if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
                     {
                         // e.g. JP 0x234
-                        Patch.LabelName = Tokens.Tokens[1];
+                        Patch.LabelName = *At(&Tokens, 1);
                     }
                     else if (Instruction.Args[0].Type == argument_type::V && Instruction.Args[0].Value == 0 &&
                         Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
                     {
                         // e.g. JP V0 0x234
-                        Patch.LabelName = Tokens.Tokens[2];
+                        Patch.LabelName = *At(&Tokens, 2);
                     }
                 } break;
 
@@ -2165,7 +2276,7 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                     if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
                     {
                         // e.g. CALL 0x234
-                        Patch.LabelName = Tokens.Tokens[1];
+                        Patch.LabelName = *At(&Tokens, 1);
                     }
                 } break;
 
@@ -2175,7 +2286,7 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 Bas
                         Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
                     {
                         // e.g. LD I 0x234
-                        Patch.LabelName = Tokens.Tokens[2];
+                        Patch.LabelName = *At(&Tokens, 2);
                     }
                 } break;
             }
@@ -2199,18 +2310,18 @@ EndOfContentParsing:
         PatchIndex < Patches.NumElements;
         ++PatchIndex)
     {
-        patch* Patch = Patches.Data + PatchIndex;
+        patch* Patch = Patches.Data() + PatchIndex;
 
         bool Found = false;
         for (int LabelIndex = 0;
             LabelIndex < Labels.NumElements;
             ++LabelIndex)
         {
-            label* Label = Labels.Data + LabelIndex;
-            if (mtb_StringsAreEqual(Label->Text.Size, Label->Text.Data, Patch->LabelName.Size, Patch->LabelName.Data))
+            label* Label = Labels.Data() + LabelIndex;
+            if (AreEqual(Label->Name, Patch->LabelName))
             {
-                MTB_AssertDebug(Patch->InstructionMemoryOffset >= BaseMemoryOffset);
-                u16 MemoryIndex = Patch->InstructionMemoryOffset - BaseMemoryOffset;
+                MTB_AssertDebug(Patch->InstructionMemoryOffset >= Settings.BaseMemoryOffset);
+                u16 MemoryIndex = Patch->InstructionMemoryOffset - Settings.BaseMemoryOffset;
                 u16* InstructionLocation = (u16*)At(ByteCode, MemoryIndex);
                 u16 EncodedInstruction = ReadWord(InstructionLocation);
                 EncodedInstruction |= (Label->MemoryOffset & 0x0FFF);
@@ -2221,10 +2332,9 @@ EndOfContentParsing:
             }
         }
 
-        if (!Found)
+        if (!Found && Settings.Errors.LabelNotFound)
         {
-            MTB_Fail("Unknown label");
-            // TODO: Diagnostics?
+            Settings.Errors.LabelNotFound(Patch->LabelName);
         }
     }
 }

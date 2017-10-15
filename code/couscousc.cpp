@@ -21,11 +21,6 @@ using f64 = mtb_f64;
 using uint = unsigned int;
 using bool32 = int;
 
-#include "_generated/text.h"
-#include "_generated/token.h"
-#include "_generated/label_array.h"
-#include "_generated/patch_array.h"
-#include "_generated/u8_array.h"
 #include "couscous.h"
 
 #include "couscous.cpp"
@@ -132,7 +127,7 @@ int main(int NumArgs, char const* Args[])
     //
     //
     char* ContentsBegin = nullptr;
-    char* ContentsOnePastLast = nullptr;
+    char* ContentsEnd = nullptr;
 
     FILE* InFile = fopen(Files[0], "rb");
     fseek(InFile, 0, SEEK_END);
@@ -140,7 +135,7 @@ int main(int NumArgs, char const* Args[])
     fseek(InFile, 0, SEEK_SET);
 
     ContentsBegin = (char*)malloc(InFileSize);
-    ContentsOnePastLast = ContentsBegin + InFileSize;
+    ContentsEnd = ContentsBegin + InFileSize;
     fread(ContentsBegin, InFileSize, 1, InFile);
 
     fclose(InFile);
@@ -152,27 +147,32 @@ int main(int NumArgs, char const* Args[])
         else
             OutFile = fopen(Files[1], "wb");
 
-        char* Current = ContentsBegin;
         if (Mode == commandline_mode::Assemble)
         {
             u8_array ByteCode{};
             MTB_DEFER[&]{ Deallocate(&ByteCode); };
 
-            AssembleCode(ContentsBegin, ContentsOnePastLast, &ByteCode);
+            parser_error_handlers ErrorHandlers{};
+
+            parser_settings Settings{};
+            Settings.BaseMemoryOffset = 200u;
+            Settings.Errors = ErrorHandlers;
+            AssembleCode(ContentsBegin, ContentsEnd, &ByteCode, Settings);
 
             // Write the result!
-            fwrite(ByteCode.Data, ByteCode.NumElements * sizeof(*ByteCode.Data), 1, OutFile);
+            fwrite(ByteCode.Data(), ByteCode.NumElements, 1, OutFile);
         }
         else if (Mode == commandline_mode::Disassemble)
         {
-            while (Current < ContentsOnePastLast)
+            char* Current = ContentsBegin;
+            while (Current < ContentsEnd)
             {
                 instruction_decoder Decoder{};
                 Decoder.Data = ReadWord(Current);
                 Current += sizeof(u16);
 
                 // Can only trigger if Current and ContentsOnePastLast are not aligned to 2 bytes relative to each other!
-                MTB_AssertDebug(Current <= ContentsOnePastLast);
+                MTB_AssertDebug(Current <= ContentsEnd);
 
                 instruction Instruction = DecodeInstruction(Decoder);
                 text Code = DisassembleInstruction(Instruction);

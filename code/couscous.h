@@ -207,43 +207,93 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown);
 
 #if COUSCOUSC
 
+#include "_generated/u8_array.h"
+
+struct strc
+{
+    size_t Size;
+    char const* Data;
+};
+
+struct str
+{
+    size_t Size;
+    char* Data;
+
+    // Implicit conversion to const string.
+    inline operator strc() const { return { Size, Data }; }
+};
+#include "_generated/str_array.h"
+
+#include "_generated/text.h"
+#include "_generated/token.h"
+#include "_generated/token_array.h"
+
+static str
+Trim(str Text);
+
+static str
+Str(char* Stringz);
+
+static strc
+StrConst(char* Stringz);
+
+static strc
+Str(char const* Stringz);
+
+static str
+StrNoConst(char const* Stringz);
+
+static int
+Compare(str A, str B);
+
+static bool
+AreEqual(str A, str B);
+
 struct label
 {
-    text Text;
+    str Name;
     u16 MemoryOffset;
 };
+#include "_generated/label_array.h"
 
 struct patch
 {
-    token LabelName;
+    str LabelName;
     u16 InstructionMemoryOffset;
 };
+#include "_generated/patch_array.h"
 
-struct assembler_tokens
-{
-    int NumTokens;
-    token Tokens[4];
-};
-
-static assembler_tokens
-Tokenize(text Code);
+static str_array
+Tokenize(str Code);
 
 static text
-Detokenize(assembler_tokens Tokens);
+Detokenize(int NumTokens, str* Tokens);
 
 static instruction
-AssembleInstruction(text Code);
+AssembleInstruction(str Code);
 
 static instruction
-AssembleInstruction(assembler_tokens Tokens);
+AssembleInstruction(int NumTokens, str* Tokens);
 
-static assembler_tokens
+static token_array
 DisassembleInstructionTokens(instruction Instruction);
 
 static text
 DisassembleInstruction(instruction Instruction);
 
+struct parser_error_handlers
+{
+    void(*LabelNotFound)(strc LabelName);
+};
+
+struct parser_settings
+{
+    parser_error_handlers Errors;
+    u16 BaseMemoryOffset;
+};
+
 static void
-AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 BaseMemoryOffset = 0x200u);
+AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_settings Settings);
 
 #endif // COUSCOUSC
