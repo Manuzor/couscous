@@ -1794,7 +1794,7 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
     return Result;
 }
 
-#if COUSCOUS_ASSEMBLER
+#if COUSCOUSC
 
 static void
 ToUpper(int Size, char* String)
@@ -2229,4 +2229,4 @@ EndOfContentParsing:
     }
 }
 
-#endif // COUSCOUS_ASSEMBLER
+#endif // COUSCOUSC

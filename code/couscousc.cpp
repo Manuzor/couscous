@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#define COUSCOUS_ASSEMBLER 1
+#define COUSCOUSC 1
 
 #include "mtb.h"
 using u8 = mtb_u08;
@@ -34,7 +34,7 @@ using bool32 = int;
 static void
 PrintHelp(FILE* OutFile)
 {
-    fprintf(OutFile, "Usage: couscous_assembler [-help] (-assemble|-disassemble) <in_file> [<out_file>]\n");
+    fprintf(OutFile, "Usage: couscousc [-help] (-assemble|-disassemble) <in_file> [<out_file>]\n");
 }
 
 enum struct commandline_mode

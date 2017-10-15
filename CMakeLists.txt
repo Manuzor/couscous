@@ -60,11 +60,11 @@ if(MSVC)
 endif()
 target_sources(couscous PUBLIC ${COUSCOUS_CPP_FILES})
 
-# couscous_assembler
+# couscousc
 include_directories("${CMAKE_SOURCE_DIR}/code")
-add_executable(couscous_assembler "${CMAKE_SOURCE_DIR}/code/couscous_assembler.cpp")
-add_dependencies(couscous_assembler generate_code)
+add_executable(couscousc "${CMAKE_SOURCE_DIR}/code/couscousc.cpp")
+add_dependencies(couscousc generate_code)
 if(MSVC)
-    set_target_properties(couscous_assembler PROPERTIES LINK_FLAGS "/INCREMENTAL:NO")
+    set_target_properties(couscousc PROPERTIES LINK_FLAGS "/INCREMENTAL:NO")
 endif()
-target_sources(couscous_assembler PUBLIC ${COUSCOUS_CPP_FILES})
+target_sources(couscousc PUBLIC ${COUSCOUS_CPP_FILES})

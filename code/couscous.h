@@ -205,7 +205,7 @@ static u16
 SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown);
 
 
-#if COUSCOUS_ASSEMBLER
+#if COUSCOUSC
 
 struct label
 {
@@ -246,4 +246,4 @@ DisassembleInstruction(instruction Instruction);
 static void
 AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, u16 BaseMemoryOffset = 0x200u);
 
-#endif // COUSCOUS_ASSEMBLER
+#endif // COUSCOUSC

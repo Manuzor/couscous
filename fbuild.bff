@@ -211,14 +211,14 @@
   }
 }
 
-// couscous_assembler
+// couscousc
 {
   .PreBuildDependencies = { 'generate_code' }
 
   .ProjectConfigs = {}
   .ProjectInputPaths = {}
 
-  .MyName = 'couscous_assembler'
+  .MyName = 'couscousc'
 
   .MyCodePath = '$RepoRoot$/code'
   .ProjectBasePath = .MyCodePath
@@ -226,10 +226,10 @@
 
   // win_msvc_x64
   {
-    .MyOutputName = 'couscous_assembler'
+    .MyOutputName = 'couscousc'
     .MyOutputExtension = '.exe'
 
-    .CompilerInputFiles = '$MyCodePath$/couscous_assembler.cpp'
+    .CompilerInputFiles = '$MyCodePath$/couscousc.cpp'
 
     .MyPlatformId = 'win_msvc_x64'
 

@@ -6,8 +6,8 @@
     #include <stdio.h>
 #endif
 
-#if !defined(COUSCOUS_ASSEMBLER)
-    #define COUSCOUS_ASSEMBLER 1
+#if !defined(COUSCOUSC)
+    #define COUSCOUSC 1
 #endif
 
 #include "mtb.h"
