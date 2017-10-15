@@ -26,6 +26,32 @@ using bool32 = int;
 #include "couscous.cpp"
 #include "_generated/all_generated.cpp"
 
+
+static void
+OnError(void* ErrorInfo)
+{
+    parser_error_type ErrorType = *(parser_error_type*)ErrorInfo;
+
+    switch (ErrorType)
+    {
+        case ERR_LabelNotFound:
+        {
+            parser_label_not_found* Info = (parser_label_not_found*)ErrorInfo;
+            fprintf(stderr, "Label not found.");
+        } break;
+
+        case ERR_DuplicateLabel:
+        {
+            parser_duplicate_label* Info = (parser_duplicate_label*)ErrorInfo;
+            fprintf(stderr, "Duplicate label definition.");
+        } break;
+
+        default:
+        {
+        } break;
+    }
+}
+
 static void
 PrintHelp(FILE* OutFile)
 {
@@ -152,11 +178,9 @@ int main(int NumArgs, char const* Args[])
             u8_array ByteCode{};
             MTB_DEFER[&]{ Deallocate(&ByteCode); };
 
-            parser_error_handlers ErrorHandlers{};
-
             parser_settings Settings{};
             Settings.BaseMemoryOffset = 200u;
-            Settings.Errors = ErrorHandlers;
+            Settings.ErrorHandler = OnError;
             AssembleCode(ContentsBegin, ContentsEnd, &ByteCode, Settings);
 
             // Write the result!

@@ -245,13 +245,44 @@ static str
 StrNoConst(char const* Stringz);
 
 static int
-Compare(str A, str B);
+Compare(strc A, strc B);
 
 static bool
-AreEqual(str A, str B);
+AreEqual(strc A, strc B);
+
+static bool
+StartsWith(strc String, strc Start);
+
+struct parser_cursor
+{
+    char* Begin;
+    char* End;
+    int NumLineBreaks;
+    int LinePos;
+};
+
+static str
+Str(parser_cursor Cursor);
+
+static bool
+IsValid(parser_cursor Cursor);
+
+static parser_cursor
+Advance(parser_cursor Cursor, int NumToAdvance = 1);
+
+static parser_cursor
+SkipWhitespace(parser_cursor Cursor);
+
+static parser_cursor
+SkipWhitespaceAndComments(parser_cursor Cursor);
+
+static parser_cursor
+ParseLine(parser_cursor Cursor);
+
 
 struct label
 {
+    parser_cursor Cursor;
     str Name;
     u16 MemoryOffset;
 };
@@ -259,6 +290,7 @@ struct label
 
 struct patch
 {
+    parser_cursor Cursor;
     str LabelName;
     u16 InstructionMemoryOffset;
 };
@@ -282,18 +314,57 @@ DisassembleInstructionTokens(instruction Instruction);
 static text
 DisassembleInstruction(instruction Instruction);
 
-struct parser_error_handlers
-{
-    void(*LabelNotFound)(strc LabelName);
-};
+using parser_error_handler = void(*)(void* ErrorInfo);
 
 struct parser_settings
 {
-    parser_error_handlers Errors;
+    parser_error_handler ErrorHandler;
     u16 BaseMemoryOffset;
 };
 
 static void
 AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_settings Settings);
+
+enum parser_error_type
+{
+    ERR_NONE,
+
+    ERR_LabelNotFound,
+    ERR_DuplicateLabel,
+
+    ERR_COUNT,
+};
+
+struct parser_label_not_found
+{
+    parser_error_type ErrorType = ERR_LabelNotFound;
+    parser_cursor PatchCursor;
+};
+inline void ErrorLabelNotFound(parser_error_handler Handler, parser_cursor PatchCursor)
+{
+    if (Handler)
+    {
+        parser_label_not_found Info{};
+        Info.PatchCursor = PatchCursor;
+        Handler(&Info);
+    }
+}
+
+struct parser_duplicate_label
+{
+    parser_error_type ErrorType = ERR_DuplicateLabel;
+    parser_cursor MainCursor;
+    parser_cursor SecondaryCursor;
+};
+inline void ErrorDuplicateLabel(parser_error_handler Handler, parser_cursor MainLabelCursor, parser_cursor SecondaryLabelCursor)
+{
+    if (Handler)
+    {
+        parser_duplicate_label Info{};
+        Info.MainCursor = MainLabelCursor;
+        Info.SecondaryCursor = SecondaryLabelCursor;
+        Handler(&Info);
+    }
+}
 
 #endif // COUSCOUSC
