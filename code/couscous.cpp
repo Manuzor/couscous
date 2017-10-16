@@ -494,7 +494,7 @@ Tick(machine* M)
     instruction Instruction = DecodeInstruction(Decoder);
 #if 1
     text DisassembledInstruction = DisassembleInstruction(Instruction);
-    printf("[%llu] %*s (0x%04X)\n", M->CurrentCycle, (int)DisassembledInstruction.Size, (char*)DisassembledInstruction.Data, Decoder.Data);
+    printf("[%llu] " STR_FMT " (0x%04X)\n", M->CurrentCycle, STR_FMTARG(DisassembledInstruction), Decoder.Data);
 #endif
 
     if (Instruction.Type != instruction_type::INVALID)
@@ -1771,8 +1771,8 @@ ExecuteInstruction(machine* M, instruction Instruction)
     }
 
     MTB_INTERNAL_CODE({
-      text Disassembly = DisassembleInstruction(Instruction);
-      printf("%*s: Invalid instruction to execute.\n", (int)Disassembly.Size, (char*)Disassembly.Data);
+        text Disassembly = DisassembleInstruction(Instruction);
+        printf(STR_FMT ": Invalid instruction to execute.\n", STR_FMTARG(Disassembly));
     });
 }
 
@@ -1794,7 +1794,205 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
     return Result;
 }
 
+
+int GetNumArguments(instruction Instruction)
+{
+    int Result = 0;
+    for (int ArgIndex = 0;
+        ArgIndex < mtb_ArrayLengthOf(Instruction.Args);
+        ++ArgIndex)
+    {
+        if (Instruction.Args[ArgIndex].Type == argument_type::NONE)
+            break;
+
+        ++Result;
+    }
+
+    return Result;
+}
+
 #if COUSCOUSC
+
+#define I0(Hint, InstructionType)                               { Hint, MTB_CONCAT(instruction_type::, InstructionType), 0 }
+#define I1(Hint, InstructionType, ArgType0)                     { Hint, MTB_CONCAT(instruction_type::, InstructionType), 1, { MTB_CONCAT(argument_type::, ArgType0) } }
+#define I2(Hint, InstructionType, ArgType0, ArgType1)           { Hint, MTB_CONCAT(instruction_type::, InstructionType), 2, { MTB_CONCAT(argument_type::, ArgType0), MTB_CONCAT(argument_type::, ArgType1) } }
+#define I3(Hint, InstructionType, ArgType0, ArgType1, ArgType2) { Hint, MTB_CONCAT(instruction_type::, InstructionType), 3, { MTB_CONCAT(argument_type::, ArgType0), MTB_CONCAT(argument_type::, ArgType1), MTB_CONCAT(argument_type::, ArgType2) } }
+
+static instruction_signature InstructionSignatures[] =
+{
+    I2("Fx1E", ADD, I, V),           // ADD I, Vx          - Fx1E
+    I2("7xkk", ADD, V, CONSTANT),    // ADD Vx, byte       - 7xkk
+    I2("8xy4", ADD, V, V),           // ADD Vx, Vy         - 8xy4
+    I2("8xy2", AND, V, V),           // AND Vx, Vy         - 8xy2
+    I1("2nnn", CALL, CONSTANT),      // CALL addr          - 2nnn
+    I0("00E0", CLS),                 // CLS                - 00E0
+    I3("Dxyn", DRW, V, V, CONSTANT), // DRW Vx, Vy, nibble - Dxyn
+    I1("1nnn", JP, CONSTANT),        // JP addr            - 1nnn
+    I2("Bnnn", JP, V, CONSTANT),     // JP V0, addr        - Bnnn
+    I2("Fx55", LD, ATI, V),          // LD [I], Vx         - Fx55
+    I2("Fx33", LD, B, V),            // LD B, Vx           - Fx33
+    I2("Fx15", LD, DT, V),           // LD DT, Vx          - Fx15
+    I2("Fx29", LD, F, V),            // LD F, Vx           - Fx29
+    I2("Annn", LD, I, CONSTANT),     // LD I, addr         - Annn
+    I2("Fx18", LD, ST, V),           // LD ST, Vx          - Fx18
+    I2("Fx65", LD, V, ATI),          // LD Vx, [I]         - Fx65
+    I2("6xkk", LD, V, CONSTANT),     // LD Vx, byte        - 6xkk
+    I2("Fx07", LD, V, DT),           // LD Vx, DT          - Fx07
+    I2("Fx0A", LD, V, K),            // LD Vx, K           - Fx0A
+    I2("8xy0", LD, V, V),            // LD Vx, Vy          - 8xy0
+    I2("8xy1", OR, V, V),            // OR Vx, Vy          - 8xy1
+    I0("00EE", RET),                 // RET                - 00EE
+    I2("Cxkk", RND, V, CONSTANT),    // RND Vx, byte       - Cxkk
+    I2("3xkk", SE, V, CONSTANT),     // SE Vx, byte        - 3xkk
+    I2("5xy0", SE, V, V),            // SE Vx, Vy          - 5xy0
+    I2("8xyE", SHL, V, V),           // SHL Vx {, Vy}      - 8xyE
+    I2("8xy6", SHR, V, V),           // SHR Vx {, Vy}      - 8xy6
+    I1("ExA1", SKNP, V),             // SKNP Vx            - ExA1
+    I1("Ex9E", SKP, V),              // SKP Vx             - Ex9E
+    I2("4xkk", SNE, V, CONSTANT),    // SNE Vx, byte       - 4xkk
+    I2("9xy0", SNE, V, V),           // SNE Vx, Vy         - 9xy0
+    I2("8xy5", SUB, V, V),           // SUB Vx, Vy         - 8xy5
+    I2("8xy7", SUBN, V, V),          // SUBN Vx, Vy        - 8xy7
+    I1("0nnn", SYS, CONSTANT),       // SYS addr           - 0nnn
+    I2("8xy3", XOR, V, V),           // XOR Vx, Vy         - 8xy3
+};
+
+#undef I0
+#undef I1
+#undef I2
+#undef I3
+
+bool
+IsCompatible(instruction Instruction, instruction_signature Signature)
+{
+    bool Result = false;
+
+    if (Instruction.Type == Signature.Type && GetNumArguments(Instruction) == Signature.NumParams)
+    {
+        Result = true;
+
+        for (int ParamIndex = 0;
+            ParamIndex < Signature.NumParams;
+            ++ParamIndex)
+        {
+            if (Instruction.Args[ParamIndex].Type != Signature.Params[ParamIndex])
+            {
+                Result = false;
+                break;
+            }
+        }
+    }
+
+    return Result;
+}
+
+instruction_signature*
+FindSignature(instruction instruction)
+{
+    instruction_signature* Result = nullptr;
+
+    for (int SignatureIndex = 0;
+        SignatureIndex < mtb_ArrayLengthOf(InstructionSignatures);
+        ++SignatureIndex)
+    {
+        instruction_signature* Signature = InstructionSignatures + SignatureIndex;
+        if (IsCompatible(instruction, *Signature))
+        {
+            Result = Signature;
+            break;
+        }
+    }
+
+    return Result;
+}
+
+instruction_signature*
+FindMostCompatibleSignature(instruction Instruction)
+{
+    struct signature_compatibility_score
+    {
+        int SignatureIndex;
+        int Score;
+    };
+    signature_compatibility_score Scores[mtb_ArrayLengthOf(InstructionSignatures)]{};
+
+    int NumArgs = GetNumArguments(Instruction);
+    if (NumArgs > 3)
+        NumArgs = 3;
+
+    for (int SignatureIndex = 0;
+        SignatureIndex < mtb_ArrayLengthOf(InstructionSignatures);
+        ++SignatureIndex)
+    {
+        instruction_signature* Signature = InstructionSignatures + SignatureIndex;
+        int BaseScore = 0;
+        if (Signature->Type == Instruction.Type)
+            BaseScore += 3;
+
+        // BaseScore -= mtb_Abs(Signature->NumParams - NumArgs);
+
+        int ParamScores[3]{};
+
+        for (int ParamIndex = 0;
+            ParamIndex < Signature->NumParams;
+            ++ParamIndex)
+        {
+            for (int ArgIndex = 0;
+                ArgIndex < mtb_ArrayLengthOf(Instruction.Args) && Instruction.Args[ArgIndex].Type != argument_type::NONE;
+                ++ArgIndex)
+            {
+                if (Signature->Params[ParamIndex] == Instruction.Args[ArgIndex].Type)
+                {
+                    if (ParamIndex == ArgIndex)
+                        ParamScores[ParamIndex] = 2;
+                    else
+                        ParamScores[ParamIndex] = 1;
+                }
+            }
+        }
+
+        int ParamScoreTotal = 0;
+        for (int ParamIndex = 0;
+            ParamIndex < Signature->NumParams;
+            ++ParamIndex)
+        {
+            ParamScoreTotal += ParamScores[ParamIndex];
+        }
+
+        signature_compatibility_score* Score = Scores + SignatureIndex;
+        Score->SignatureIndex = SignatureIndex;
+        Score->Score = BaseScore;
+        if (Signature->NumParams > 0)
+            Score->Score += ParamScoreTotal / Signature->NumParams;
+    }
+
+    qsort(Scores, mtb_ArrayLengthOf(Scores), sizeof(signature_compatibility_score), [](void const* A_, void const* B_)
+    {
+        signature_compatibility_score const* A = (signature_compatibility_score const*)A_;
+        signature_compatibility_score const* B = (signature_compatibility_score const*)B_;
+        int Result = B->Score - A->Score;
+        return Result;
+    });
+
+    instruction_signature* Result = nullptr;
+    if (Scores[0].Score > 0)
+    {
+        Result = InstructionSignatures + Scores[0].SignatureIndex;
+    }
+
+#if 1
+    for (int ScoreIndex = 0;
+        ScoreIndex < mtb_ArrayLengthOf(Scores) && Scores[ScoreIndex].Score > 0;
+        ++ScoreIndex)
+    {
+        signature_compatibility_score* Score = Scores + ScoreIndex;
+        instruction_signature* Signature = InstructionSignatures + Score->SignatureIndex;
+        fprintf(stderr, "  Score %d: %s (%s)\n", Score->Score, GetInstructionTypeAsString(Signature->Type), Signature->Hint);
+    }
+#endif
+
+    return Result;
+}
 
 str Trim(str Text)
 {
@@ -1822,14 +2020,22 @@ str Trim(str Text)
 
 str Str(char* Stringz)
 {
-    str Result{ mtb_StringLengthOf(Stringz), Stringz };
+    
+    str Result{ (int)mtb_SafeConvert_s32(mtb_StringLengthOf(Stringz)), Stringz };
 
     return Result;
 }
 
 strc Str(char const* Stringz)
 {
-    strc Result{ mtb_StringLengthOf(Stringz), Stringz };
+    strc Result{ (int)mtb_SafeConvert_s32(mtb_StringLengthOf(Stringz)), Stringz };
+
+    return Result;
+}
+
+str Str(char* Begin, char* End)
+{
+    str Result{ (int)(End - Begin), Begin };
 
     return Result;
 }
@@ -1846,7 +2052,7 @@ str StrNoConst(char const* Stringz)
 
 int Compare(strc A, strc B)
 {
-    int Result = mtb_StringCompare(A.Size, A.Data, B.Size, B.Data);
+    int Result = mtb_StringCompare((size_t)A.Size, A.Data, (size_t)B.Size, B.Data);
 
     return Result;
 }
@@ -1863,7 +2069,7 @@ bool StartsWith(strc String, strc Start)
     bool Result = false;
     if (Start.Size <= String.Size)
     {
-        size_t Size = mtb_Min(String.Size, Start.Size);
+        int Size = mtb_Min(String.Size, Start.Size);
         strc A{ Size, String.Data };
         strc B{ Size, Start.Data };
         Result = AreEqual(A, B);
@@ -1909,7 +2115,7 @@ Tokenize(str Code)
             ++Current;
 
         str* Token = Add(&Tokens);
-        *Token = { (size_t)(Current - TokenStart), TokenStart };
+        *Token = { (int)(Current - TokenStart), TokenStart };
         *Token = Trim(*Token);
         ToUpper(*Token);
 
@@ -1965,15 +2171,16 @@ AssembleInstruction(int NumTokens, str* Tokens)
 
     if (NumTokens > 0)
     {
-        Result.Type = MakeInstructionTypeFromString(Tokens[0].Size, Tokens[0].Data);
+        str* TypeToken = Tokens + 0;
+        Result.Type = MakeInstructionTypeFromString((size_t)TypeToken->Size, TypeToken->Data);
 
         for (int TokenIndex = 1;
             TokenIndex < NumTokens;
             ++TokenIndex)
         {
-            str* Token = Tokens + TokenIndex;
+            str* ArgToken = Tokens + TokenIndex;
             int ArgumentIndex = TokenIndex - 1;
-            Result.Args[ArgumentIndex] = MakeArgumentFromString(Token->Size, Token->Data);
+            Result.Args[ArgumentIndex] = MakeArgumentFromString((size_t)ArgToken->Size, ArgToken->Data);
         }
     }
 
@@ -2035,7 +2242,7 @@ DisassembleInstructionTokens(instruction Instruction)
 str
 Str(parser_cursor Cursor)
 {
-    return { (size_t)(Cursor.End - Cursor.Begin), Cursor.Begin };
+    return Str(Cursor.Begin, Cursor.End);
 }
 
 bool
@@ -2117,11 +2324,11 @@ ParseLine(parser_cursor Cursor)
 }
 
 void
-AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_settings Settings)
+AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode)
 {
     parser_cursor Cursor{ ContentsBegin, ContentsEnd };
 
-    u16 CurrentMemoryOffset = Settings.BaseMemoryOffset;
+    u16 CurrentMemoryOffset = Context->BaseMemoryOffset;
 
     label_array Labels{};
     MTB_DEFER[&]{ Deallocate(&Labels); };
@@ -2138,7 +2345,7 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_
         parser_cursor LineStart = Cursor;
         Cursor = ParseLine(Cursor);
 
-        str Text = Trim(str{ (size_t)(Cursor.Begin - LineStart.Begin), LineStart.Begin });
+        str Text = Trim(Str(LineStart.Begin, Cursor.Begin));
 
         if (Text.Data[Text.Size - 1] == ':')
         {
@@ -2153,7 +2360,7 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_
             label* Existing = Find(&Labels, [&](label* L) { return AreEqual(L->Name, Label.Name); });
             if (Existing)
             {
-                ErrorDuplicateLabel(Settings.ErrorHandler, Existing->Cursor, LineStart);
+                ErrorDuplicateLabel(Context, Existing->Cursor, LineStart);
             }
             else
             {
@@ -2262,10 +2469,11 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_
 
             instruction Instruction = AssembleInstruction(Tokens.NumElements, Tokens.Data());
 
-            if (Instruction.Type == instruction_type::INVALID)
+            instruction_signature* Signature = FindSignature(Instruction);
+            if (!Signature)
             {
-                // TODO: Diagnostics?
-                MTB_Fail("Unknown instruction");
+                instruction_signature* MostCompatibleSignature = FindMostCompatibleSignature(Instruction);
+                ErrorInvalidInstruction(Context, LineStart, MostCompatibleSignature);
             }
 
             patch Patch{};
@@ -2314,13 +2522,17 @@ AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_
                 {
                     PatchCursor = Advance(PatchCursor);
                 }
+                PatchCursor.End = Cursor.Begin;
                 Patch.Cursor = PatchCursor;
 
                 *Add(&Patches) = Patch;
             }
 
             u16 EncodedInstruction = EncodeInstruction(Instruction);
-            MTB_AssertDebug(EncodedInstruction != 0);
+            if (EncodedInstruction == 0)
+            {
+                // TODO: Diagnostics or assert?
+            }
 
             u16* NewWord = (u16*)Add(ByteCode, 2);
             WriteWord(NewWord, EncodedInstruction);
@@ -2345,8 +2557,8 @@ EndOfContentParsing:
             label* Label = Labels.Data() + LabelIndex;
             if (AreEqual(Label->Name, Patch->LabelName))
             {
-                MTB_AssertDebug(Patch->InstructionMemoryOffset >= Settings.BaseMemoryOffset);
-                u16 MemoryIndex = Patch->InstructionMemoryOffset - Settings.BaseMemoryOffset;
+                MTB_AssertDebug(Patch->InstructionMemoryOffset >= Context->BaseMemoryOffset);
+                u16 MemoryIndex = Patch->InstructionMemoryOffset - Context->BaseMemoryOffset;
                 u16* InstructionLocation = (u16*)At(ByteCode, MemoryIndex);
                 u16 EncodedInstruction = ReadWord(InstructionLocation);
                 EncodedInstruction |= (Label->MemoryOffset & 0x0FFF);
@@ -2359,7 +2571,7 @@ EndOfContentParsing:
 
         if (!Found)
         {
-            ErrorLabelNotFound(Settings.ErrorHandler, Patch->Cursor);
+            ErrorLabelNotFound(Context, Patch->Cursor);
         }
     }
 }

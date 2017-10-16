@@ -207,17 +207,38 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown);
 
 #if COUSCOUSC
 
+static int
+GetNumArguments(instruction Instruction);
+
+struct instruction_signature
+{
+    char const* Hint;
+    instruction_type Type;
+    int NumParams;
+    argument_type Params[3];
+};
+
+static bool
+IsCompatible(instruction Instruction, instruction_signature Signature);
+
+static instruction_signature*
+FindSignature(instruction instruction);
+
 #include "_generated/u8_array.h"
+#include "_generated/int_array.h"
+
+#define STR_FMT "%*.*s"
+#define STR_FMTARG(Str) (int)(Str).Size, (int)(Str).Size, (char const*)(Str).Data
 
 struct strc
 {
-    size_t Size;
+    int Size;
     char const* Data;
 };
 
 struct str
 {
-    size_t Size;
+    int Size;
     char* Data;
 
     // Implicit conversion to const string.
@@ -237,6 +258,9 @@ Str(char* Stringz);
 
 static strc
 StrConst(char* Stringz);
+
+static str
+Str(char* Begin, char* End);
 
 static strc
 Str(char const* Stringz);
@@ -314,39 +338,45 @@ DisassembleInstructionTokens(instruction Instruction);
 static text
 DisassembleInstruction(instruction Instruction);
 
-using parser_error_handler = void(*)(void* ErrorInfo);
-
-struct parser_settings
-{
-    parser_error_handler ErrorHandler;
-    u16 BaseMemoryOffset;
-};
-
-static void
-AssembleCode(char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode, parser_settings Settings);
-
 enum parser_error_type
 {
     ERR_NONE,
 
     ERR_LabelNotFound,
     ERR_DuplicateLabel,
+    ERR_InvalidInstruction,
 
     ERR_COUNT,
 };
+
+struct parser_error_info
+{
+    parser_error_type Type;
+};
+
+using parser_error_handler = void(*)(struct parser_context* Context, parser_error_info* ErrorInfo);
+
+struct parser_context
+{
+    parser_error_handler ErrorHandler;
+    u16 BaseMemoryOffset;
+};
+
+static void
+AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode);
 
 struct parser_label_not_found
 {
     parser_error_type ErrorType = ERR_LabelNotFound;
     parser_cursor PatchCursor;
 };
-inline void ErrorLabelNotFound(parser_error_handler Handler, parser_cursor PatchCursor)
+inline void ErrorLabelNotFound(parser_context* Context, parser_cursor PatchCursor)
 {
-    if (Handler)
+    if (Context->ErrorHandler)
     {
         parser_label_not_found Info{};
         Info.PatchCursor = PatchCursor;
-        Handler(&Info);
+        Context->ErrorHandler(Context, (parser_error_info*)&Info);
     }
 }
 
@@ -356,14 +386,31 @@ struct parser_duplicate_label
     parser_cursor MainCursor;
     parser_cursor SecondaryCursor;
 };
-inline void ErrorDuplicateLabel(parser_error_handler Handler, parser_cursor MainLabelCursor, parser_cursor SecondaryLabelCursor)
+inline void ErrorDuplicateLabel(parser_context* Context, parser_cursor MainLabelCursor, parser_cursor SecondaryLabelCursor)
 {
-    if (Handler)
+    if (Context->ErrorHandler)
     {
         parser_duplicate_label Info{};
         Info.MainCursor = MainLabelCursor;
         Info.SecondaryCursor = SecondaryLabelCursor;
-        Handler(&Info);
+        Context->ErrorHandler(Context, (parser_error_info*)&Info);
+    }
+}
+
+struct parser_invalid_instruction
+{
+    parser_error_type ErrorType = ERR_InvalidInstruction;
+    parser_cursor Cursor;
+    instruction_signature* BestMatchingSignature;
+};
+inline void ErrorInvalidInstruction(parser_context* Context, parser_cursor Cursor, instruction_signature* BestMatchingSignature)
+{
+    if (Context->ErrorHandler)
+    {
+        parser_invalid_instruction Info{};
+        Info.Cursor = Cursor;
+        Info.BestMatchingSignature = BestMatchingSignature;
+        Context->ErrorHandler(Context, (parser_error_info*)&Info);
     }
 }
 

@@ -209,7 +209,7 @@ $($CtorName)(strc String)
 ${FunctionQualifiers}str
 Str($($Text.Name)* Text)
 {
-  str Result{ (size_t)Text->Size, Text->Data };
+  str Result{ Text->Size, Text->Data };
 
   return Result;
 }
@@ -226,16 +226,16 @@ Trim($($Text.Name) Text)
 ${FunctionQualifiers}int
 Append($($Text.Name)* Text, strc String)
 {
-  size_t NewSize = Text->Size + String.Size;
+  int NewSize = Text->Size + String.Size;
   MTB_AssertDebug(NewSize < Text->Capacity, `"Result would be too long to append`");
   if (NewSize > Text->Capacity)
   {
     NewSize = Text->Capacity;
   }
 
-  int NumCopies = (int)NewSize - Text->Size;
+  int NumCopies = NewSize - Text->Size;
   mtb_CopyBytes(NumCopies, Text->Data + Text->Size, String.Data);
-  Text->Size = (int)NewSize;
+  Text->Size = NewSize;
 
   return NumCopies;
 }

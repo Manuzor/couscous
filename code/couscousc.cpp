@@ -26,24 +26,102 @@ using bool32 = int;
 #include "couscous.cpp"
 #include "_generated/all_generated.cpp"
 
+struct my_parser_context
+{
+    parser_context BaseContext;
+    FILE* ErrorFile;
+    strc CurrentFileName;
+};
 
 static void
-OnError(void* ErrorInfo)
+PrintLocation(FILE* File, my_parser_context* Context, parser_cursor Cursor)
 {
-    parser_error_type ErrorType = *(parser_error_type*)ErrorInfo;
+    int Line = Cursor.NumLineBreaks + 1;
+    int Column = Cursor.LinePos + 1;
+    fprintf(File, STR_FMT "(%d,%d)", STR_FMTARG(Context->CurrentFileName), Line, Column);
+}
 
-    switch (ErrorType)
+static void
+PrintSignature(FILE* File, instruction_signature* Signature)
+{
+    char const* TypeString = GetInstructionTypeAsString(Signature->Type);
+    fprintf(File, "%s ", TypeString);
+
+    char const* RegisterSuffixes[]{ "x", "y" };
+    char const** RegisterPlaceholder = RegisterSuffixes;
+
+    char const* ConstantPlaceholders[]{ "<nnn>", "<nn>", "<n>" };
+
+    char const* Sep = "";
+    for (int ParamIndex = 0;
+        ParamIndex < Signature->NumParams;
+        ++ParamIndex)
+    {
+        fprintf(File, Sep);
+        Sep = ", ";
+
+        argument_type ArgType = Signature->Params[ParamIndex];
+        switch (ArgType)
+        {
+            case argument_type::NONE: fprintf(File, "NONE"); break;
+            case argument_type::V: fprintf(File, "V%s", *RegisterPlaceholder++); break;
+            case argument_type::I: fprintf(File, "I"); break;
+            case argument_type::DT: fprintf(File, "DT"); break;
+            case argument_type::ST: fprintf(File, "ST"); break;
+            case argument_type::K: fprintf(File, "K"); break;
+            case argument_type::F: fprintf(File, "F"); break;
+            case argument_type::B: fprintf(File, "B"); break;
+            case argument_type::ATI: fprintf(File, "[I]"); break;
+            case argument_type::CONSTANT: fprintf(File, ConstantPlaceholders[ParamIndex]); break;
+
+            default:
+            {
+                MTB_INVALID_CODE_PATH;
+            } break;
+
+        }
+    }
+
+    fprintf(File, " (%s)", Signature->Hint);
+}
+
+static void
+OnError(parser_context* BaseContext, parser_error_info* ErrorInfo)
+{
+    my_parser_context* Context = (my_parser_context*)BaseContext;
+    FILE* File = Context->ErrorFile;
+
+    switch (ErrorInfo->Type)
     {
         case ERR_LabelNotFound:
         {
             parser_label_not_found* Info = (parser_label_not_found*)ErrorInfo;
-            fprintf(stderr, "Label not found.");
+            PrintLocation(File, Context, Info->PatchCursor);
+            strc LabelName = Str(Info->PatchCursor);
+            fprintf(File, ": error: Undefined label: " STR_FMT "\n", STR_FMTARG(LabelName));
         } break;
 
         case ERR_DuplicateLabel:
         {
             parser_duplicate_label* Info = (parser_duplicate_label*)ErrorInfo;
-            fprintf(stderr, "Duplicate label definition.");
+            PrintLocation(File, Context, Info->SecondaryCursor);
+            fprintf(File, ": error: Duplicate label definition.\n");
+            fprintf(File, "    See original definition at: ");
+            PrintLocation(File, Context, Info->MainCursor);
+            fprintf(File, "\n");
+        } break;
+
+        case ERR_InvalidInstruction:
+        {
+            parser_invalid_instruction* Info = (parser_invalid_instruction*)ErrorInfo;
+            PrintLocation(File, Context, Info->Cursor);
+            fprintf(File, ": error: Invalid instruction.\n");
+            if (Info->BestMatchingSignature)
+            {
+                fprintf(File, "    Did you mean: ");
+                PrintSignature(File, Info->BestMatchingSignature);
+                fprintf(File, "\n");
+            }
         } break;
 
         default:
@@ -178,10 +256,12 @@ int main(int NumArgs, char const* Args[])
             u8_array ByteCode{};
             MTB_DEFER[&]{ Deallocate(&ByteCode); };
 
-            parser_settings Settings{};
-            Settings.BaseMemoryOffset = 200u;
-            Settings.ErrorHandler = OnError;
-            AssembleCode(ContentsBegin, ContentsEnd, &ByteCode, Settings);
+            my_parser_context Context{};
+            Context.BaseContext.BaseMemoryOffset = 200u;
+            Context.BaseContext.ErrorHandler = OnError;
+            Context.CurrentFileName = Str(Files[0]);
+            Context.ErrorFile = stderr;
+            AssembleCode((parser_context*)&Context, ContentsBegin, ContentsEnd, &ByteCode);
 
             // Write the result!
             fwrite(ByteCode.Data(), ByteCode.NumElements, 1, OutFile);
@@ -200,7 +280,7 @@ int main(int NumArgs, char const* Args[])
 
                 instruction Instruction = DecodeInstruction(Decoder);
                 text Code = DisassembleInstruction(Instruction);
-                fprintf(OutFile, "%*s\n", Code.Size, Code.Data);
+                fprintf(OutFile, STR_FMT "\n", STR_FMTARG(Code));
             }
         }
         else

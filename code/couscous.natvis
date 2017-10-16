@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
     <Type Name="str">
+        <AlternativeType Name="strc"/>
         <DisplayString>{Data,[Size]s8}</DisplayString>
         <StringView>Data,[Size]s8</StringView>
     </Type>
