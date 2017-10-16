@@ -31,6 +31,7 @@ struct my_parser_context
     parser_context BaseContext;
     FILE* ErrorFile;
     strc CurrentFileName;
+    parser_error_type LastErrorType;
 };
 
 static void
@@ -45,14 +46,14 @@ static void
 PrintSignature(FILE* File, instruction_signature* Signature)
 {
     char const* TypeString = GetInstructionTypeAsString(Signature->Type);
-    fprintf(File, "%s ", TypeString);
+    fprintf(File, "%s", TypeString);
 
     char const* RegisterSuffixes[]{ "x", "y" };
     char const** RegisterPlaceholder = RegisterSuffixes;
 
     char const* ConstantPlaceholders[]{ "<nnn>", "<nn>", "<n>" };
 
-    char const* Sep = "";
+    char const* Sep = " ";
     for (int ParamIndex = 0;
         ParamIndex < Signature->NumParams;
         ++ParamIndex)
@@ -88,7 +89,11 @@ PrintSignature(FILE* File, instruction_signature* Signature)
 static void
 OnError(parser_context* BaseContext, parser_error_info* ErrorInfo)
 {
+    MTB_AssertDebug(ErrorInfo->Type != ERR_NONE);
+    MTB_AssertDebug(ErrorInfo->Type != ERR_COUNT);
+
     my_parser_context* Context = (my_parser_context*)BaseContext;
+    Context->LastErrorType = ErrorInfo->Type;
     FILE* File = Context->ErrorFile;
 
     switch (ErrorInfo->Type)
@@ -150,7 +155,7 @@ int main(int NumArgs, char const* Args[])
     size_t FileIndex = 0;
     commandline_mode Mode{};
 
-    int Result = 1;
+    int Result = -1;
 
     for (int ArgIndex = 1; ArgIndex < NumArgs; ++ArgIndex)
     {
@@ -263,6 +268,8 @@ int main(int NumArgs, char const* Args[])
             Context.ErrorFile = stderr;
             AssembleCode((parser_context*)&Context, ContentsBegin, ContentsEnd, &ByteCode);
 
+            Result = (int)Context.LastErrorType;
+
             // Write the result!
             fwrite(ByteCode.Data(), ByteCode.NumElements, 1, OutFile);
         }
@@ -282,6 +289,8 @@ int main(int NumArgs, char const* Args[])
                 text Code = DisassembleInstruction(Instruction);
                 fprintf(OutFile, STR_FMT "\n", STR_FMTARG(Code));
             }
+
+            Result = 0;
         }
         else
         {
@@ -299,7 +308,6 @@ int main(int NumArgs, char const* Args[])
     //
     //
 
-    Result = 0;
 end:
     return Result;
 }
