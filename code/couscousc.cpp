@@ -43,6 +43,12 @@ PrintLocation(FILE* File, my_parser_context* Context, parser_cursor Cursor)
 }
 
 static void
+PrintErrorType(FILE* File, parser_error_type ErrorType)
+{
+    fprintf(File, "error %d", (int)ErrorType);
+}
+
+static void
 PrintSignature(FILE* File, instruction_signature* Signature)
 {
     char const* TypeString = GetInstructionTypeAsString(Signature->Type);
@@ -102,15 +108,19 @@ OnError(parser_context* BaseContext, parser_error_info* ErrorInfo)
         {
             parser_label_not_found* Info = (parser_label_not_found*)ErrorInfo;
             PrintLocation(File, Context, Info->PatchCursor);
+            fprintf(File, ": ");
+            PrintErrorType(File, ErrorInfo->Type);
             strc LabelName = Str(Info->PatchCursor);
-            fprintf(File, ": error: Undefined label: " STR_FMT "\n", STR_FMTARG(LabelName));
+            fprintf(File, ": Undefined label: " STR_FMT "\n", STR_FMTARG(LabelName));
         } break;
 
         case ERR_DuplicateLabel:
         {
             parser_duplicate_label* Info = (parser_duplicate_label*)ErrorInfo;
             PrintLocation(File, Context, Info->SecondaryCursor);
-            fprintf(File, ": error: Duplicate label definition.\n");
+            fprintf(File, ": ");
+            PrintErrorType(File, ErrorInfo->Type);
+            fprintf(File, ": Duplicate label definition: " STR_FMT "\n", STR_FMTARG(Str(Info->SecondaryCursor)));
             fprintf(File, "    See original definition at: ");
             PrintLocation(File, Context, Info->MainCursor);
             fprintf(File, "\n");
@@ -120,7 +130,9 @@ OnError(parser_context* BaseContext, parser_error_info* ErrorInfo)
         {
             parser_invalid_instruction* Info = (parser_invalid_instruction*)ErrorInfo;
             PrintLocation(File, Context, Info->Cursor);
-            fprintf(File, ": error: Invalid instruction.\n");
+            fprintf(File, ": ");
+            PrintErrorType(File, ErrorInfo->Type);
+            fprintf(File, ": Invalid instruction: " STR_FMT "\n", STR_FMTARG(Str(Info->Cursor)));
             if (Info->BestMatchingSignature)
             {
                 fprintf(File, "    Did you mean: ");

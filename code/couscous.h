@@ -307,7 +307,6 @@ ParseLine(parser_cursor Cursor);
 struct label
 {
     parser_cursor Cursor;
-    str Name;
     u16 MemoryOffset;
 };
 #include "_generated/label_array.h"

@@ -1980,7 +1980,7 @@ FindMostCompatibleSignature(instruction Instruction)
         Result = InstructionSignatures + Scores[0].SignatureIndex;
     }
 
-#if 1
+#if 0
     for (int ScoreIndex = 0;
         ScoreIndex < mtb_ArrayLengthOf(Scores) && Scores[ScoreIndex].Score > 0;
         ++ScoreIndex)
@@ -2020,7 +2020,7 @@ str Trim(str Text)
 
 str Str(char* Stringz)
 {
-    
+
     str Result{ (int)mtb_SafeConvert_s32(mtb_StringLengthOf(Stringz)), Stringz };
 
     return Result;
@@ -2342,25 +2342,30 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
         if (!IsValid(Cursor))
             goto EndOfContentParsing;
 
-        parser_cursor LineStart = Cursor;
+        parser_cursor LineCursor = Cursor;
         Cursor = ParseLine(Cursor);
 
-        str Text = Trim(Str(LineStart.Begin, Cursor.Begin));
+        LineCursor.End = Cursor.Begin;
+
+        str Text = Trim(Str(LineCursor.Begin, Cursor.Begin));
 
         if (Text.Data[Text.Size - 1] == ':')
         {
             // We have a label!
 
             label Label{};
-            Label.Cursor = LineStart;
-            // Copy without the trailing colon
-            Label.Name = str{ Text.Size - 1, Text.Data };
             Label.MemoryOffset = CurrentMemoryOffset;
+            Label.Cursor = LineCursor;
+            // Ignore the trailing colon.
+            --Label.Cursor.End;
 
-            label* Existing = Find(&Labels, [&](label* L) { return AreEqual(L->Name, Label.Name); });
+            // Copy without the trailing colon
+            str LabelName = Str(Label.Cursor);
+
+            label* Existing = Find(&Labels, [&](label* L) { return AreEqual(LabelName, Str(L->Cursor)); });
             if (Existing)
             {
-                ErrorDuplicateLabel(Context, Existing->Cursor, LineStart);
+                ErrorDuplicateLabel(Context, Existing->Cursor, Label.Cursor);
             }
             else
             {
@@ -2372,7 +2377,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
             // We have a data section.
 
             // Skip the opening bracket.
-            parser_cursor DataCursor = Advance(LineStart);
+            parser_cursor DataCursor = Advance(LineCursor);
 
             // Ignore the closing bracket.
             --DataCursor.End;
@@ -2464,6 +2469,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
         }
         else
         {
+            // TODO: Tokenize should return an array of cursors.
             str_array Tokens = Tokenize(Text);
             MTB_DEFER[&]{ Deallocate(&Tokens); };
 
@@ -2473,7 +2479,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
             if (!Signature)
             {
                 instruction_signature* MostCompatibleSignature = FindMostCompatibleSignature(Instruction);
-                ErrorInvalidInstruction(Context, LineStart, MostCompatibleSignature);
+                ErrorInvalidInstruction(Context, LineCursor, MostCompatibleSignature);
             }
 
             patch Patch{};
@@ -2517,7 +2523,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
 
             if (Patch.LabelName.Size)
             {
-                parser_cursor PatchCursor = LineStart;
+                parser_cursor PatchCursor = LineCursor;
                 while (!StartsWith(Str(PatchCursor), Patch.LabelName))
                 {
                     PatchCursor = Advance(PatchCursor);
@@ -2555,7 +2561,9 @@ EndOfContentParsing:
             ++LabelIndex)
         {
             label* Label = Labels.Data() + LabelIndex;
-            if (AreEqual(Label->Name, Patch->LabelName))
+            str LabelName = Str(Label->Cursor);
+            str PatchLabelName = Patch->LabelName;
+            if (AreEqual(LabelName, PatchLabelName))
             {
                 MTB_AssertDebug(Patch->InstructionMemoryOffset >= Context->BaseMemoryOffset);
                 u16 MemoryIndex = Patch->InstructionMemoryOffset - Context->BaseMemoryOffset;
