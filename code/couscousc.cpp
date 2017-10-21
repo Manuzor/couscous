@@ -107,10 +107,10 @@ OnError(parser_context* BaseContext, parser_error_info* ErrorInfo)
         case ERR_LabelNotFound:
         {
             parser_label_not_found* Info = (parser_label_not_found*)ErrorInfo;
-            PrintLocation(File, Context, Info->PatchCursor);
+            PrintLocation(File, Context, Info->LabelNameCursor);
             fprintf(File, ": ");
             PrintErrorType(File, ErrorInfo->Type);
-            strc LabelName = Str(Info->PatchCursor);
+            strc LabelName = Str(Info->LabelNameCursor);
             fprintf(File, ": Undefined label: " STR_FMT "\n", STR_FMTARG(LabelName));
         } break;
 

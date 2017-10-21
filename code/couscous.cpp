@@ -31,7 +31,7 @@ argument_type
 MakeArgumentTypeFromString(size_t CodeLen, char const* Code)
 {
 #define MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(EXPECTED) \
-    if(mtb_StringsAreEqual(sizeof(#EXPECTED) - 1, Code, #EXPECTED)) \
+    if(mtb_StringsAreEqual(CodeLen, Code, sizeof(#EXPECTED) - 1, #EXPECTED)) \
     { \
       Result = argument_type::EXPECTED; \
       break; \
@@ -177,98 +177,105 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
     return Result;
 }
 
-// Note: The caller must guarantee that Code is uppercase.
 argument
-MakeArgumentFromString(size_t CodeLen, char const* Code)
+MakeArgumentFromString(size_t CodeLen, char const* CodeInput)
 {
     argument Result{};
 
     if (CodeLen > 0)
     {
-        switch (Code[0])
+        if (CodeLen <= 3)
         {
-            case 'V':
+            char Code[3]{};
+            for (size_t CharIndex = 0; CharIndex < CodeLen; ++CharIndex)
+                Code[CharIndex] = CodeInput[CharIndex];
+            ToUpper(str{ (int)CodeLen, Code });
+
+            switch (Code[0])
             {
-                if (CodeLen == 2)
+                case 'V':
                 {
-                    Result.Type = argument_type::V;
-                    switch (Code[1])
+                    if (CodeLen == 2)
                     {
-                        case '0': Result.Value = 0x0; break;
-                        case '1': Result.Value = 0x1; break;
-                        case '2': Result.Value = 0x2; break;
-                        case '3': Result.Value = 0x3; break;
-                        case '4': Result.Value = 0x4; break;
-                        case '5': Result.Value = 0x5; break;
-                        case '6': Result.Value = 0x6; break;
-                        case '7': Result.Value = 0x7; break;
-                        case '8': Result.Value = 0x8; break;
-                        case '9': Result.Value = 0x9; break;
-                        case 'A': Result.Value = 0xA; break;
-                        case 'B': Result.Value = 0xB; break;
-                        case 'C': Result.Value = 0xC; break;
-                        case 'D': Result.Value = 0xD; break;
-                        case 'E': Result.Value = 0xE; break;
-                        case 'F': Result.Value = 0xF; break;
-                        default: MTB_INVALID_CODE_PATH; break;
+                        Result.Type = argument_type::V;
+                        switch (Code[1])
+                        {
+                            case '0': Result.Value = 0x0; break;
+                            case '1': Result.Value = 0x1; break;
+                            case '2': Result.Value = 0x2; break;
+                            case '3': Result.Value = 0x3; break;
+                            case '4': Result.Value = 0x4; break;
+                            case '5': Result.Value = 0x5; break;
+                            case '6': Result.Value = 0x6; break;
+                            case '7': Result.Value = 0x7; break;
+                            case '8': Result.Value = 0x8; break;
+                            case '9': Result.Value = 0x9; break;
+                            case 'A': Result.Value = 0xA; break;
+                            case 'B': Result.Value = 0xB; break;
+                            case 'C': Result.Value = 0xC; break;
+                            case 'D': Result.Value = 0xD; break;
+                            case 'E': Result.Value = 0xE; break;
+                            case 'F': Result.Value = 0xF; break;
+                            default: MTB_INVALID_CODE_PATH; break;
+                        }
                     }
+                    break;
                 }
-                break;
-            }
 
-            case 'I':
-            {
-                if (CodeLen == 1)
-                    Result.Type = argument_type::I;
-                break;
-            }
-
-            case 'D':
-            {
-                if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "DT", Code))
-                    Result.Type = argument_type::DT;
-                break;
-            }
-
-            case 'S':
-            {
-                if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "ST", Code))
-                    Result.Type = argument_type::ST;
-                break;
-            }
-
-            case 'K':
-            {
-                if (CodeLen == 1)
-                    Result.Type = argument_type::K;
-                break;
-            }
-
-            case 'F':
-            {
-                if (CodeLen == 1)
-                    Result.Type = argument_type::F;
-                break;
-            }
-
-            case 'B':
-            {
-                if (CodeLen == 1)
-                    Result.Type = argument_type::B;
-                break;
-            }
-
-            case '[':
-            {
-                if (CodeLen == 3)
+                case 'I':
                 {
-                    if (mtb_StringsAreEqual(3, "[I]", 3, Code))
-                        Result.Type = argument_type::ATI;
+                    if (CodeLen == 1)
+                        Result.Type = argument_type::I;
+                    break;
                 }
+
+                case 'D':
+                {
+                    if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "DT", Code))
+                        Result.Type = argument_type::DT;
+                    break;
+                }
+
+                case 'S':
+                {
+                    if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "ST", Code))
+                        Result.Type = argument_type::ST;
+                    break;
+                }
+
+                case 'K':
+                {
+                    if (CodeLen == 1)
+                        Result.Type = argument_type::K;
+                    break;
+                }
+
+                case 'F':
+                {
+                    if (CodeLen == 1)
+                        Result.Type = argument_type::F;
+                    break;
+                }
+
+                case 'B':
+                {
+                    if (CodeLen == 1)
+                        Result.Type = argument_type::B;
+                    break;
+                }
+
+                case '[':
+                {
+                    if (CodeLen == 3)
+                    {
+                        if (mtb_StringsAreEqual(3, "[I]", 3, Code))
+                            Result.Type = argument_type::ATI;
+                    }
+                    break;
+                }
+
                 break;
             }
-
-            break;
         }
 
         if (Result.Type == argument_type::NONE)
@@ -276,19 +283,19 @@ MakeArgumentFromString(size_t CodeLen, char const* Code)
             Result.Type = argument_type::CONSTANT;
 
             unsigned int Value = 0;
-            if (Code[0] == '0')
+            if (CodeInput[0] == '0')
             {
-                switch (Code[1])
+                switch (CodeInput[1])
                 {
-                    case 'X': sscanf(Code + 2, "%X", &Value); break;
-                    case 'B': MTB_NOT_IMPLEMENTED; break;
-                    case 'D': sscanf(Code + 2, "%d", &Value); break;
-                    default: sscanf(Code + 1, "%d", &Value); break;
+                    case 'X': case 'x': sscanf(CodeInput + 2, "%X", &Value); break;
+                    case 'B': case 'b': MTB_NOT_IMPLEMENTED; break;
+                    case 'D': case 'd': sscanf(CodeInput + 2, "%d", &Value); break;
+                    default: sscanf(CodeInput + 1, "%d", &Value); break;
                 }
             }
             else
             {
-                sscanf(Code, "%d", &Value);
+                sscanf(CodeInput, "%d", &Value);
             }
 
             Result.Value = (u16)Value;
@@ -341,71 +348,79 @@ GetInstructionTypeAsString(instruction_type Value)
 
 // Note: The caller must guarantee that Code is uppercase.
 instruction_type
-MakeInstructionTypeFromString(size_t CodeLen, char const* Code)
+MakeInstructionTypeFromString(size_t CodeLen, char const* CodeInput)
 {
 #define MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(EXPECTED) \
-    if(mtb_StringsAreEqual(sizeof(#EXPECTED) - 1, Code, #EXPECTED)) \
+    if(mtb_StringsAreEqual(CodeLen, Code, sizeof(#EXPECTED) - 1, #EXPECTED)) \
     { \
       Result = instruction_type::EXPECTED; \
       break; \
     }
 
     instruction_type Result{};
-    if (CodeLen > 0) switch (Code[0])
+    if (CodeLen > 0 && CodeLen <= 4)
     {
-        case 'A': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(ADD);
-            MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(AND);
-            break;
+        char Code[4]{};
+        for (size_t CharIndex = 0; CharIndex < CodeLen; ++CharIndex)
+            Code[CharIndex] = CodeInput[CharIndex];
+        ToUpper(str{ (int)CodeLen, Code });
 
-        case 'C': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(CALL);
-            MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(CLS);
-            break;
-
-        case 'D': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(DRW);
-            break;
-
-        case 'J': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(JP);
-            break;
-
-        case 'L': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(LD);
-            break;
-
-        case 'O': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(OR);
-            break;
-
-        case 'R': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(RET);
-            MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(RND);
-            break;
-
-        case 'S':
+        switch (Code[0])
         {
-            if (CodeLen > 1) switch (Code[1])
+            case 'A': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(ADD);
+                MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(AND);
+                break;
+
+            case 'C': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(CALL);
+                MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(CLS);
+                break;
+
+            case 'D': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(DRW);
+                break;
+
+            case 'J': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(JP);
+                break;
+
+            case 'L': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(LD);
+                break;
+
+            case 'O': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(OR);
+                break;
+
+            case 'R': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(RET);
+                MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(RND);
+                break;
+
+            case 'S':
             {
-                case 'E': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SE);
-                    break;
+                if (CodeLen > 1) switch (Code[1])
+                {
+                    case 'E': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SE);
+                        break;
 
-                case 'H': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SHL);
-                    MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SHR);
-                    break;
+                    case 'H': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SHL);
+                        MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SHR);
+                        break;
 
-                case 'K': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SKNP);
-                    MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SKP);
-                    break;
+                    case 'K': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SKNP);
+                        MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SKP);
+                        break;
 
-                case 'N': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SNE);
-                    break;
+                    case 'N': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SNE);
+                        break;
 
-                case 'U': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SUB);
-                    MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SUBN);
-                    break;
+                    case 'U': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SUB);
+                        MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SUBN);
+                        break;
 
-                case 'Y': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SYS);
-                    break;
-            }
-        } break;
+                    case 'Y': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(SYS);
+                        break;
+                }
+            } break;
 
-        case 'X': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(XOR);
-            break;
+            case 'X': MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(XOR);
+                break;
+        }
     }
 
     return Result;
@@ -2078,6 +2093,20 @@ bool StartsWith(strc String, strc Start)
     return Result;
 }
 
+char
+ToUpper(char Char)
+{
+    char Result = Char;
+
+    if (Char >= 'a' && Char <= 'z')
+    {
+        char Offset = Char - 'a';
+        Result = 'A' + Offset;
+    }
+
+    return Result;
+}
+
 void
 ToUpper(str String)
 {
@@ -2085,42 +2114,26 @@ ToUpper(str String)
         Index < String.Size;
         ++Index)
     {
-        if (String.Data[Index] >= 'a' && String.Data[Index] <= 'z')
-        {
-            char Offset = String.Data[Index] - 'a';
-            String.Data[Index] = 'A' + Offset;
-        }
+        String.Data[Index] = ToUpper(String.Data[Index]);
     }
 }
 
-str_array
-Tokenize(str Code)
+cursor_array
+Tokenize(parser_cursor Code)
 {
-    str_array Tokens{};
+    cursor_array Tokens{};
 
-    char* Current = Code.Data;
-    char* OnePastLast = Current + Code.Size;
-    char* TokenStart = Current;
-
-    while (Current < OnePastLast)
+    while (true)
     {
-        // Skip whitespace
-        while (Current < OnePastLast && mtb_IsWhitespace(Current[0]))
-            ++Current;
+        Code = Eat(Code, eat_flags::Whitespace, ",");
+        if (!IsValid(Code))
+            break;
 
-        TokenStart = Current;
+        parser_cursor Token = Code;
+        Code = EatExcept(Code, eat_flags::Whitespace, ",");
+        Token.End = Code.Begin;
 
-        // Search for whitespace or a comma.
-        while (Current < OnePastLast && !mtb_IsWhitespace(Current[0]) && Current[0] != ',')
-            ++Current;
-
-        str* Token = Add(&Tokens);
-        *Token = { (int)(Current - TokenStart), TokenStart };
-        *Token = Trim(*Token);
-        ToUpper(*Token);
-
-        // Skip the current whitespace or comma.
-        ++Current;
+        *Add(&Tokens) = Token;
     }
 
     return Tokens;
@@ -2155,9 +2168,9 @@ Detokenize(int NumTokens, str* Tokens)
 }
 
 instruction
-AssembleInstruction(str Code)
+AssembleInstruction(parser_cursor Code)
 {
-    str_array Tokens = Tokenize(Code);
+    cursor_array Tokens = Tokenize(Code);
     instruction Result = AssembleInstruction(Tokens.NumElements, Tokens.Data());
     Deallocate(&Tokens);
 
@@ -2165,22 +2178,22 @@ AssembleInstruction(str Code)
 }
 
 instruction
-AssembleInstruction(int NumTokens, str* Tokens)
+AssembleInstruction(int NumTokens, parser_cursor* Tokens)
 {
     instruction Result{};
 
     if (NumTokens > 0)
     {
-        str* TypeToken = Tokens + 0;
-        Result.Type = MakeInstructionTypeFromString((size_t)TypeToken->Size, TypeToken->Data);
+        str TypeToken = Str(Tokens[0]);
+        Result.Type = MakeInstructionTypeFromString((size_t)TypeToken.Size, TypeToken.Data);
 
         for (int TokenIndex = 1;
             TokenIndex < NumTokens;
             ++TokenIndex)
         {
-            str* ArgToken = Tokens + TokenIndex;
+            str ArgToken = Str(Tokens[TokenIndex]);
             int ArgumentIndex = TokenIndex - 1;
-            Result.Args[ArgumentIndex] = MakeArgumentFromString((size_t)ArgToken->Size, ArgToken->Data);
+            Result.Args[ArgumentIndex] = MakeArgumentFromString((size_t)ArgToken.Size, ArgToken.Data);
         }
     }
 
@@ -2272,31 +2285,89 @@ Advance(parser_cursor Cursor, int NumToAdvance)
 }
 
 parser_cursor
-SkipWhitespace(parser_cursor Cursor)
+Eat(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToEat)
 {
-    while (IsValid(Cursor) && mtb_IsWhitespace(Cursor.Begin[0]))
-        Cursor = Advance(Cursor);
+    while (IsValid(Cursor))
+    {
+        parser_cursor Previous = Cursor;
+
+        if ((Flags & eat_flags::Whitespace) == eat_flags::Whitespace)
+        {
+            while (IsValid(Cursor) && mtb_IsWhitespace(Cursor.Begin[0]))
+                Cursor = Advance(Cursor);
+        }
+
+        if ((Flags & eat_flags::Comments) == eat_flags::Comments)
+        {
+            Cursor = EatComments(Cursor);
+        }
+
+        if (AdditionalCharsToEat)
+        {
+            char const* Seek = AdditionalCharsToEat;
+            while (Seek[0])
+            {
+                while (IsValid(Cursor) && Cursor.Begin[0] == Seek[0])
+                    Cursor = Advance(Cursor);
+
+                ++Seek;
+            }
+        }
+
+        if (Cursor.Begin == Previous.Begin)
+        {
+            // We didn't move, so we're done.
+            break;
+        }
+    }
 
     return Cursor;
 }
 
 parser_cursor
-SkipWhitespaceAndComments(parser_cursor Cursor)
+EatExcept(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToStopAt /*= nullptr*/)
 {
-    while (true)
+    bool StopAtWhitespace = (Flags & eat_flags::Whitespace) == eat_flags::Whitespace;
+    bool StopAtComments = (Flags & eat_flags::Comments) == eat_flags::Comments;
+
+    while (IsValid(Cursor))
     {
-        Cursor = SkipWhitespace(Cursor);
+        char Char = Cursor.Begin[0];
 
-        // Comments
-        if (IsValid(Cursor) && Cursor.Begin[0] == '#')
+        if (StopAtWhitespace && mtb_IsWhitespace(Char))
         {
-            while (IsValid(Cursor) && Cursor.Begin[0] != '\n')
-                Cursor = Advance(Cursor);
-
-            continue;
+            return Cursor;
         }
 
-        break;
+        if (StopAtComments && Char == '#')
+        {
+            return Cursor;
+        }
+
+        if(AdditionalCharsToStopAt)
+        {
+            char const* Seek = AdditionalCharsToStopAt;
+            while (Seek[0])
+            {
+                if (Seek[0] == Char)
+                    return Cursor;
+                ++Seek;
+            }
+        }
+
+        parser_cursor Previous = Cursor;
+        Cursor = Advance(Cursor);
+    }
+
+    return Cursor;
+}
+
+parser_cursor EatComments(parser_cursor Cursor)
+{
+    if (IsValid(Cursor) && Cursor.Begin[0] == '#')
+    {
+        while (IsValid(Cursor) && Cursor.Begin[0] != '\n')
+            Cursor = Advance(Cursor);
     }
 
     return Cursor;
@@ -2338,7 +2409,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
 
     while (true)
     {
-        Cursor = SkipWhitespaceAndComments(Cursor);
+        Cursor = Eat(Cursor, eat_flags::Whitespace | eat_flags::Comments);
         if (!IsValid(Cursor))
             goto EndOfContentParsing;
 
@@ -2355,17 +2426,17 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
 
             label Label{};
             Label.MemoryOffset = CurrentMemoryOffset;
-            Label.Cursor = LineCursor;
+            Label.NameCursor = LineCursor;
             // Ignore the trailing colon.
-            --Label.Cursor.End;
+            --Label.NameCursor.End;
 
             // Copy without the trailing colon
-            str LabelName = Str(Label.Cursor);
+            str LabelName = Str(Label.NameCursor);
 
-            label* Existing = Find(&Labels, [&](label* L) { return AreEqual(LabelName, Str(L->Cursor)); });
+            label* Existing = Find(&Labels, [&](label* L) { return AreEqual(LabelName, Str(L->NameCursor)); });
             if (Existing)
             {
-                ErrorDuplicateLabel(Context, Existing->Cursor, Label.Cursor);
+                ErrorDuplicateLabel(Context, Existing->NameCursor, Label.NameCursor);
             }
             else
             {
@@ -2385,7 +2456,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
             MTB_AssertDebug(DataCursor.End - DataCursor.Begin > 0);
 
             char DataType = DataCursor.Begin[0];
-            DataCursor = SkipWhitespaceAndComments(DataCursor);
+            DataCursor = Eat(DataCursor, eat_flags::Whitespace | eat_flags::Comments);
 
             switch (DataType)
             {
@@ -2397,7 +2468,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
                         u8 Byte = 0;
                         for (u8 BitIndex = 7; BitIndex >= 0; --BitIndex)
                         {
-                            DataCursor = SkipWhitespace(DataCursor);
+                            DataCursor = Eat(DataCursor, eat_flags::Whitespace);
                             if (!IsValid(DataCursor))
                                 break;
 
@@ -2420,7 +2491,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
                         u8 Byte = 0;
                         for (u8 NibbleIndex = 1; NibbleIndex >= 0; --NibbleIndex)
                         {
-                            DataCursor = SkipWhitespace(DataCursor);
+                            DataCursor = Eat(DataCursor, eat_flags::Whitespace);
                             if (!IsValid(DataCursor))
                                 break;
 
@@ -2470,74 +2541,65 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
         else
         {
             // TODO: Tokenize should return an array of cursors.
-            str_array Tokens = Tokenize(Text);
+            cursor_array Tokens = Tokenize(LineCursor);
             MTB_DEFER[&]{ Deallocate(&Tokens); };
 
             instruction Instruction = AssembleInstruction(Tokens.NumElements, Tokens.Data());
 
+            u16 EncodedInstruction = 0;
             instruction_signature* Signature = FindSignature(Instruction);
-            if (!Signature)
+            if (Signature)
+            {
+                patch Patch{};
+                Patch.InstructionMemoryOffset = CurrentMemoryOffset;
+                switch (Instruction.Type)
+                {
+                    case instruction_type::JP:
+                    {
+                        if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
+                        {
+                            // e.g. JP 0x234
+                            Patch.LabelNameCursor = *At(&Tokens, 1);
+                        }
+                        else if (Instruction.Args[0].Type == argument_type::V && Instruction.Args[0].Value == 0 &&
+                            Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
+                        {
+                            // e.g. JP V0 0x234
+                            Patch.LabelNameCursor = *At(&Tokens, 2);
+                        }
+                    } break;
+
+                    case instruction_type::CALL:
+                    {
+                        if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
+                        {
+                            // e.g. CALL 0x234
+                            Patch.LabelNameCursor = *At(&Tokens, 1);
+                        }
+                    } break;
+
+                    case instruction_type::LD:
+                    {
+                        if (Instruction.Args[0].Type == argument_type::I &&
+                            Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
+                        {
+                            // e.g. LD I 0x234
+                            Patch.LabelNameCursor = *At(&Tokens, 2);
+                        }
+                    } break;
+                }
+
+                if (IsValid(Patch.LabelNameCursor))
+                {
+                    *Add(&Patches) = Patch;
+                }
+
+                EncodedInstruction = EncodeInstruction(Instruction);
+            }
+            else
             {
                 instruction_signature* MostCompatibleSignature = FindMostCompatibleSignature(Instruction);
                 ErrorInvalidInstruction(Context, LineCursor, MostCompatibleSignature);
-            }
-
-            patch Patch{};
-            Patch.InstructionMemoryOffset = CurrentMemoryOffset;
-            switch (Instruction.Type)
-            {
-                case instruction_type::JP:
-                {
-                    if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
-                    {
-                        // e.g. JP 0x234
-                        Patch.LabelName = *At(&Tokens, 1);
-                    }
-                    else if (Instruction.Args[0].Type == argument_type::V && Instruction.Args[0].Value == 0 &&
-                        Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
-                    {
-                        // e.g. JP V0 0x234
-                        Patch.LabelName = *At(&Tokens, 2);
-                    }
-                } break;
-
-                case instruction_type::CALL:
-                {
-                    if (Instruction.Args[0].Type == argument_type::CONSTANT && Instruction.Args[0].Value == 0)
-                    {
-                        // e.g. CALL 0x234
-                        Patch.LabelName = *At(&Tokens, 1);
-                    }
-                } break;
-
-                case instruction_type::LD:
-                {
-                    if (Instruction.Args[0].Type == argument_type::I &&
-                        Instruction.Args[1].Type == argument_type::CONSTANT && Instruction.Args[1].Value == 0)
-                    {
-                        // e.g. LD I 0x234
-                        Patch.LabelName = *At(&Tokens, 2);
-                    }
-                } break;
-            }
-
-            if (Patch.LabelName.Size)
-            {
-                parser_cursor PatchCursor = LineCursor;
-                while (!StartsWith(Str(PatchCursor), Patch.LabelName))
-                {
-                    PatchCursor = Advance(PatchCursor);
-                }
-                PatchCursor.End = Cursor.Begin;
-                Patch.Cursor = PatchCursor;
-
-                *Add(&Patches) = Patch;
-            }
-
-            u16 EncodedInstruction = EncodeInstruction(Instruction);
-            if (EncodedInstruction == 0)
-            {
-                // TODO: Diagnostics or assert?
             }
 
             u16* NewWord = (u16*)Add(ByteCode, 2);
@@ -2561,8 +2623,8 @@ EndOfContentParsing:
             ++LabelIndex)
         {
             label* Label = Labels.Data() + LabelIndex;
-            str LabelName = Str(Label->Cursor);
-            str PatchLabelName = Patch->LabelName;
+            str LabelName = Str(Label->NameCursor);
+            str PatchLabelName = Str(Patch->LabelNameCursor);
             if (AreEqual(LabelName, PatchLabelName))
             {
                 MTB_AssertDebug(Patch->InstructionMemoryOffset >= Context->BaseMemoryOffset);
@@ -2579,7 +2641,7 @@ EndOfContentParsing:
 
         if (!Found)
         {
-            ErrorLabelNotFound(Context, Patch->Cursor);
+            ErrorLabelNotFound(Context, Patch->LabelNameCursor);
         }
     }
 }

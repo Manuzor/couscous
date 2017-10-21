@@ -25,6 +25,7 @@ $Arrays = @(
   @{ Name = "u8_array"; Type = "u8"; FixedCapacity = 32 };
   @{ Name = "str_array"; Type = "str"; FixedCapacity = 32 };
   @{ Name = "token_array"; Type = "token"; FixedCapacity = 8 };
+  @{ Name = "cursor_array"; Type = "parser_cursor"; FixedCapacity = 8 };
 )
 
 foreach($Array in $Arrays)

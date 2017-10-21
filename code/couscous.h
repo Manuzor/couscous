@@ -277,13 +277,20 @@ AreEqual(strc A, strc B);
 static bool
 StartsWith(strc String, strc Start);
 
+static char
+ToUpper(char Char);
+
+static void
+ToUpper(str String);
+
 struct parser_cursor
 {
     char* Begin;
     char* End;
-    int NumLineBreaks;
-    int LinePos;
+    int NumLineBreaks; // Relative to Begin
+    int LinePos; // Relative to Begin
 };
+#include "_generated/cursor_array.h"
 
 static str
 Str(parser_cursor Cursor);
@@ -294,42 +301,56 @@ IsValid(parser_cursor Cursor);
 static parser_cursor
 Advance(parser_cursor Cursor, int NumToAdvance = 1);
 
-static parser_cursor
-SkipWhitespace(parser_cursor Cursor);
+enum struct eat_flags
+{
+    NONE,
+
+    Whitespace      = 0b0001,
+    Comments        = 0b0010,
+
+    ALL = 0b1111,
+};
+inline eat_flags operator|(eat_flags A, eat_flags B) { return (eat_flags)((u32)A | (u32)B); }
+inline eat_flags operator&(eat_flags A, eat_flags B) { return (eat_flags)((u32)A & (u32)B); }
+inline eat_flags operator~(eat_flags A) { return (eat_flags)(~(u32)A); }
 
 static parser_cursor
-SkipWhitespaceAndComments(parser_cursor Cursor);
+Eat(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToEat = nullptr);
+
+static parser_cursor
+EatExcept(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToNotEat = nullptr);
+
+static parser_cursor
+EatComments(parser_cursor Cursor);
 
 static parser_cursor
 ParseLine(parser_cursor Cursor);
 
-
 struct label
 {
-    parser_cursor Cursor;
+    parser_cursor NameCursor;
     u16 MemoryOffset;
 };
 #include "_generated/label_array.h"
 
 struct patch
 {
-    parser_cursor Cursor;
-    str LabelName;
+    parser_cursor LabelNameCursor;
     u16 InstructionMemoryOffset;
 };
 #include "_generated/patch_array.h"
 
-static str_array
-Tokenize(str Code);
+static cursor_array
+Tokenize(parser_cursor Code);
 
 static text
 Detokenize(int NumTokens, str* Tokens);
 
 static instruction
-AssembleInstruction(str Code);
+AssembleInstruction(parser_cursor Code);
 
 static instruction
-AssembleInstruction(int NumTokens, str* Tokens);
+AssembleInstruction(int NumTokens, parser_cursor* Tokens);
 
 static token_array
 DisassembleInstructionTokens(instruction Instruction);
@@ -367,14 +388,14 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
 struct parser_label_not_found
 {
     parser_error_type ErrorType = ERR_LabelNotFound;
-    parser_cursor PatchCursor;
+    parser_cursor LabelNameCursor;
 };
-inline void ErrorLabelNotFound(parser_context* Context, parser_cursor PatchCursor)
+inline void ErrorLabelNotFound(parser_context* Context, parser_cursor LabelNameCursor)
 {
     if (Context->ErrorHandler)
     {
         parser_label_not_found Info{};
-        Info.PatchCursor = PatchCursor;
+        Info.LabelNameCursor = LabelNameCursor;
         Context->ErrorHandler(Context, (parser_error_info*)&Info);
     }
 }
