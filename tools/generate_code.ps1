@@ -2,12 +2,18 @@ param(
   [string]$RepoRoot = "$PSScriptRoot/..",
   [string]$OutDir = "$RepoRoot/code/_generated",
   [switch]$StaticFunctions = $true,
-  [string]$PragmaOnce
+  [string]$PragmaOnce,
+  [switch]$Clean
 )
 
 $ErrorActionPreference = "Stop"
 
 $OutDir = mkdir -Force $OutDir
+if($Clean)
+{
+  Write-Host "Cleaning directory: $OutDir"
+  rm -Force -Recurse "$OutDir/*"
+}
 
 $UmbrellaHeaderIncludes = @()
 $UmbrellaIncludes = @()
@@ -26,10 +32,14 @@ $Arrays = @(
   @{ Name = "str_array"; Type = "str"; FixedCapacity = 32 };
   @{ Name = "token_array"; Type = "token"; FixedCapacity = 8 };
   @{ Name = "cursor_array"; Type = "parser_cursor"; FixedCapacity = 8 };
+  @{ Name = "debug_info_array"; Type = "debug_info"; FixedCapacity = 0 };
 )
 
 foreach($Array in $Arrays)
 {
+  $HasFixed = $Array.FixedCapacity -gt 0;
+  $MinCapacity = if($HasFixed) { $Array.FixedCapacity } else { 32 }
+
   $HeaderContent = @"
 // Generated on $DateStamp
 $(if($PragmaOnce) { "#pragma once" })
@@ -40,10 +50,17 @@ struct $($Array.Name)
   int Capacity;
   $($Array.Type)* _Data;
 
-  enum { FixedCapacity = $($Array.FixedCapacity) };
+$(if($HasFixed)
+{@"
+enum { FixedCapacity = $($Array.FixedCapacity) };
   $($Array.Type) _Fixed[FixedCapacity];
 
   $($Array.Type)* Data() { return _Data ? _Data : _Fixed; }
+"@}
+else
+{@"
+  $($Array.Type)* Data() { return _Data; }
+"@})
 };
 
 ${FunctionQualifiers}void
@@ -84,19 +101,18 @@ Find($($Array.Name)* Array, predicate Predicate)
 
 ${FunctionQualifiers}void
 Reserve($($Array.Name)* Array, int RequiredCapacity)
-{
-  if (Array->_Data == nullptr || Array->Capacity == 0)
+{ $(if($HasFixed)
+{@"
+if (Array->_Data == nullptr || Array->Capacity == 0)
   {
     Array->Capacity = Array->FixedCapacity;
     Array->_Data = nullptr;
   }
-
+"@}
+)
   if (RequiredCapacity > Array->Capacity)
   {
-    int NewCapacity = 2 * $($Array.Name)::FixedCapacity;
-
-    if (Array->Capacity > 0)
-      NewCapacity = Array->Capacity;
+    int NewCapacity = Array->Capacity > 0 ? Array->Capacity : $MinCapacity;
 
     while (NewCapacity < RequiredCapacity)
       NewCapacity *= 2;
@@ -179,11 +195,15 @@ ${FunctionQualifiers}$($Text.Name) $($CtorName)(strc String);
 // To str
 ${FunctionQualifiers}str Str($($Text.Name)* Text);
 
+// EnsureZeroTerminated
+${FunctionQualifiers}void EnsureZeroTerminated($($Text.Name)* Text);
+
 // Trim
 ${FunctionQualifiers}$($Text.Name) Trim($($Text.Name) Text);
 
 // Append
 ${FunctionQualifiers}int Append($($Text.Name)* Text, strc String);
+${FunctionQualifiers}int Append($($Text.Name)* Text, char Char);
 
 // Comparison
 ${FunctionQualifiers}int Compare($($Text.Name)* A, $($Text.Name)* B);
@@ -215,6 +235,14 @@ Str($($Text.Name)* Text)
   return Result;
 }
 
+void
+EnsureZeroTerminated($($Text.Name)* Text)
+{
+  int ZeroIndex = Text->Size;
+  if(ZeroIndex < Text->Capacity)
+    Text->Data[ZeroIndex] = 0;
+}
+
 $($Text.Name)
 Trim($($Text.Name) Text)
 {
@@ -228,10 +256,10 @@ ${FunctionQualifiers}int
 Append($($Text.Name)* Text, strc String)
 {
   int NewSize = Text->Size + String.Size;
-  MTB_AssertDebug(NewSize < Text->Capacity, `"Result would be too long to append`");
-  if (NewSize > Text->Capacity)
+  MTB_AssertDebug(NewSize < Text->Capacity - 1, `"Result would be too long to append`");
+  if (NewSize > Text->Capacity - 1)
   {
-    NewSize = Text->Capacity;
+    NewSize = Text->Capacity - 1;
   }
 
   int NumCopies = NewSize - Text->Size;
@@ -239,6 +267,14 @@ Append($($Text.Name)* Text, strc String)
   Text->Size = NewSize;
 
   return NumCopies;
+}
+
+${FunctionQualifiers}int
+Append($($Text.Name)* Text, char Char)
+{
+  int Result = Append(Text, str{ 1, &Char });
+
+  return Result;
 }
 
 ${FunctionQualifiers}int Compare($($Text.Name)* A, $($Text.Name)* B)

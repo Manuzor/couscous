@@ -147,10 +147,39 @@ OnError(parser_context* BaseContext, parser_error_info* ErrorInfo)
     }
 }
 
+static bool
+IsDirectorySeparator(char Char) { return Char == '\\' || Char == '/'; }
+
+static void
+ChangeFileNameExtension(text1024* FileName, strc NewExtension)
+{
+    // Find the last dot.
+    for (int SeekIndex = FileName->Size - 1;
+        SeekIndex >= 0 && !IsDirectorySeparator(FileName->Data[SeekIndex]);
+        --SeekIndex)
+    {
+        if (FileName->Data[SeekIndex] == '.')
+        {
+            // Truncate
+            FileName->Size = SeekIndex;
+            break;
+        }
+    }
+
+    if (NewExtension.Size > 0)
+    {
+        if (NewExtension.Data[0] != '.')
+            Append(FileName, '.');
+        Append(FileName, NewExtension);
+    }
+
+    EnsureZeroTerminated(FileName);
+}
+
 static void
 PrintHelp(FILE* OutFile)
 {
-    fprintf(OutFile, "Usage: couscousc [-help] (-assemble|-disassemble) <in_file> [<out_file>]\n");
+    fprintf(OutFile, "Usage: couscousc [-help] [-assemble|-disassemble] [-chd] <in_file> [<out_file>]\n");
 }
 
 enum struct commandline_mode
@@ -166,6 +195,7 @@ int main(int NumArgs, char const* Args[])
     char const* Files[2]{ nullptr, "-" };
     size_t FileIndex = 0;
     commandline_mode Mode{};
+    bool GenerateDebugInfos = false;
 
     int Result = -1;
 
@@ -188,6 +218,10 @@ int main(int NumArgs, char const* Args[])
                 else if (mtb_StringsAreEqual(ArgContent, "disassemble"))
                 {
                     Mode = commandline_mode::Disassemble;
+                }
+                else if(mtb_StringsAreEqual(ArgContent, "chd"))
+                {
+                    GenerateDebugInfos = true;
                 }
                 else if (mtb_StringsAreEqual(ArgContent, "help"))
                 {
@@ -264,26 +298,65 @@ int main(int NumArgs, char const* Args[])
     {
         FILE* OutFile = nullptr;
         if (mtb_StringsAreEqual(Files[1], "-"))
+        {
             OutFile = stdout;
+            GenerateDebugInfos = false;
+        }
         else
+        {
             OutFile = fopen(Files[1], "wb");
+        }
 
         if (Mode == commandline_mode::Assemble)
         {
-            u8_array ByteCode{};
-            MTB_DEFER[&]{ Deallocate(&ByteCode); };
-
             my_parser_context Context{};
-            Context.BaseContext.BaseMemoryOffset = 200u;
             Context.BaseContext.ErrorHandler = OnError;
+            Context.BaseContext.FileId = 1;
+            Context.BaseContext.BaseMemoryOffset = 200u;
+            Context.BaseContext.GatherDebugInfo = GenerateDebugInfos;
             Context.CurrentFileName = Str(Files[0]);
             Context.ErrorFile = stderr;
-            AssembleCode((parser_context*)&Context, ContentsBegin, ContentsEnd, &ByteCode);
+            assemble_code_result Assembled = AssembleCode((parser_context*)&Context, ContentsBegin, ContentsEnd);
+            MTB_DEFER[&]{ Deallocate(&Assembled); };
 
             Result = (int)Context.LastErrorType;
 
             // Write the result!
-            fwrite(ByteCode.Data(), ByteCode.NumElements, 1, OutFile);
+            fwrite(Assembled.ByteCode.Data(), Assembled.ByteCode.NumElements, 1, OutFile);
+
+            if (GenerateDebugInfos && Context.LastErrorType == ERR_NONE)
+            {
+                text1024 ChdPath = CreateText1024(Str(Files[1]));
+                ChangeFileNameExtension(&ChdPath, Str(".chd"));
+                FILE* ChdFile = fopen(ChdPath.Data, "wb");
+                if (ChdFile)
+                {
+                    fprintf(ChdFile, "BaseMemoryOffset = %u\n", Context.BaseContext.BaseMemoryOffset);
+                    fprintf(ChdFile, "NumSourceFiles = 1\n");
+                    fprintf(ChdFile, "NumTargetFiles = 1\n");
+                    fprintf(ChdFile, "NumInfos = %d\n", Assembled.DebugInfos.NumElements);
+                    fprintf(ChdFile, "\n");
+                    fprintf(ChdFile, "# SourceFiles (FileId;FilePath)\n");
+                    fprintf(ChdFile, "1;%s\n", Files[1]);
+                    fprintf(ChdFile, "\n");
+                    fprintf(ChdFile, "# TargetFiles (FileId;FilePath)\n");
+                    fprintf(ChdFile, "1;%s\n", ChdPath.Data);
+                    fprintf(ChdFile, "\n");
+                    fprintf(ChdFile, "# Infos (FileId;Line;Column;MemoryOffset)\n");
+                    for (int InfoIndex = 0;
+                        InfoIndex < Assembled.DebugInfos.NumElements;
+                        ++InfoIndex)
+                    {
+                        debug_info* Info = Assembled.DebugInfos.Data() + InfoIndex;
+                        fprintf(ChdFile, "%d;%d;%d;%u\n", Info->FileId, Info->Line, Info->Column, Info->MemoryOffset);
+                    }
+                    fclose(ChdFile);
+                }
+                else
+                {
+                    fprintf(stderr, "Unable to open file for writing: %s", (char const*)ChdPath.Data);
+                }
+            }
         }
         else if (Mode == commandline_mode::Disassemble)
         {
@@ -294,7 +367,7 @@ int main(int NumArgs, char const* Args[])
                 Decoder.Data = ReadWord(Current);
                 Current += sizeof(u16);
 
-                // Can only trigger if Current and ContentsOnePastLast are not aligned to 2 bytes relative to each other!
+                // Can only trigger if Current and ContentsEnd are not aligned to 2 bytes relative to each other!
                 MTB_AssertDebug(Current <= ContentsEnd);
 
                 instruction Instruction = DecodeInstruction(Decoder);

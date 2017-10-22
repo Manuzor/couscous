@@ -2394,9 +2394,13 @@ ParseLine(parser_cursor Cursor)
     return Cursor;
 }
 
-void
-AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode)
+assemble_code_result
+AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
 {
+    assemble_code_result Result{};
+    debug_info_array* DebugInfos = &Result.DebugInfos;
+    u8_array* ByteCode = &Result.ByteCode;
+
     parser_cursor Cursor{ ContentsBegin, ContentsEnd };
 
     u16 CurrentMemoryOffset = Context->BaseMemoryOffset;
@@ -2479,6 +2483,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
                         }
 
                         *Add(ByteCode) = Byte;
+                        // TODO: Debug info
                         ++CurrentMemoryOffset;
                     }
                 } break;
@@ -2527,6 +2532,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
                         }
 
                         *Add(ByteCode) = Byte;
+                        // TODO: Debug info
                         ++CurrentMemoryOffset;
                     }
                     MTB_NOT_IMPLEMENTED;
@@ -2540,7 +2546,6 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
         }
         else
         {
-            // TODO: Tokenize should return an array of cursors.
             cursor_array Tokens = Tokenize(LineCursor);
             MTB_DEFER[&]{ Deallocate(&Tokens); };
 
@@ -2605,6 +2610,16 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8
             u16* NewWord = (u16*)Add(ByteCode, 2);
             WriteWord(NewWord, EncodedInstruction);
 
+            if (Context->GatherDebugInfo)
+            {
+                debug_info Info{};
+                Info.FileId = Context->FileId;
+                Info.Line = At(&Tokens, 0)->NumLineBreaks + 1;
+                Info.Column = At(&Tokens, 0)->LinePos + 1;
+                Info.MemoryOffset = CurrentMemoryOffset;
+                *Add(DebugInfos) = Info;
+            }
+
             CurrentMemoryOffset += 2;
         }
     }
@@ -2644,6 +2659,8 @@ EndOfContentParsing:
             ErrorLabelNotFound(Context, Patch->LabelNameCursor);
         }
     }
+
+    return Result;
 }
 
 #endif // COUSCOUSC

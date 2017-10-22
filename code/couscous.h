@@ -225,7 +225,6 @@ static instruction_signature*
 FindSignature(instruction instruction);
 
 #include "_generated/u8_array.h"
-#include "_generated/int_array.h"
 
 #define STR_FMT "%*.*s"
 #define STR_FMTARG(Str) (int)(Str).Size, (int)(Str).Size, (char const*)(Str).Data
@@ -379,11 +378,30 @@ using parser_error_handler = void(*)(struct parser_context* Context, parser_erro
 struct parser_context
 {
     parser_error_handler ErrorHandler;
+    int FileId;
+    bool GatherDebugInfo;
+
     u16 BaseMemoryOffset;
 };
 
-static void
-AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd, u8_array* ByteCode);
+struct debug_info
+{
+    int FileId;
+    int Line; // 1-based
+    int Column; // 1-based
+    u16 MemoryOffset;
+};
+#include "_generated/debug_info_array.h"
+
+struct assemble_code_result
+{
+    u8_array ByteCode;
+    debug_info_array DebugInfos;
+};
+inline void Deallocate(assemble_code_result* Code) { Deallocate(&Code->ByteCode); Deallocate(&Code->DebugInfos); }
+
+static assemble_code_result
+AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd);
 
 struct parser_label_not_found
 {
