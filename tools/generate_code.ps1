@@ -101,15 +101,17 @@ Find($($Array.Name)* Array, predicate Predicate)
 
 ${FunctionQualifiers}void
 Reserve($($Array.Name)* Array, int RequiredCapacity)
-{ $(if($HasFixed)
+{
+$(if($HasFixed)
 {@"
-if (Array->_Data == nullptr || Array->Capacity == 0)
+  if (Array->_Data == nullptr || Array->Capacity == 0)
   {
     Array->Capacity = Array->FixedCapacity;
     Array->_Data = nullptr;
   }
 "@}
 )
+
   if (RequiredCapacity > Array->Capacity)
   {
     int NewCapacity = Array->Capacity > 0 ? Array->Capacity : $MinCapacity;
@@ -117,14 +119,21 @@ if (Array->_Data == nullptr || Array->Capacity == 0)
     while (NewCapacity < RequiredCapacity)
       NewCapacity *= 2;
 
-    void* OldData = Array->_Data;
     void* NewData = malloc(NewCapacity * sizeof($($Array.Type)));
 
-    if (OldData)
+    if (Array->_Data)
     {
-      mtb_CopyBytes(Array->NumElements * sizeof($($Array.Type)), NewData, OldData);
-      free(OldData);
+      mtb_CopyBytes(Array->NumElements * sizeof($($Array.Type)), NewData, Array->_Data);
+      free(Array->_Data);
     }
+$(if($HasFixed)
+{@"
+    else
+    {
+      mtb_CopyBytes(Array->NumElements * sizeof($($Array.Type)), NewData, Array->_Fixed);
+    }
+"@}
+)
 
     Array->_Data = ($($Array.Type)*)NewData;
     Array->Capacity = NewCapacity;

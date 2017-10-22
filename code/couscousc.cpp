@@ -312,7 +312,7 @@ int main(int NumArgs, char const* Args[])
             my_parser_context Context{};
             Context.BaseContext.ErrorHandler = OnError;
             Context.BaseContext.FileId = 1;
-            Context.BaseContext.BaseMemoryOffset = 200u;
+            Context.BaseContext.BaseMemoryOffset = 0x200u;
             Context.BaseContext.GatherDebugInfo = GenerateDebugInfos;
             Context.CurrentFileName = Str(Files[0]);
             Context.ErrorFile = stderr;
@@ -331,24 +331,46 @@ int main(int NumArgs, char const* Args[])
                 FILE* ChdFile = fopen(ChdPath.Data, "wb");
                 if (ChdFile)
                 {
-                    fprintf(ChdFile, "BaseMemoryOffset = %u\n", Context.BaseContext.BaseMemoryOffset);
+                    fprintf(ChdFile, "BaseMemoryOffset = 0x%04X\n", Context.BaseContext.BaseMemoryOffset);
                     fprintf(ChdFile, "NumSourceFiles = 1\n");
                     fprintf(ChdFile, "NumTargetFiles = 1\n");
+                    fprintf(ChdFile, "NumLabels = %d\n", Assembled.Labels.NumElements);
                     fprintf(ChdFile, "NumInfos = %d\n", Assembled.DebugInfos.NumElements);
+
                     fprintf(ChdFile, "\n");
                     fprintf(ChdFile, "# SourceFiles (FileId;FilePath)\n");
                     fprintf(ChdFile, "1;%s\n", Files[1]);
+
                     fprintf(ChdFile, "\n");
                     fprintf(ChdFile, "# TargetFiles (FileId;FilePath)\n");
                     fprintf(ChdFile, "1;%s\n", ChdPath.Data);
+
                     fprintf(ChdFile, "\n");
+                    fprintf(ChdFile, "#\n");
+                    fprintf(ChdFile, "# Labels (LabelName;MemoryOffset)\n");
+                    fprintf(ChdFile, "#\n");
+                    for (int LabelIndex = 0;
+                        LabelIndex < Assembled.Labels.NumElements;
+                        ++LabelIndex)
+                    {
+                        label* Label = Assembled.Labels.Data() + LabelIndex;
+                        strc LabelName = Str(Label->NameCursor);
+                        fprintf(ChdFile, STR_FMT ";0x%04X\n", STR_FMTARG(LabelName), Label->MemoryOffset);
+                    }
+
+                    fprintf(ChdFile, "\n");
+                    fprintf(ChdFile, "#\n");
                     fprintf(ChdFile, "# Infos (FileId;Line;Column;MemoryOffset)\n");
+                    fprintf(ChdFile, "#\n");
                     for (int InfoIndex = 0;
                         InfoIndex < Assembled.DebugInfos.NumElements;
                         ++InfoIndex)
                     {
                         debug_info* Info = Assembled.DebugInfos.Data() + InfoIndex;
-                        fprintf(ChdFile, "%d;%d;%d;%u\n", Info->FileId, Info->Line, Info->Column, Info->MemoryOffset);
+                        fprintf(ChdFile, "\n");
+                        fprintf(ChdFile, "# " STR_FMT "\n", STR_FMTARG(Info->SourceLine));
+                        fprintf(ChdFile, "# %04X\n", Info->GeneratedInstruction);
+                        fprintf(ChdFile, "%d;%d;%d;0x%04X\n", Info->FileId, Info->Line, Info->Column, Info->MemoryOffset);
                     }
                     fclose(ChdFile);
                 }

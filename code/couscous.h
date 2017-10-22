@@ -390,6 +390,9 @@ struct debug_info
     int Line; // 1-based
     int Column; // 1-based
     u16 MemoryOffset;
+
+    u16 GeneratedInstruction;
+    strc SourceLine;
 };
 #include "_generated/debug_info_array.h"
 
@@ -397,8 +400,16 @@ struct assemble_code_result
 {
     u8_array ByteCode;
     debug_info_array DebugInfos;
+    label_array Labels;
 };
-inline void Deallocate(assemble_code_result* Code) { Deallocate(&Code->ByteCode); Deallocate(&Code->DebugInfos); }
+inline
+void
+Deallocate(assemble_code_result* Code)
+{
+    Deallocate(&Code->ByteCode);
+    Deallocate(&Code->DebugInfos);
+    Deallocate(&Code->Labels);
+}
 
 static assemble_code_result
 AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd);

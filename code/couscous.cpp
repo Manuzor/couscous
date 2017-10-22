@@ -156,12 +156,17 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
         {
             if (Argument.Value <= 0xFFF)
             {
+#define COUSCOUS_HEX_OUTPUT 1
+#if COUSCOUS_HEX_OUTPUT
                 Buffer[0] = '0';
                 Buffer[1] = 'x';
                 Buffer[2] = ToHexChar((Argument.Value >> 8) & 0xF);
                 Buffer[3] = ToHexChar((Argument.Value >> 4) & 0xF);
                 Buffer[4] = ToHexChar((Argument.Value >> 0) & 0xF);
                 Result = 5;
+#else
+                Result = (size_t)snprintf((char*)Buffer, BufferSize, "%d", Argument.Value);
+#endif
             }
             else
             {
@@ -2398,15 +2403,12 @@ assemble_code_result
 AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
 {
     assemble_code_result Result{};
-    debug_info_array* DebugInfos = &Result.DebugInfos;
     u8_array* ByteCode = &Result.ByteCode;
+    debug_info_array* DebugInfos = &Result.DebugInfos;
+    label_array* Labels = &Result.Labels;
 
     parser_cursor Cursor{ ContentsBegin, ContentsEnd };
-
     u16 CurrentMemoryOffset = Context->BaseMemoryOffset;
-
-    label_array Labels{};
-    MTB_DEFER[&]{ Deallocate(&Labels); };
 
     patch_array Patches{};
     MTB_DEFER[&]{ Deallocate(&Patches); };
@@ -2437,14 +2439,14 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
             // Copy without the trailing colon
             str LabelName = Str(Label.NameCursor);
 
-            label* Existing = Find(&Labels, [&](label* L) { return AreEqual(LabelName, Str(L->NameCursor)); });
+            label* Existing = Find(Labels, [&](label* L) { return AreEqual(LabelName, Str(L->NameCursor)); });
             if (Existing)
             {
                 ErrorDuplicateLabel(Context, Existing->NameCursor, Label.NameCursor);
             }
             else
             {
-                *Add(&Labels) = Label;
+                *Add(Labels) = Label;
             }
         }
         else if (Text.Data[0] == '[' && Text.Data[Text.Size - 1] == ']' && Text.Size >= 3)
@@ -2612,11 +2614,18 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
 
             if (Context->GatherDebugInfo)
             {
+                //parser_cursor* InfoToken = At(&Tokens, 0);
+                parser_cursor* InfoToken = &LineCursor;
+
                 debug_info Info{};
                 Info.FileId = Context->FileId;
-                Info.Line = At(&Tokens, 0)->NumLineBreaks + 1;
-                Info.Column = At(&Tokens, 0)->LinePos + 1;
+                Info.Line = InfoToken->NumLineBreaks + 1;
+                Info.Column = InfoToken->LinePos + 1;
                 Info.MemoryOffset = CurrentMemoryOffset;
+
+                // Note: Info.GeneratedInstruction is filled in later.
+                Info.SourceLine = Str(*InfoToken);
+
                 *Add(DebugInfos) = Info;
             }
 
@@ -2634,10 +2643,10 @@ EndOfContentParsing:
 
         bool Found = false;
         for (int LabelIndex = 0;
-            LabelIndex < Labels.NumElements;
+            LabelIndex < Labels->NumElements;
             ++LabelIndex)
         {
-            label* Label = Labels.Data() + LabelIndex;
+            label* Label = Labels->Data() + LabelIndex;
             str LabelName = Str(Label->NameCursor);
             str PatchLabelName = Str(Patch->LabelNameCursor);
             if (AreEqual(LabelName, PatchLabelName))
@@ -2657,6 +2666,18 @@ EndOfContentParsing:
         if (!Found)
         {
             ErrorLabelNotFound(Context, Patch->LabelNameCursor);
+        }
+    }
+
+    if (Context->GatherDebugInfo)
+    {
+        for (int InfoIndex = 0;
+            InfoIndex < Result.DebugInfos.NumElements;
+            ++InfoIndex)
+        {
+            debug_info* Info = Result.DebugInfos.Data() + InfoIndex;
+            int ByteCodeIndex = Info->MemoryOffset - Context->BaseMemoryOffset;
+            Info->GeneratedInstruction = ReadWord(At(&Result.ByteCode, ByteCodeIndex));
         }
     }
 

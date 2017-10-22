@@ -26,11 +26,6 @@ using f64 = mtb_f64;
 using uint = unsigned int;
 using bool32 = int;
 
-#include "_generated/text.h"
-#include "_generated/token.h"
-#include "_generated/label_array.h"
-#include "_generated/patch_array.h"
-#include "_generated/u8_array.h"
 #include "couscous.h"
 
 #include "couscous.cpp"
@@ -102,7 +97,7 @@ struct win32_loaded_rom
 };
 
 static u8_array
-Win32LoadRomFromFile(char const* FileName)
+Win32LoadFileContents(char const* FileName)
 {
     u8_array Result{};
 
@@ -125,7 +120,7 @@ Win32LoadRomFromFile(char const* FileName)
         DWORD NumBytesRead;
         if (ReadFile(
             FileHandle,         // _In_        HANDLE       hFile
-            Result.Data,        // _Out_       LPVOID       lpBuffer
+            Result.Data(),      // _Out_       LPVOID       lpBuffer
             Result.NumElements, // _In_        DWORD        nNumberOfBytesToRead
             &NumBytesRead,      // _Out_opt_   LPDWORD      lpNumberOfBytesRead
             nullptr))           // _Inout_opt_ LPOVERLAPPED lpOverlapped
@@ -630,9 +625,9 @@ static void
 Win32MakeWindowTitle(text1024* Text, char const* FileName, double CyclesPerSecond)
 {
     *Text = {};
-    Append(Text, "Couscous CHIP-8 | ");
-    Append(Text, FileName);
-    Append(Text, " | ");
+    Append(Text, Str("Couscous CHIP-8 | "));
+    Append(Text, Str(FileName));
+    Append(Text, Str(" | "));
     snprintf(Text->Data + Text->Size, mtb_ArrayLengthOf(Text->Data) - Text->Size, "%f c/s", CyclesPerSecond);
 }
 
@@ -681,18 +676,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         win32_loaded_rom Rom{ mtb_ArrayLengthOf(GlobalTestProgram), GlobalTestProgram };
         RomLoaded = LoadRom(M, Rom.Length, Rom.Ptr);
 #else
-        u8_array FileContents = Win32LoadRomFromFile(FileName);
-
-        if (StringEndsWith(FileName, ".couscous"))
-        {
-            u8_array ByteCode{};
-            AssembleCode((char*)FileContents.Data, (char*)FileContents.Data + FileContents.NumElements, &ByteCode);
-
-            mtb_Swap(ByteCode, FileContents);
-            Deallocate(&ByteCode);
-        }
-
-        RomLoaded = LoadRom(M, FileContents.NumElements, FileContents.Data);
+        u8_array FileContents = Win32LoadFileContents(FileName);
+        RomLoaded = LoadRom(M, FileContents.NumElements, FileContents.Data());
         Deallocate(&FileContents);
 #endif
     }
