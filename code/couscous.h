@@ -207,6 +207,8 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown);
 
 #if COUSCOUSC
 
+#define COUSCOUS_DISPOSE_LATER(Disposable) MTB_DEFER[&]{ Deallocate(&Disposable); }
+
 static int
 GetNumArguments(instruction Instruction);
 
@@ -246,6 +248,7 @@ struct str
 #include "_generated/str_array.h"
 
 #include "_generated/text.h"
+#include "_generated/text1024.h"
 #include "_generated/token.h"
 #include "_generated/token_array.h"
 
@@ -282,6 +285,12 @@ ToUpper(char Char);
 static void
 ToUpper(str String);
 
+inline bool
+IsDirectorySeparator(char Char) { return Char == '\\' || Char == '/'; }
+
+static void
+ChangeFileNameExtension(text1024* FileName, strc NewExtension);
+
 struct parser_cursor
 {
     char* Begin;
@@ -306,6 +315,7 @@ enum struct eat_flags
 
     Whitespace      = 0b0001,
     Comments        = 0b0010,
+    Strings         = 0b0100,
 
     ALL = 0b1111,
 };
@@ -321,6 +331,9 @@ EatExcept(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToNo
 
 static parser_cursor
 EatComments(parser_cursor Cursor);
+
+static parser_cursor
+EatBetween(parser_cursor Cursor, char Delimiter, char Escaper = '\\');
 
 static parser_cursor
 ParseLine(parser_cursor Cursor);
@@ -340,7 +353,7 @@ struct patch
 #include "_generated/patch_array.h"
 
 static cursor_array
-Tokenize(parser_cursor Code);
+Tokenize(parser_cursor Code, eat_flags TokenizerEatFlags, char* AdditionalTokenDelimiters = nullptr);
 
 static text
 Detokenize(int NumTokens, str* Tokens);

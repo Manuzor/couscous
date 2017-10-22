@@ -322,3 +322,37 @@ $UmbrellaContent = @"
 $($UmbrellaIncludes | % { "#include <$_>`n" })
 "@
 Set-Content "$UmbrellaBaseFilePath.cpp" $UmbrellaContent
+
+#
+# Write the generated natvis file
+#
+$NatvisFilePath = "$OutDir/generated.natvis"
+Set-Content $NatvisFilePath @"
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+$(foreach($Array in $Arrays)
+{@"
+    <Type Name="$($Array.Name)">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            $(if($Array.FixedCapacity -gt 0){ "<Item Name=`"IsFixed`">_Data ? false : true</Item>" })
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                $(if($Array.FixedCapacity -gt 0)
+                {
+                  "<ValuePointer>_Data ? _Data : _Fixed</ValuePointer>"
+                }
+                else
+                {
+                  "<ValuePointer>_Data</ValuePointer>"
+                })
+            </ArrayItems>
+        </Expand>
+    </Type>
+
+"@}
+)
+</AutoVisualizer>
+"@

@@ -682,6 +682,109 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 #endif
     }
 
+    bool HasDebugInfo = false;
+    u16 BaseMemoryOffset = 0x200;
+    u8_array DebugInfoFileContents{};
+    COUSCOUS_DISPOSE_LATER(DebugInfoFileContents);
+    str_array DebugSourceFilePaths{};
+    COUSCOUS_DISPOSE_LATER(DebugSourceFilePaths);
+    str_array DebugTargetFiles{};
+    COUSCOUS_DISPOSE_LATER(DebugTargetFiles);
+    debug_info_array DebugInfos{};
+    COUSCOUS_DISPOSE_LATER(DebugInfos);
+    {
+        text1024 DebugInfoFileName = CreateText1024(Str(FileName));
+        ChangeFileNameExtension(&DebugInfoFileName, Str(".chd"));
+        DebugInfoFileContents = Win32LoadFileContents(DebugInfoFileName.Data);
+        if (DebugInfoFileContents.NumElements > 0)
+        {
+            parser_cursor FileCursor{ (char*)DebugInfoFileContents.Data(), (char*)(DebugInfoFileContents.Data() + DebugInfoFileContents.NumElements) };
+            cursor_array Tokens = Tokenize(FileCursor, eat_flags::Whitespace | eat_flags::Comments, ";");
+            COUSCOUS_DISPOSE_LATER(Tokens);
+
+            if (Tokens.NumElements >= 5)
+            {
+                // BaseMemoryOffset
+                u32 BaseMemoryOffset_;
+                sscanf(At(&Tokens, 0)->Begin, "%X", &BaseMemoryOffset_);
+                BaseMemoryOffset = mtb_SafeConvert_u16(BaseMemoryOffset_);
+
+                int PendingSourceFiles = 0;
+                sscanf(At(&Tokens, 1)->Begin, "%d", &PendingSourceFiles);
+                Add(&DebugSourceFilePaths, PendingSourceFiles);
+
+                int PendingTargetFiles = 0;
+                sscanf(At(&Tokens, 2)->Begin, "%d", &PendingTargetFiles);
+                Add(&DebugTargetFiles, PendingTargetFiles);
+
+                int PendingLabels = 0;
+                sscanf(At(&Tokens, 3)->Begin, "%d", &PendingLabels);
+
+                int PendingInfos = 0;
+                sscanf(At(&Tokens, 4)->Begin, "%d", &PendingInfos);
+                Add(&DebugInfos, PendingInfos);
+
+                int TokenIndex = 5;
+                while (TokenIndex < Tokens.NumElements)
+                {
+                    if (PendingSourceFiles)
+                    {
+                        --PendingSourceFiles;
+
+                        int FileId;
+                        sscanf(At(&Tokens, TokenIndex)->Begin, "%d", &FileId);
+
+                        int FileIndex = FileId - 1;
+                        *At(&DebugSourceFilePaths, FileIndex) = Str(*At(&Tokens, TokenIndex + 1));
+
+                        TokenIndex += 2;
+                    }
+                    else if (PendingTargetFiles)
+                    {
+                        --PendingTargetFiles;
+
+                        int FileId;
+                        sscanf(At(&Tokens, TokenIndex)->Begin, "%d", &FileId);
+
+                        int FileIndex = FileId - 1;
+                        *At(&DebugTargetFiles, FileIndex) = Str(*At(&Tokens, TokenIndex + 1));
+
+                        TokenIndex += 2;
+                    }
+                    else if (PendingLabels)
+                    {
+                        --PendingLabels;
+                        // Ignored for now.
+                        TokenIndex += 2;
+                    }
+                    else if (PendingInfos)
+                    {
+                        debug_info Info{};
+                        sscanf(At(&Tokens, TokenIndex + 0)->Begin, "%d", &Info.FileId);
+                        sscanf(At(&Tokens, TokenIndex + 1)->Begin, "%d", &Info.Line);
+                        sscanf(At(&Tokens, TokenIndex + 2)->Begin, "%d", &Info.Column);
+
+                        u32 Value;
+                        sscanf(At(&Tokens, TokenIndex + 3)->Begin, "%X", &Value);
+
+                        Info.MemoryOffset = mtb_SafeConvert_u16(Value);
+                        sscanf(At(&Tokens, TokenIndex + 4)->Begin, "%X", &Value);
+
+                        Info.GeneratedInstruction = mtb_SafeConvert_u16(Value);
+
+                        Info.SourceLine = Str(*At(&Tokens, TokenIndex + 5));
+
+                        *At(&DebugInfos, DebugInfos.NumElements - PendingInfos--) = Info;
+
+                        TokenIndex += 6;
+                    }
+                }
+
+                HasDebugInfo = true;
+            }
+        }
+    }
+
     if (RomLoaded)
     {
         win32_window Window;
@@ -730,7 +833,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
             mtb_CopyBytes(mtb_ArrayByteSizeOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
 
-            u16 InitialProgramCounter = 0x200;
+            u16 InitialProgramCounter = BaseMemoryOffset;
             M->ProgramCounter = InitialProgramCounter;
 
             //
@@ -791,6 +894,55 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 while (TicksThisFrame > 0)
                 {
                     ++M->CurrentCycle;
+
+                    if (HasDebugInfo)
+                    {
+                        u16 PC = M->ProgramCounter;
+                        bool FoundDebugInfo = false;
+                        for (int InfoIndex = 0;
+                            InfoIndex < DebugInfos.NumElements;
+                            ++InfoIndex)
+                        {
+                            debug_info* Info = DebugInfos.Data() + InfoIndex;
+                            if (Info->MemoryOffset == PC)
+                            {
+                                int FileIndex = Info->FileId - 1;
+                                strc SourceFilePath = *At(&DebugSourceFilePaths, FileIndex);
+                                u16 Instruction = ReadWord(M->Memory + PC);
+                                if (Instruction != Info->GeneratedInstruction)
+                                {
+                                    printf("Detected discrepancy at 0x%04X: Generated " STR_FMT " 0x%04X vs. 0x%04X | " STR_FMT "(%d,%d)\n",
+                                        PC,
+                                        STR_FMTARG(Info->SourceLine),
+                                        Info->GeneratedInstruction,
+                                        Instruction,
+                                        STR_FMTARG(SourceFilePath),
+                                        Info->Line,
+                                        Info->Column
+                                    );
+                                }
+                                else
+                                {
+                                    printf("Executing instruction at 0x%04X: " STR_FMT " 0x%04X | " STR_FMT "(%d,%d)\n",
+                                        PC,
+                                        STR_FMTARG(Info->SourceLine),
+                                        Info->GeneratedInstruction,
+                                        STR_FMTARG(SourceFilePath),
+                                        Info->Line,
+                                        Info->Column
+                                    );
+                                }
+
+                                FoundDebugInfo = true;
+                                break;
+                            }
+                        }
+
+                        if (!FoundDebugInfo)
+                        {
+                            printf("Unable to find debug info for location: 0x%04X", PC);
+                        }
+                    }
 
                     tick_result TickResult = Tick(M);
 

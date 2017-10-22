@@ -512,7 +512,7 @@ Tick(machine* M)
     instruction_decoder Decoder;
     Decoder.Data = ReadWord(M->Memory + M->ProgramCounter);
     instruction Instruction = DecodeInstruction(Decoder);
-#if 1
+#if 0
     text DisassembledInstruction = DisassembleInstruction(Instruction);
     printf("[%llu] " STR_FMT " (0x%04X)\n", M->CurrentCycle, STR_FMTARG(DisassembledInstruction), Decoder.Data);
 #endif
@@ -2123,19 +2123,45 @@ ToUpper(str String)
     }
 }
 
+static void
+ChangeFileNameExtension(text1024* FileName, strc NewExtension)
+{
+    // Find the last dot.
+    for (int SeekIndex = FileName->Size - 1;
+        SeekIndex >= 0 && !IsDirectorySeparator(FileName->Data[SeekIndex]);
+        --SeekIndex)
+    {
+        if (FileName->Data[SeekIndex] == '.')
+        {
+            // Truncate
+            FileName->Size = SeekIndex;
+            break;
+        }
+    }
+
+    if (NewExtension.Size > 0)
+    {
+        if (NewExtension.Data[0] != '.')
+            Append(FileName, '.');
+        Append(FileName, NewExtension);
+    }
+
+    EnsureZeroTerminated(FileName);
+}
+
 cursor_array
-Tokenize(parser_cursor Code)
+Tokenize(parser_cursor Code, eat_flags TokenDelimiters, char* AdditionalTokenDelimiters)
 {
     cursor_array Tokens{};
 
     while (true)
     {
-        Code = Eat(Code, eat_flags::Whitespace, ",");
+        Code = Eat(Code, TokenDelimiters, AdditionalTokenDelimiters);
         if (!IsValid(Code))
             break;
 
         parser_cursor Token = Code;
-        Code = EatExcept(Code, eat_flags::Whitespace, ",");
+        Code = EatExcept(Code, TokenDelimiters, AdditionalTokenDelimiters);
         Token.End = Code.Begin;
 
         *Add(&Tokens) = Token;
@@ -2175,7 +2201,7 @@ Detokenize(int NumTokens, str* Tokens)
 instruction
 AssembleInstruction(parser_cursor Code)
 {
-    cursor_array Tokens = Tokenize(Code);
+    cursor_array Tokens = Tokenize(Code, eat_flags::Whitespace, ",");
     instruction Result = AssembleInstruction(Tokens.NumElements, Tokens.Data());
     Deallocate(&Tokens);
 
@@ -2307,6 +2333,11 @@ Eat(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToEat)
             Cursor = EatComments(Cursor);
         }
 
+        if ((Flags & eat_flags::Strings) == eat_flags::Strings)
+        {
+            Cursor = EatBetween(Cursor, '"', '\\');
+        }
+
         if (AdditionalCharsToEat)
         {
             char const* Seek = AdditionalCharsToEat;
@@ -2335,6 +2366,7 @@ EatExcept(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToSt
     bool StopAtWhitespace = (Flags & eat_flags::Whitespace) == eat_flags::Whitespace;
     bool StopAtComments = (Flags & eat_flags::Comments) == eat_flags::Comments;
 
+    char LastChar = '\0';
     while (IsValid(Cursor))
     {
         char Char = Cursor.Begin[0];
@@ -2360,8 +2392,18 @@ EatExcept(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToSt
             }
         }
 
-        parser_cursor Previous = Cursor;
+        {
+            parser_cursor Previous = Cursor;
+            Cursor = EatBetween(Cursor, '"', '\\');
+            if (Cursor.Begin > Previous.Begin)
+            {
+                continue;
+            }
+        }
+
         Cursor = Advance(Cursor);
+
+        LastChar = Char;
     }
 
     return Cursor;
@@ -2373,6 +2415,30 @@ parser_cursor EatComments(parser_cursor Cursor)
     {
         while (IsValid(Cursor) && Cursor.Begin[0] != '\n')
             Cursor = Advance(Cursor);
+    }
+
+    return Cursor;
+}
+
+parser_cursor EatBetween(parser_cursor Cursor, char Delimiter, char Escaper /*= '\\'*/)
+{
+    if (IsValid(Cursor) && Cursor.Begin[0] == Delimiter)
+    {
+        while (true)
+        {
+            Cursor = Advance(Cursor);
+            if (!IsValid(Cursor))
+                break;
+
+            if (Cursor.Begin[0] == Delimiter)
+            {
+                Cursor = Advance(Cursor);
+                break;
+            }
+
+            if (Cursor.Begin[0] == Escaper)
+                Cursor = Advance(Cursor);
+        }
     }
 
     return Cursor;
@@ -2548,7 +2614,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
         }
         else
         {
-            cursor_array Tokens = Tokenize(LineCursor);
+            cursor_array Tokens = Tokenize(LineCursor, eat_flags::Whitespace, ",");
             MTB_DEFER[&]{ Deallocate(&Tokens); };
 
             instruction Instruction = AssembleInstruction(Tokens.NumElements, Tokens.Data());
