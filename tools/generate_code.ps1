@@ -33,6 +33,7 @@ $Arrays = @(
   @{ Name = "token_array"; Type = "token"; FixedCapacity = 8 };
   @{ Name = "cursor_array"; Type = "parser_cursor"; FixedCapacity = 8 };
   @{ Name = "debug_info_array"; Type = "debug_info"; FixedCapacity = 0 };
+  @{ Name = "win32_window_event_array"; Type = "win32_window_event"; FixedCapacity = 32 };
 )
 
 foreach($Array in $Arrays)
@@ -66,8 +67,14 @@ else
 ${FunctionQualifiers}void
 Reserve($($Array.Name)* Array, int RequiredCapacity);
 
+${FunctionQualifiers}void
+SetNumElements($($Array.Name)* Array, int NewNumElements);
+
 ${FunctionQualifiers}$($Array.Type)*
 Add($($Array.Name)* Array, int NumToAdd = 1);
+
+${FunctionQualifiers}void
+Clear($($Array.Name)* Array);
 
 ${FunctionQualifiers}$($Array.Type)*
 At($($Array.Name)* Array, int Index);
@@ -140,6 +147,13 @@ $(if($HasFixed)
   }
 }
 
+${FunctionQualifiers}void
+SetNumElements($($Array.Name)* Array, int NewNumElements)
+{
+    Reserve(Array, NewNumElements);
+    Array->NumElements = NewNumElements;
+}
+
 ${FunctionQualifiers}$($Array.Type)*
 Add($($Array.Name)* Array, int NumToAdd)
 {
@@ -148,6 +162,12 @@ Add($($Array.Name)* Array, int NumToAdd)
   Array->NumElements += NumToAdd;
 
   return Result;
+}
+
+${FunctionQualifiers}void
+Clear($($Array.Name)* Array)
+{
+  Array->NumElements = 0;
 }
 
 ${FunctionQualifiers}$($Array.Type)*
@@ -192,10 +212,14 @@ foreach($Text in $TextTypes)
 
 struct $($Text.Name)
 {
-  enum { Capacity = $($Text.FixedCapacity) };
+  enum
+  {
+    FullCapacity = $($Text.FixedCapacity),
+    Capacity = FullCapacity - 1, // We reserve one character for the null terminator.
+  };
 
   int Size;
-  char Data[Capacity];
+  char Data[FullCapacity];
 };
 
 // "Constructor"
@@ -206,6 +230,9 @@ ${FunctionQualifiers}str Str($($Text.Name)* Text);
 
 // EnsureZeroTerminated
 ${FunctionQualifiers}void EnsureZeroTerminated($($Text.Name)* Text);
+
+// Clear
+${FunctionQualifiers}void Clear($($Text.Name)* Text);
 
 // Trim
 ${FunctionQualifiers}$($Text.Name) Trim($($Text.Name) Text);
@@ -247,9 +274,15 @@ Str($($Text.Name)* Text)
 void
 EnsureZeroTerminated($($Text.Name)* Text)
 {
-  int ZeroIndex = Text->Size;
-  if(ZeroIndex < Text->Capacity)
-    Text->Data[ZeroIndex] = 0;
+  if(Text->Size < Text->FullCapacity)
+    Text->Data[Text->Size] = 0;
+}
+
+void
+Clear($($Text.Name)* Text)
+{
+  Text->Size = 0;
+  EnsureZeroTerminated(Text);
 }
 
 $($Text.Name)
@@ -265,10 +298,10 @@ ${FunctionQualifiers}int
 Append($($Text.Name)* Text, strc String)
 {
   int NewSize = Text->Size + String.Size;
-  MTB_AssertDebug(NewSize < Text->Capacity - 1, `"Result would be too long to append`");
-  if (NewSize > Text->Capacity - 1)
+  MTB_AssertDebug(NewSize < Text->Capacity, `"Result would be too long to append`");
+  if (NewSize > Text->Capacity)
   {
-    NewSize = Text->Capacity - 1;
+    NewSize = Text->Capacity;
   }
 
   int NumCopies = NewSize - Text->Size;

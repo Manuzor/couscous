@@ -29,7 +29,6 @@ using bool32 = int;
 #include "couscous.h"
 
 #include "couscous.cpp"
-#include "_generated/all_generated.cpp"
 
 #include "charmap.cpp"
 
@@ -208,29 +207,92 @@ struct rect_s32
     s32 Width, Height;
 };
 
-static void
-Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
+inline RECT
+Win32ToWinRect(rect_s32 Rect)
 {
+    RECT Result;
+    Result.left = Rect.X;
+    Result.top = Rect.Y;
+    Result.right = Rect.X + Rect.Width;
+    Result.bottom = Rect.Y + Rect.Height;
+
+    return Result;
+}
+
+inline rect_s32
+Win32FromWinRect(RECT Rect)
+{
+    rect_s32 Result;
+    Result.X = Rect.left;
+    Result.Y = Rect.top;
+    Result.Width = Rect.right - Rect.left;
+    Result.Height = Rect.bottom - Rect.top;
+
+    return Result;
+}
+
+enum struct win32_window_event_type
+{
+    Action,
+    CharacterInput,
+};
+
+enum struct win32_window_event_action_type
+{
+    Exit,
+    TogglePause,
+    SingleStep,
+    ToggleFullscreen,
+
+    AcceptText,
+    DeleteCharacter,
+    DeleteWord,
+};
+
+struct win32_window_event
+{
+    win32_window_event_type Type;
+    union
+    {
+        win32_window_event_action_type Action;
+        u32 UnicodeCodePoint;
+    };
+};
+#include "_generated/win32_window_event_array.h"
+
+struct win32_window
+{
+    HWND Handle;
+
+    // The entire inner area of the window.
+    int ClientWidth;
+    int ClientHeight;
+
+    win32_front_buffer FrontBuffer;
+    u16 InputState;
+    win32_window_event_array Events;
+    u8_array DebugText;
+};
+
+static void
+Win32Present(win32_window* Window)
+{
+    HWND WindowHandle = Window->Handle;
+    win32_front_buffer* FrontBuffer = &Window->FrontBuffer;
+
     HDC DC = GetDC(WindowHandle);
     colorRGBA8* Pixels = FrontBuffer->Pixels;
 
-    // TODO: Keep aspect ratio of screen.
     rect_s32 SourceRect{};
     SourceRect.Width = (int)FrontBuffer->Width;
     SourceRect.Height = (int)FrontBuffer->Height;
 
-    // float Aspect = (float)SourceRect.Width / (float)SourceRect.Height;
+    rect_s32 ClientArea{};
+    Win32GetWindowClientArea(WindowHandle, &ClientArea.Width, &ClientArea.Height);
 
-    rect_s32 DestRect{};
-    Win32GetWindowClientArea(WindowHandle, &DestRect.Width, &DestRect.Height);
-
-    // Add some margin to possibly catch errors.
-#if MTB_FLAG(DEBUG)
-    DestRect.X += 64;
-    DestRect.Y += 64;
-    DestRect.Width -= DestRect.X + 64;
-    DestRect.Height -= DestRect.Y + 64;
-#endif
+    rect_s32 DestRect = ClientArea;
+    float const Aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
+    DestRect.Height = (s32)((float)DestRect.Width / Aspect + 0.5f);
 
     MTB_INTERNAL_CODE(int Result = ) StretchDIBits(
         DC,                       // _In_       HDC        hdc
@@ -247,29 +309,26 @@ Win32Present(HWND WindowHandle, win32_front_buffer* FrontBuffer)
         DIB_RGB_COLORS,           // _In_       UINT       iUsage
         SRCCOPY);                 // _In_       DWORD      dwRop
 
-      // TODO: Clear regions to black that aren't covered by the code above?
+    bool IsDebugAreaVisible = DestRect.Height < ClientArea.Height;
+    if(IsDebugAreaVisible)
+    {
+        // Clear the debug area.
+        static HBRUSH ClearBrush = CreateSolidBrush(RGB(255, 255, 255));
+        RECT DebugAreaRect{};
+        DebugAreaRect.left = ClientArea.X;
+        DebugAreaRect.right = ClientArea.X + ClientArea.Width;
+        DebugAreaRect.top = DestRect.Y + DestRect.Height;
+        DebugAreaRect.bottom = ClientArea.Y + ClientArea.Height;
+        FillRect(DC, &DebugAreaRect, ClearBrush);
+
+        SetTextColor(DC, RGB(0, 0, 0));
+        SetBkMode(DC, TRANSPARENT);
+
+        DrawText(DC, (char const*)Window->DebugText.Data(), Window->DebugText.NumElements, &DebugAreaRect, DT_NOPREFIX | DT_NOCLIP);
+    }
 
     ReleaseDC(WindowHandle, DC);
 }
-
-struct win32_client_input
-{
-    int Pause;
-    int SingleStep;
-};
-
-struct win32_window
-{
-    HWND Handle;
-
-    // The entire inner area of the window.
-    int ClientWidth;
-    int ClientHeight;
-
-    win32_front_buffer FrontBuffer;
-    u16 InputState;
-    win32_client_input ClientInput;
-};
 
 static void
 Win32ToggleFullscreenWindow(HWND WindowHandle)
@@ -304,8 +363,7 @@ Win32ToggleFullscreenWindow(HWND WindowHandle)
 }
 
 static LRESULT CALLBACK
-Win32MainWindowCallback(HWND WindowHandle, UINT Message,
-    WPARAM WParam, LPARAM LParam)
+Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM LParam)
 {
     LRESULT Result = 0;
 
@@ -329,38 +387,96 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
             bool KeyWasPressed = !KeyWasDown && KeyIsDown;
 
             bool AltKeyModifier = false;
-            if (Message == WM_SYSKEYDOWN || Message == WM_SYSKEYUP)
-                AltKeyModifier = mtb_IsBitSet((u64)LParam, 29);
-
-            if (VKCode == VK_SPACE)
             {
-                if (KeyWasReleased)
-                    Window->ClientInput.Pause = 0;
-                if (KeyIsDown)
-                    ++Window->ClientInput.Pause;
+                SHORT KeyState = GetKeyState(VK_MENU);
+                if (mtb_IsBitSet((u32)KeyState, 15))
+                    AltKeyModifier = true;
             }
 
-            if (VKCode == VK_F5)
+            bool CtrlKeyModifier = false;
             {
-                Window->ClientInput.SingleStep = KeyWasPressed;
+                SHORT KeyState = GetKeyState(VK_CONTROL);
+                if (mtb_IsBitSet((u32)KeyState, 15))
+                    CtrlKeyModifier = true;
             }
 
-            if (KeyWasPressed)
+            bool ShiftKeyModifier = false;
             {
-                if (VKCode == VK_ESCAPE)
-                {
-                    PostQuitMessage(0);
-                }
+                SHORT KeyState = GetKeyState(VK_SHIFT);
+                if (mtb_IsBitSet((u32)KeyState, 15))
+                    ShiftKeyModifier = true;
+            }
 
-                if (AltKeyModifier && VKCode == VK_F4)
+            switch (VKCode)
+            {
+                case VK_ESCAPE:
                 {
-                    PostQuitMessage(0);
-                }
+                    if (KeyWasReleased)
+                    {
+                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::Exit };
+                    }
+                } break;
 
-                if (AltKeyModifier && VKCode == VK_RETURN)
+                case VK_F4:
                 {
-                    Win32ToggleFullscreenWindow(WindowHandle);
-                }
+                    if (KeyWasReleased && AltKeyModifier)
+                    {
+                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::Exit };
+                    }
+                } break;
+
+                case VK_F10:
+                case VK_F11:
+                {
+                    if (KeyWasReleased)
+                    {
+                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::SingleStep };
+                    }
+                } break;
+
+                case VK_F5:
+                {
+                    if (KeyWasReleased)
+                    {
+                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::TogglePause };
+                    }
+                } break;
+
+                case VK_BACK:
+                {
+                    if (KeyIsDown)
+                    {
+                        win32_window_event Event{ win32_window_event_type::Action };
+                        if (CtrlKeyModifier)
+                        {
+                            Event.Action = win32_window_event_action_type::DeleteWord;
+                        }
+                        else
+                        {
+                            Event.Action = win32_window_event_action_type::DeleteCharacter;
+                        }
+
+                        *Add(&Window->Events) = Event;
+                    }
+                } break;
+
+                case VK_RETURN:
+                {
+                    if (KeyWasReleased)
+                    {
+                        if (AltKeyModifier)
+                        {
+                            *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::ToggleFullscreen };
+                        }
+                        else
+                        {
+                            *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::AcceptText };
+                        }
+                    }
+                } break;
+
+                default:
+                    break;
             }
 
             char VKCodeAsChar = (char)VKCode;
@@ -395,6 +511,18 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
                 Window->InputState = NewState;
             }
         }
+        else if (Message == WM_CHAR)
+        {
+            // TODO(manu): WParam is actually a UTF-16 parameter. Decode it?
+            u32 UnicodeCodePoint = (u32)WParam;
+            if (UnicodeCodePoint >= 32 && UnicodeCodePoint < 127)
+            {
+                win32_window_event* Event = Add(&Window->Events);
+                *Event = {};
+                Event->Type = win32_window_event_type::CharacterInput;
+                Event->UnicodeCodePoint = UnicodeCodePoint;
+            }
+        }
     }
     else if (Message == WM_SIZE)
     {
@@ -412,7 +540,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message,
         if (MustBeginAndEndPaint)
             BeginPaint(WindowHandle, &Paint);
 
-        Win32Present(WindowHandle, &Window->FrontBuffer);
+        Win32Present(Window);
 
         if (MustBeginAndEndPaint)
             EndPaint(WindowHandle, &Paint);
@@ -631,6 +759,81 @@ Win32MakeWindowTitle(text1024* Text, char const* FileName, double CyclesPerSecon
     snprintf(Text->Data + Text->Size, mtb_ArrayLengthOf(Text->Data) - Text->Size, "%f c/s", CyclesPerSecond);
 }
 
+float
+Win32GetCurrentWindowScale(win32_window* Window)
+{
+    float Result = 1.0f;
+
+    RECT ClientRect;
+    if(GetClientRect(Window->Handle, &ClientRect))
+    {
+        int Width = ClientRect.right - ClientRect.left;
+        Result = (float)Width / (float)Window->FrontBuffer.Width;
+    }
+
+    return Result;
+}
+
+inline rect_s32
+Win32GetGameAreaRect(win32_window* Window)
+{
+    float const Scale = Win32GetCurrentWindowScale(Window);
+
+    rect_s32 Result
+    {
+        0,
+        0,
+        (s32)(Window->FrontBuffer.Width * Scale + 0.5f),
+        (s32)(Window->FrontBuffer.Height * Scale + 0.5f),
+    };
+
+    return Result;
+}
+
+static rect_s32
+Win32GetDebugAreaRect(win32_window* Window)
+{
+    rect_s32 GameRect = Win32GetGameAreaRect(Window);
+
+    rect_s32 Result
+    {
+        GameRect.X,
+        GameRect.Y + GameRect.Height,
+        GameRect.Width,
+    };
+
+    RECT ClientRect;
+    if(GetClientRect(Window->Handle, &ClientRect))
+    {
+        int CurrentClientHeight = ClientRect.bottom - ClientRect.top;
+        Result.Height = CurrentClientHeight - Result.Y;
+
+        if (Result.Height < 0)
+            Result.Height = 0;
+    }
+
+    return Result;
+}
+
+void
+Win32ClearDebugText(win32_window* Window)
+{
+    Clear(&Window->DebugText);
+}
+
+void
+Win32AppendDebugText(win32_window* Window, strc Text)
+{
+    u8* Ptr = Add(&Window->DebugText, Text.Size);
+    mtb_CopyBytes((size_t)Text.Size, Ptr, Text.Data);
+}
+
+enum struct pause_state
+{
+    None,
+    Prompt,
+};
+
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     LPSTR CommandLine, int ShowCode)
@@ -792,12 +995,11 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
         Win32MakeWindowTitle(&WindowTitle, FileName, 0.0);
 
         {
-            const int ScreenWidth = SCREEN_WIDTH;
-            const int ScreenHeight = SCREEN_HEIGHT;
             const int SizeOfPixelInWindow = 16;
+            const int InitialDebugAreaHeight = 128;
             Window = Win32CreateWindow(ProcessHandle, WindowTitle.Data,
-                ScreenWidth * SizeOfPixelInWindow,
-                ScreenHeight * SizeOfPixelInWindow);
+                SCREEN_WIDTH * SizeOfPixelInWindow,
+                SCREEN_HEIGHT * SizeOfPixelInWindow + InitialDebugAreaHeight);
         }
 
         if (Window.Handle)
@@ -849,9 +1051,14 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
             int PendingTicks = 0;
 
+            pause_state PauseState = pause_state::None;
+            text1024 TextInputBuffer{};
+            text1024 DebugMessage{};
+
             while (true)
             {
-                PendingTicks += TicksPerFrame;
+                if (PauseState == pause_state::None)
+                    PendingTicks += TicksPerFrame;
 
                 // Pump messages while also waiting to be in sync with last frame.
                 while (true)
@@ -866,107 +1073,256 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                     }
                 }
 
-                // Apply input.
-                u16 OldInputState = M->InputState;
-                u16 NewInputState = Window.InputState;
-                M->InputState = NewInputState;
+                bool SingleStep = false;
 
-                if (M->DT > 0)
-                    --M->DT;
-
-                u8 OldST = M->ST;
-                if (M->ST > 0)
-                    --M->ST;
-
-                int TicksThisFrame = PendingTicks;
-                if (Window.ClientInput.Pause > 0)
+                // Process client input.
+                for (int EventIndex = 0;
+                    EventIndex < Window.Events.NumElements;
+                    ++EventIndex)
                 {
-                    TicksThisFrame = 0;
-                    if (Window.ClientInput.SingleStep == 1)
-                        TicksThisFrame = 1;
-                }
-
-                if (!Win32CanTick(M, OldInputState, NewInputState))
-                {
-                    TicksThisFrame = 0;
-                }
-
-                while (TicksThisFrame > 0)
-                {
-                    ++M->CurrentCycle;
-
-                    if (HasDebugInfo)
+                    win32_window_event* Event = Window.Events.Data() + EventIndex;
+                    switch (Event->Type)
                     {
-                        u16 PC = M->ProgramCounter;
-                        bool FoundDebugInfo = false;
-                        for (int InfoIndex = 0;
-                            InfoIndex < DebugInfos.NumElements;
-                            ++InfoIndex)
+                        case win32_window_event_type::Action:
                         {
-                            debug_info* Info = DebugInfos.Data() + InfoIndex;
-                            if (Info->MemoryOffset == PC)
+                            switch (Event->Action)
                             {
-                                int FileIndex = Info->FileId - 1;
-                                strc SourceFilePath = *At(&DebugSourceFilePaths, FileIndex);
-                                u16 Instruction = ReadWord(M->Memory + PC);
-                                if (Instruction != Info->GeneratedInstruction)
+                                case win32_window_event_action_type::Exit:
                                 {
-                                    printf("Detected discrepancy at 0x%04X: Generated " STR_FMT " 0x%04X vs. 0x%04X | " STR_FMT "(%d,%d)\n",
-                                        PC,
-                                        STR_FMTARG(Info->SourceLine),
-                                        Info->GeneratedInstruction,
-                                        Instruction,
-                                        STR_FMTARG(SourceFilePath),
-                                        Info->Line,
-                                        Info->Column
-                                    );
-                                }
-                                else
-                                {
-                                    printf("Executing instruction at 0x%04X: " STR_FMT " 0x%04X | " STR_FMT "(%d,%d)\n",
-                                        PC,
-                                        STR_FMTARG(Info->SourceLine),
-                                        Info->GeneratedInstruction,
-                                        STR_FMTARG(SourceFilePath),
-                                        Info->Line,
-                                        Info->Column
-                                    );
-                                }
+                                    PostQuitMessage(0);
+                                } break;
 
-                                FoundDebugInfo = true;
-                                break;
+                                case win32_window_event_action_type::AcceptText:
+                                {
+                                    if (PauseState == pause_state::Prompt)
+                                    {
+                                        Clear(&DebugMessage);
+
+                                        if (StartsWith(Str(&TextInputBuffer), Str("break ")))
+                                        {
+                                            // TODO: Implement this.
+                                            Append(&DebugMessage, Str("Sorry, command not implemented."));
+                                        }
+                                        else
+                                        {
+                                            Append(&DebugMessage, Str("Unrecognized command"));
+                                        }
+
+                                        Clear(&TextInputBuffer);
+                                    }
+                                } break;
+
+                                case win32_window_event_action_type::ToggleFullscreen:
+                                {
+                                    Win32ToggleFullscreenWindow(Window.Handle);
+                                } break;
+
+                                case win32_window_event_action_type::TogglePause:
+                                {
+                                    if (PauseState == pause_state::None)
+                                        PauseState = pause_state::Prompt;
+                                    else
+                                        PauseState = pause_state::None;
+                                    Clear(&TextInputBuffer);
+                                } break;
+
+                                case win32_window_event_action_type::SingleStep:
+                                {
+                                    SingleStep = true;
+                                } break;
+
+                                case win32_window_event_action_type::DeleteCharacter:
+                                {
+                                    if (PauseState == pause_state::Prompt && TextInputBuffer.Size > 0)
+                                    {
+                                        --TextInputBuffer.Size;
+                                        EnsureZeroTerminated(&TextInputBuffer);
+                                    }
+                                } break;
+
+                                case win32_window_event_action_type::DeleteWord:
+                                {
+                                    if (PauseState == pause_state::Prompt)
+                                    {
+                                        char* Data = TextInputBuffer.Data;
+                                        int End = TextInputBuffer.Size;
+
+                                        while (End >= 0 && mtb_IsWhitespace(Data[End - 1]))
+                                        {
+                                            --End;
+                                        }
+
+                                        for (; End >= 0; --End)
+                                        {
+                                            char Char = Data[End - 1];
+                                            bool IsAlphabetic =
+                                                (Char >= 'A' && Char <= 'Z') ||
+                                                (Char >= 'a' && Char <= 'z');
+                                            if (!IsAlphabetic)
+                                                break;
+                                        }
+
+                                        if (End < TextInputBuffer.Size)
+                                        {
+                                            TextInputBuffer.Size = End;
+                                            EnsureZeroTerminated(&TextInputBuffer);
+                                        }
+                                    }
+                                } break;
+
+                                default: MTB_INVALID_CODE_PATH;
+                            }
+                        } break;
+
+                        case win32_window_event_type::CharacterInput:
+                        {
+                            if (PauseState == pause_state::Prompt)
+                            {
+                                char Char = (char)Event->UnicodeCodePoint;
+                                if ((u32)Char == Event->UnicodeCodePoint)
+                                {
+                                    Append(&TextInputBuffer, (char)Event->UnicodeCodePoint);
+                                }
+                            }
+                        } break;
+
+                        default: MTB_INVALID_CODE_PATH;
+                    }
+                }
+                Clear(&Window.Events);
+
+                Win32ClearDebugText(&Window);
+                if (PauseState == pause_state::None)
+                {
+                    Win32AppendDebugText(&Window, Str("Running\n"));
+                }
+                else
+                {
+                    Win32AppendDebugText(&Window, Str("Paused | [F10][F11] Single Step | [F5] Unpause\n"));
+                    Win32AppendDebugText(&Window, Str("Commands:\n"));
+                    Win32AppendDebugText(&Window, Str("break 123 - Set a new breakpoint on a line 123\n"));
+                    Win32AppendDebugText(&Window, Str("> "));
+
+                    Win32AppendDebugText(&Window, Str(&TextInputBuffer));
+
+                    Win32AppendDebugText(&Window, Str("|\n"));
+                    Win32AppendDebugText(&Window, Str(&DebugMessage));
+                }
+
+                int TicksThisFrame;
+                if (PauseState == pause_state::None)
+                {
+                    TicksThisFrame = PendingTicks;
+                }
+                else
+                {
+                    if (SingleStep)
+                    {
+                        TicksThisFrame = 1;
+                    }
+                    else
+                    {
+                        TicksThisFrame = 0;
+                    }
+                }
+
+                if (TicksThisFrame > 0)
+                {
+                    // Process game input.
+                    u16 OldInputState = M->InputState;
+                    u16 NewInputState = Window.InputState;
+                    M->InputState = NewInputState;
+
+                    if (M->DT > 0)
+                        --M->DT;
+
+                    u8 OldST = M->ST;
+                    if (M->ST > 0)
+                        --M->ST;
+
+                    if (!Win32CanTick(M, OldInputState, NewInputState))
+                    {
+                        TicksThisFrame = 0;
+                    }
+
+                    while (TicksThisFrame > 0)
+                    {
+                        ++M->CurrentCycle;
+
+                        if (HasDebugInfo && false)
+                        {
+                            u16 PC = M->ProgramCounter;
+                            bool FoundDebugInfo = false;
+                            for (int InfoIndex = 0;
+                                InfoIndex < DebugInfos.NumElements;
+                                ++InfoIndex)
+                            {
+                                debug_info* Info = DebugInfos.Data() + InfoIndex;
+                                if (Info->MemoryOffset == PC)
+                                {
+                                    int FileIndex = Info->FileId - 1;
+                                    strc SourceFilePath = *At(&DebugSourceFilePaths, FileIndex);
+                                    u16 Instruction = ReadWord(M->Memory + PC);
+                                    if (Instruction != Info->GeneratedInstruction)
+                                    {
+                                        printf("Detected discrepancy at 0x%04X: Generated " STR_FMT " 0x%04X vs. 0x%04X | " STR_FMT "(%d,%d)\n",
+                                            PC,
+                                            STR_FMTARG(Info->SourceLine),
+                                            Info->GeneratedInstruction,
+                                            Instruction,
+                                            STR_FMTARG(SourceFilePath),
+                                            Info->Line,
+                                            Info->Column
+                                        );
+                                    }
+                                    else
+                                    {
+                                        printf("Executing instruction at 0x%04X: " STR_FMT " 0x%04X | " STR_FMT "(%d,%d)\n",
+                                            PC,
+                                            STR_FMTARG(Info->SourceLine),
+                                            Info->GeneratedInstruction,
+                                            STR_FMTARG(SourceFilePath),
+                                            Info->Line,
+                                            Info->Column
+                                        );
+                                    }
+
+                                    FoundDebugInfo = true;
+                                    break;
+                                }
+                            }
+
+                            if (!FoundDebugInfo)
+                            {
+                                printf("Unable to find debug info for location: 0x%04X", PC);
                             }
                         }
 
-                        if (!FoundDebugInfo)
+                        tick_result TickResult = Tick(M);
+
+                        --TicksThisFrame;
+                        if (PauseState == pause_state::None)
+                            --PendingTicks;
+
+                        if (!TickResult.Continue)
                         {
-                            printf("Unable to find debug info for location: 0x%04X", PC);
+                            M->ProgramCounter = InitialProgramCounter;
                         }
                     }
 
-                    tick_result TickResult = Tick(M);
-
-                    --TicksThisFrame;
-                    --PendingTicks;
-
-                    if (!TickResult.Continue)
+                    if (OldST == 0 && M->ST != 0)
                     {
-                        M->ProgramCounter = InitialProgramCounter;
+                        // TODO: Start the sound
                     }
+                    else if (OldST > 0 && M->ST == 0)
+                    {
+                        // TODO: Stop the sound
+                    }
+
+                    Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
                 }
 
-                Win32SwapBuffers(M->Screen, &Window.FrontBuffer);
-                Win32Present(Window.Handle, &Window.FrontBuffer);
-
-                if (OldST == 0 && M->ST != 0)
-                {
-                    // TODO: Start the sound
-                }
-                else if (OldST > 0 && M->ST == 0)
-                {
-                    // TODO: Stop the sound
-                }
-
+                Win32Present(&Window);
 
                 f64 SecondsSinceBigBang = Win32DeltaSeconds(&Clock, Win32Now(), BigBang);
                 if (SecondsSinceBigBang > 0)
@@ -998,3 +1354,5 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
     return 0;
 }
+
+#include "_generated/all_generated.cpp"
