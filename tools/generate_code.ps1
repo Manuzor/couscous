@@ -2,7 +2,6 @@ param(
   [string]$RepoRoot = "$PSScriptRoot/..",
   [string]$OutDir = "$RepoRoot/code/_generated",
   [switch]$StaticFunctions = $true,
-  [string]$PragmaOnce,
   [switch]$Clean
 )
 
@@ -41,10 +40,13 @@ foreach($Array in $Arrays)
 {
   $HasFixed = $Array.FixedCapacity -gt 0;
   $MinCapacity = if($HasFixed) { $Array.FixedCapacity } else { 32 }
+  $IncludeGuard = "GUARD_GENEREATED_$($Array.Name)"
 
   $HeaderContent = @"
 // Generated on $DateStamp
-$(if($PragmaOnce) { "#pragma once" })
+
+#if !defined($IncludeGuard)
+#define $IncludeGuard
 
 struct $($Array.Name)
 {
@@ -99,6 +101,7 @@ Find($($Array.Name)* Array, predicate Predicate)
     return nullptr;
 }
 
+#endif // !defined($IncludeGuard)
 "@
   $HeaderFilePath = "$OutDir/$($Array.Name).h"
   $UmbrellaHeaderIncludes += $HeaderFilePath
@@ -106,6 +109,8 @@ Find($($Array.Name)* Array, predicate Predicate)
 
   $Content = @"
 // Generated on $DateStamp
+
+#if defined($IncludeGuard)
 
 ${FunctionQualifiers}void
 Reserve($($Array.Name)* Array, int RequiredCapacity)
@@ -189,6 +194,7 @@ Deallocate($($Array.Name)* Array)
   *Array = {};
 }
 
+#endif // defined($IncludeGuard)
 "@
   $FilePath = "$OutDir/$($Array.Name).cpp"
   $UmbrellaIncludes += $FilePath
