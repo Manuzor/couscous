@@ -2675,7 +2675,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
                 ErrorInvalidInstruction(Context, LineCursor, MostCompatibleSignature);
             }
 
-            u16* NewWord = (u16*)Add(ByteCode, 2);
+            u16* NewWord = (u16*)AddN(ByteCode, 2);
             WriteWord(NewWord, EncodedInstruction);
 
             if (Context->GatherDebugInfo)

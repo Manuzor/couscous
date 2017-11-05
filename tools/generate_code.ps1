@@ -74,7 +74,10 @@ ${FunctionQualifiers}void
 SetNumElements($($Array.Name)* Array, int NewNumElements);
 
 ${FunctionQualifiers}$($Array.Type)*
-Add($($Array.Name)* Array, int NumToAdd = 1);
+AddN($($Array.Name)* Array, int NumToAdd);
+
+inline $($Array.Type)*
+Add($($Array.Name)* Array) { return AddN(Array, 1); }
 
 ${FunctionQualifiers}void
 Clear($($Array.Name)* Array);
@@ -161,7 +164,7 @@ SetNumElements($($Array.Name)* Array, int NewNumElements)
 }
 
 ${FunctionQualifiers}$($Array.Type)*
-Add($($Array.Name)* Array, int NumToAdd)
+AddN($($Array.Name)* Array, int NumToAdd)
 {
   Reserve(Array, Array->NumElements + NumToAdd);
   $($Array.Type)* Result = Array->Data() + Array->NumElements;

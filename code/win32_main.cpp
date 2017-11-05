@@ -114,7 +114,7 @@ Win32LoadFileContents(char const* FileName)
         LARGE_INTEGER FileSize;
         GetFileSizeEx(FileHandle, &FileSize);
 
-        Add(&Result, (int)FileSize.QuadPart);
+        AddN(&Result, (int)FileSize.QuadPart);
 
         DWORD NumBytesRead;
         if (ReadFile(
@@ -824,7 +824,7 @@ Win32ClearDebugText(win32_window* Window)
 void
 Win32AppendDebugText(win32_window* Window, strc Text)
 {
-    u8* Ptr = Add(&Window->DebugText, Text.Size);
+    u8* Ptr = AddN(&Window->DebugText, Text.Size);
     mtb_CopyBytes((size_t)Text.Size, Ptr, Text.Data);
 }
 
@@ -914,18 +914,18 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
                 int PendingSourceFiles = 0;
                 sscanf(At(&Tokens, 1)->Begin, "%d", &PendingSourceFiles);
-                Add(&DebugSourceFilePaths, PendingSourceFiles);
+                AddN(&DebugSourceFilePaths, PendingSourceFiles);
 
                 int PendingTargetFiles = 0;
                 sscanf(At(&Tokens, 2)->Begin, "%d", &PendingTargetFiles);
-                Add(&DebugTargetFiles, PendingTargetFiles);
+                AddN(&DebugTargetFiles, PendingTargetFiles);
 
                 int PendingLabels = 0;
                 sscanf(At(&Tokens, 3)->Begin, "%d", &PendingLabels);
 
                 int PendingInfos = 0;
                 sscanf(At(&Tokens, 4)->Begin, "%d", &PendingInfos);
-                Add(&DebugInfos, PendingInfos);
+                AddN(&DebugInfos, PendingInfos);
 
                 int TokenIndex = 5;
                 while (TokenIndex < Tokens.NumElements)
@@ -1099,14 +1099,47 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                     {
                                         Clear(&DebugMessage);
 
-                                        if (StartsWith(Str(TextInputBuffer), Str("break ")))
+                                        strc BreakCommand = Str("break ");
+                                        strc ShowCommand = Str("show");
+                                        strc ClearCommand = Str("clear");
+
+                                        if (StartsWith(Str(TextInputBuffer), BreakCommand))
                                         {
-                                            // TODO: Implement this.
-                                            Append(&DebugMessage, Str("Sorry, command not implemented."));
+                                            mtb_parse_string_result_s32 ParseResult = mtb_ParseString_s32(TextInputBuffer.Size - BreakCommand.Size, TextInputBuffer.Data + BreakCommand.Size, 0);
+                                            if (ParseResult.Success)
+                                            {
+                                                // TODO: Toggle breakpoint here.
+                                                *Add(&Breakpoints) = ParseResult.Value;
+                                            }
+                                            else
+                                            {
+                                                Append(&DebugMessage, Str("Sorry, command not implemented."));
+                                            }
                                         }
-                                        else if (AreEqual(Str(TextInputBuffer), Str("clear")))
+                                        else if (AreEqual(Str(TextInputBuffer), ShowCommand))
+                                        {
+                                            char Buffer[64];
+                                            strc Sep = Str("");
+                                            for (int BreakpointIndex = 0;
+                                                BreakpointIndex < Breakpoints.NumElements;
+                                                ++BreakpointIndex)
+                                            {
+                                                s32 Breakpoint = Breakpoints.Data()[BreakpointIndex];
+                                                mtb_to_string_result ToStringResult = mtb_ToString(Breakpoint, mtb_ArrayByteSizeOf(Buffer), Buffer);
+                                                if (ToStringResult.Success)
+                                                {
+                                                    Append(&DebugMessage, Sep);
+                                                    Append(&DebugMessage, str{ (int)ToStringResult.StrLen, ToStringResult.StrPtr });
+                                                    Sep = Str(", ");
+                                                }
+                                            }
+
+                                            // TODO: Show "No breakpoints set" if empty.
+                                        }
+                                        else if (AreEqual(Str(TextInputBuffer), ClearCommand))
                                         {
                                             Clear(&Breakpoints);
+                                            Append(&DebugMessage, Str("Cleared all breakpoints."));
                                         }
                                         else
                                         {
@@ -1207,6 +1240,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                     Win32AppendDebugText(&Window, Str("Paused | [F10][F11] Single Step | [F5] Unpause\n"));
                     Win32AppendDebugText(&Window, Str("Commands:\n"));
                     Win32AppendDebugText(&Window, Str("break 123 - Set a new breakpoint on line 123\n"));
+                    Win32AppendDebugText(&Window, Str("show - show all breakpoints.\n"));
                     Win32AppendDebugText(&Window, Str("clear - clear all breakpoints.\n"));
                     Win32AppendDebugText(&Window, Str("> "));
 

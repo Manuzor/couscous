@@ -2804,6 +2804,7 @@ mtb_ParseString_u32(size_t SourceLen, char const* SourcePtr, mtb_u32 Fallback)
   mtb_parse_string_result_u64 Result_u64 = mtb_ParseString_u64(SourceLen, SourcePtr, Fallback);
   mtb_parse_string_result_u32 Result_u32{ Result_u64.Success, Result_u64.RemainingSourceLen, Result_u64.RemainingSourcePtr };
   Result_u32.Value = mtb_SafeConvert_u32(Result_u64.Value);
+  return Result_u32;
 }
 
 
@@ -2814,6 +2815,7 @@ mtb_ParseString_u16(size_t SourceLen, char const* SourcePtr, mtb_u16 Fallback)
   mtb_parse_string_result_u64 Result_u64 = mtb_ParseString_u64(SourceLen, SourcePtr, Fallback);
   mtb_parse_string_result_u16 Result_u16{ Result_u64.Success, Result_u64.RemainingSourceLen, Result_u64.RemainingSourcePtr };
   Result_u16.Value = mtb_SafeConvert_u16(Result_u64.Value);
+  return Result_u16;
 }
 
 
@@ -2824,6 +2826,7 @@ mtb_ParseString_u08(size_t SourceLen, char const* SourcePtr, mtb_u08 Fallback)
   mtb_parse_string_result_u64 Result_u64 = mtb_ParseString_u64(SourceLen, SourcePtr, Fallback);
   mtb_parse_string_result_u08 Result_u08{ Result_u64.Success, Result_u64.RemainingSourceLen, Result_u64.RemainingSourcePtr };
   Result_u08.Value = mtb_SafeConvert_u08(Result_u64.Value);
+  return Result_u08;
 }
 
 
@@ -2843,6 +2846,7 @@ mtb_ParseString_s32(size_t SourceLen, char const* SourcePtr, mtb_s32 Fallback)
   mtb_parse_string_result_s64 Result_s64 = mtb_ParseString_s64(SourceLen, SourcePtr, Fallback);
   mtb_parse_string_result_s32 Result_s32{ Result_s64.Success, Result_s64.RemainingSourceLen, Result_s64.RemainingSourcePtr };
   Result_s32.Value = mtb_SafeConvert_s32(Result_s64.Value);
+  return Result_s32;
 }
 
 
@@ -2853,6 +2857,7 @@ mtb_ParseString_s16(size_t SourceLen, char const* SourcePtr, mtb_s16 Fallback)
   mtb_parse_string_result_s64 Result_s64 = mtb_ParseString_s64(SourceLen, SourcePtr, Fallback);
   mtb_parse_string_result_s16 Result_s16{ Result_s64.Success, Result_s64.RemainingSourceLen, Result_s64.RemainingSourcePtr };
   Result_s16.Value = mtb_SafeConvert_s16(Result_s64.Value);
+  return Result_s16;
 }
 
 
@@ -2863,6 +2868,7 @@ mtb_ParseString_s08(size_t SourceLen, char const* SourcePtr, mtb_s08 Fallback)
   mtb_parse_string_result_s64 Result_s64 = mtb_ParseString_s64(SourceLen, SourcePtr, Fallback);
   mtb_parse_string_result_s08 Result_s08{ Result_s64.Success, Result_s64.RemainingSourceLen, Result_s64.RemainingSourcePtr };
   Result_s08.Value = mtb_SafeConvert_s08(Result_s64.Value);
+  return Result_s08;
 }
 
 
