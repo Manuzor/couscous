@@ -28,12 +28,12 @@ $Arrays = @(
   @{ Name = "label_array"; Type = "label"; FixedCapacity = 32 };
   @{ Name = "patch_array"; Type = "patch"; FixedCapacity = 32 };
   @{ Name = "u8_array"; Type = "u8"; FixedCapacity = 32 };
-  @{ Name = "s32_array"; Type = "s32"; FixedCapacity = 32 };
   @{ Name = "str_array"; Type = "str"; FixedCapacity = 32 };
   @{ Name = "token_array"; Type = "token"; FixedCapacity = 8 };
   @{ Name = "cursor_array"; Type = "parser_cursor"; FixedCapacity = 8 };
   @{ Name = "debug_info_array"; Type = "debug_info"; FixedCapacity = 0 };
   @{ Name = "win32_window_event_array"; Type = "win32_window_event"; FixedCapacity = 32 };
+  @{ Name = "breakpoint_array"; Type = "breakpoint"; FixedCapacity = 32 };
 )
 
 foreach($Array in $Arrays)

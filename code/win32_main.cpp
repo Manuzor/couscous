@@ -834,6 +834,13 @@ enum struct pause_state
     Prompt,
 };
 
+struct breakpoint
+{
+    int FileId;
+    int Line;
+};
+#include "_generated/breakpoint_array.h"
+
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     LPSTR CommandLine, int ShowCode)
@@ -1054,7 +1061,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             pause_state PauseState = pause_state::None;
             text1024 TextInputBuffer{};
             text1024 DebugMessage{};
-            s32_array Breakpoints{};
+            breakpoint_array Breakpoints{};
 
             while (true)
             {
@@ -1105,36 +1112,71 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
                                         if (StartsWith(Str(TextInputBuffer), BreakCommand))
                                         {
-                                            mtb_parse_string_result_s32 ParseResult = mtb_ParseString_s32(TextInputBuffer.Size - BreakCommand.Size, TextInputBuffer.Data + BreakCommand.Size, 0);
+                                            strc BreakTarget = Trim(str{ TextInputBuffer.Size - BreakCommand.Size, TextInputBuffer.Data + BreakCommand.Size });
+                                            mtb_parse_string_result_s32 ParseResult = mtb_ParseString_s32(BreakTarget.Size, BreakTarget.Data, 0);
                                             if (ParseResult.Success)
                                             {
                                                 // TODO: Toggle breakpoint here.
-                                                *Add(&Breakpoints) = ParseResult.Value;
+                                                breakpoint Breakpoint{};
+                                                Breakpoint.FileId = 1;
+                                                Breakpoint.Line = ParseResult.Value;
+                                                bool PleaseRemove = false;
+                                                for (int BreakpointIndex = 0;
+                                                     BreakpointIndex < Breakpoints.NumElements;
+                                                     ++BreakpointIndex)
+                                                {
+                                                    breakpoint* ExistingBreakpoint = Breakpoints.Data() + BreakpointIndex;
+                                                    if(ExistingBreakpoint->FileId == Breakpoint.FileId && ExistingBreakpoint->Line == Breakpoint.Line)
+                                                    {
+                                                        PleaseRemove = true;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if(PleaseRemove)
+                                                {
+                                                    // TODO: Remove breakpoint.
+                                                    Append(&DebugMessage, Str("Breakpoint removed for line: "));
+                                                    Append(&DebugMessage, BreakTarget);
+                                                }
+                                                else
+                                                {
+                                                    *Add(&Breakpoints) = Breakpoint;
+                                                    Append(&DebugMessage, Str("Breakpoint added for line: "));
+                                                    Append(&DebugMessage, BreakTarget);
+                                                }
                                             }
                                             else
                                             {
-                                                Append(&DebugMessage, Str("Sorry, command not implemented."));
+                                                // TODO: Look for a label.
+                                                Append(&DebugMessage, Str("Not a valid line number or label: "));
+                                                Append(&DebugMessage, BreakTarget);
                                             }
                                         }
                                         else if (AreEqual(Str(TextInputBuffer), ShowCommand))
                                         {
-                                            char Buffer[64];
-                                            strc Sep = Str("");
-                                            for (int BreakpointIndex = 0;
-                                                BreakpointIndex < Breakpoints.NumElements;
-                                                ++BreakpointIndex)
+                                            if(Breakpoints.NumElements > 0)
                                             {
-                                                s32 Breakpoint = Breakpoints.Data()[BreakpointIndex];
-                                                mtb_to_string_result ToStringResult = mtb_ToString(Breakpoint, mtb_ArrayByteSizeOf(Buffer), Buffer);
-                                                if (ToStringResult.Success)
+                                                char Buffer[64];
+                                                strc Sep = Str("");
+                                                for (int BreakpointIndex = 0;
+                                                    BreakpointIndex < Breakpoints.NumElements;
+                                                    ++BreakpointIndex)
                                                 {
-                                                    Append(&DebugMessage, Sep);
-                                                    Append(&DebugMessage, str{ (int)ToStringResult.StrLen, ToStringResult.StrPtr });
-                                                    Sep = Str(", ");
+                                                    breakpoint* Breakpoint = Breakpoints.Data() + BreakpointIndex;
+                                                    mtb_to_string_result ToStringResult = mtb_ToString(Breakpoint->Line, mtb_ArrayByteSizeOf(Buffer), Buffer);
+                                                    if (ToStringResult.Success)
+                                                    {
+                                                        Append(&DebugMessage, Sep);
+                                                        Append(&DebugMessage, str{ (int)ToStringResult.StrLen, ToStringResult.StrPtr });
+                                                        Sep = Str(", ");
+                                                    }
                                                 }
                                             }
-
-                                            // TODO: Show "No breakpoints set" if empty.
+                                            else
+                                            {
+                                                Append(&DebugMessage, Str("No breakpoints set."));
+                                            }
                                         }
                                         else if (AreEqual(Str(TextInputBuffer), ClearCommand))
                                         {
@@ -1233,15 +1275,15 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 Win32ClearDebugText(&Window);
                 if (PauseState == pause_state::None)
                 {
-                    Win32AppendDebugText(&Window, Str("Running\n"));
+                    Win32AppendDebugText(&Window, Str("Running | <F5> Pause/Debug\n"));
                 }
                 else
                 {
-                    Win32AppendDebugText(&Window, Str("Paused | [F10][F11] Single Step | [F5] Unpause\n"));
+                    Win32AppendDebugText(&Window, Str("Paused | <F10>/<F11>: Single Step | <F5> Unpause\n"));
                     Win32AppendDebugText(&Window, Str("Commands:\n"));
-                    Win32AppendDebugText(&Window, Str("break 123 - Set a new breakpoint on line 123\n"));
-                    Win32AppendDebugText(&Window, Str("show - show all breakpoints.\n"));
-                    Win32AppendDebugText(&Window, Str("clear - clear all breakpoints.\n"));
+                    Win32AppendDebugText(&Window, Str("\"break 123\" Set a new breakpoint on line 123\n"));
+                    Win32AppendDebugText(&Window, Str("\"show\" show all breakpoints.\n"));
+                    Win32AppendDebugText(&Window, Str("\"clear\" clear all breakpoints.\n"));
                     Win32AppendDebugText(&Window, Str("> "));
 
                     Win32AppendDebugText(&Window, Str(TextInputBuffer));
