@@ -29,6 +29,7 @@ $Arrays = @(
   @{ Name = "label_array"; Type = "label"; FixedCapacity = 32 };
   @{ Name = "patch_array"; Type = "patch"; FixedCapacity = 32 };
   @{ Name = "u8_array"; Type = "u8"; FixedCapacity = 32 };
+  @{ Name = "s32_array"; Type = "s32"; FixedCapacity = 32 };
   @{ Name = "str_array"; Type = "str"; FixedCapacity = 32 };
   @{ Name = "token_array"; Type = "token"; FixedCapacity = 8 };
   @{ Name = "cursor_array"; Type = "parser_cursor"; FixedCapacity = 8 };
@@ -226,7 +227,7 @@ struct $($Text.Name)
 ${FunctionQualifiers}$($Text.Name) $($CtorName)(strc String);
 
 // To str
-${FunctionQualifiers}str Str($($Text.Name)* Text);
+${FunctionQualifiers}str Str($($Text.Name) Text);
 
 // EnsureZeroTerminated
 ${FunctionQualifiers}void EnsureZeroTerminated($($Text.Name)* Text);
@@ -264,9 +265,9 @@ $($CtorName)(strc String)
 }
 
 ${FunctionQualifiers}str
-Str($($Text.Name)* Text)
+Str($($Text.Name) Text)
 {
-  str Result{ Text->Size, Text->Data };
+  str Result{ Text.Size, Text.Data };
 
   return Result;
 }
@@ -288,7 +289,7 @@ Clear($($Text.Name)* Text)
 $($Text.Name)
 Trim($($Text.Name) Text)
 {
-  str Trimmed = Trim(Str(&Text));
+  str Trimmed = Trim(Str(Text));
   $($Text.Name) Result = $($CtorName)(Trimmed);
 
   return Result;

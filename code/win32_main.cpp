@@ -1054,6 +1054,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             pause_state PauseState = pause_state::None;
             text1024 TextInputBuffer{};
             text1024 DebugMessage{};
+            s32_array Breakpoints{};
 
             while (true)
             {
@@ -1094,18 +1095,23 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 
                                 case win32_window_event_action_type::AcceptText:
                                 {
-                                    if (PauseState == pause_state::Prompt)
+                                    if (TextInputBuffer.Size > 0 && PauseState == pause_state::Prompt)
                                     {
                                         Clear(&DebugMessage);
 
-                                        if (StartsWith(Str(&TextInputBuffer), Str("break ")))
+                                        if (StartsWith(Str(TextInputBuffer), Str("break ")))
                                         {
                                             // TODO: Implement this.
                                             Append(&DebugMessage, Str("Sorry, command not implemented."));
                                         }
+                                        else if (AreEqual(Str(TextInputBuffer), Str("clear")))
+                                        {
+                                            Clear(&Breakpoints);
+                                        }
                                         else
                                         {
-                                            Append(&DebugMessage, Str("Unrecognized command"));
+                                            Append(&DebugMessage, Str("Unrecognized command: "));
+                                            Append(&DebugMessage, Str(TextInputBuffer));
                                         }
 
                                         Clear(&TextInputBuffer);
@@ -1200,13 +1206,14 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 {
                     Win32AppendDebugText(&Window, Str("Paused | [F10][F11] Single Step | [F5] Unpause\n"));
                     Win32AppendDebugText(&Window, Str("Commands:\n"));
-                    Win32AppendDebugText(&Window, Str("break 123 - Set a new breakpoint on a line 123\n"));
+                    Win32AppendDebugText(&Window, Str("break 123 - Set a new breakpoint on line 123\n"));
+                    Win32AppendDebugText(&Window, Str("clear - clear all breakpoints.\n"));
                     Win32AppendDebugText(&Window, Str("> "));
 
-                    Win32AppendDebugText(&Window, Str(&TextInputBuffer));
+                    Win32AppendDebugText(&Window, Str(TextInputBuffer));
 
                     Win32AppendDebugText(&Window, Str("|\n"));
-                    Win32AppendDebugText(&Window, Str(&DebugMessage));
+                    Win32AppendDebugText(&Window, Str(DebugMessage));
                 }
 
                 int TicksThisFrame;

@@ -227,6 +227,7 @@ static instruction_signature*
 FindSignature(instruction instruction);
 
 #include "_generated/u8_array.h"
+#include "_generated/s32_array.h"
 
 #define STR_FMT "%*.*s"
 #define STR_FMTARG(Str) (int)(Str).Size, (int)(Str).Size, (char const*)(Str).Data

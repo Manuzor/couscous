@@ -2244,7 +2244,7 @@ DisassembleInstruction(instruction Instruction)
         TokenIndex < Tokens.NumElements;
         ++TokenIndex)
     {
-        *Add(&TokenStrings) = Str(Tokens.Data() + TokenIndex);
+        *Add(&TokenStrings) = Str(Tokens.Data()[TokenIndex]);
     }
 
     text Result = Detokenize(Tokens.NumElements, TokenStrings.Data());
