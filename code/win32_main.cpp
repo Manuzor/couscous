@@ -527,7 +527,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM L
     else if (Message == WM_SIZE)
     {
         // u32 NewWidth = (u32)(LParam & 0xffff);
-        // u32 NewHeight = (u32)((LParam & 0xffff0000) >> 16);
+        // u32 NewHeight = (u32)((LParam >> 16) & 0xffff);
         // TODO: Handle resizing.
     }
     else if (Message == WM_PAINT)
@@ -876,7 +876,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
 #elif MTB_FLAG(DEBUG)
     M->RNG = mtb_RandomSeed(0);
 #else
-    // TODO(Manuzor): Find a way to properly initialize the RNG.
+    // TODO: Find a way to properly initialize the RNG.
 #error Random number generator is not initialized and has no seed!
 #endif
 
@@ -1106,7 +1106,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                     {
                                         Clear(&DebugMessage);
 
-                                        strc BreakCommand = Str("break ");
+                                        strc BreakCommand = Str("break");
                                         strc ShowCommand = Str("show");
                                         strc ClearCommand = Str("clear");
 
@@ -1116,11 +1116,13 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                             mtb_parse_string_result_s32 ParseResult = mtb_ParseString_s32(BreakTarget.Size, BreakTarget.Data, 0);
                                             if (ParseResult.Success)
                                             {
+                                                BreakTarget.Size -= (int)ParseResult.RemainingSourceLen;
+
                                                 // TODO: Toggle breakpoint here.
                                                 breakpoint Breakpoint{};
                                                 Breakpoint.FileId = 1;
                                                 Breakpoint.Line = ParseResult.Value;
-                                                bool PleaseRemove = false;
+                                                int RemoveIndex = -1;
                                                 for (int BreakpointIndex = 0;
                                                      BreakpointIndex < Breakpoints.NumElements;
                                                      ++BreakpointIndex)
@@ -1128,22 +1130,28 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                                     breakpoint* ExistingBreakpoint = Breakpoints.Data() + BreakpointIndex;
                                                     if(ExistingBreakpoint->FileId == Breakpoint.FileId && ExistingBreakpoint->Line == Breakpoint.Line)
                                                     {
-                                                        PleaseRemove = true;
+                                                        RemoveIndex = BreakpointIndex;
                                                         break;
                                                     }
                                                 }
 
-                                                if(PleaseRemove)
-                                                {
-                                                    // TODO: Remove breakpoint.
-                                                    Append(&DebugMessage, Str("Breakpoint removed for line: "));
-                                                    Append(&DebugMessage, BreakTarget);
-                                                }
-                                                else
+                                                if(RemoveIndex == -1)
                                                 {
                                                     *Add(&Breakpoints) = Breakpoint;
                                                     Append(&DebugMessage, Str("Breakpoint added for line: "));
                                                     Append(&DebugMessage, BreakTarget);
+                                                }
+                                                else
+                                                {
+                                                    if (Remove(&Breakpoints, RemoveIndex))
+                                                    {
+                                                        Append(&DebugMessage, Str("Breakpoint removed for line: "));
+                                                        Append(&DebugMessage, BreakTarget);
+                                                    }
+                                                    else
+                                                    {
+                                                        MTB_Fail("Unable to remove breakpoint that we found earlier?!");
+                                                    }
                                                 }
                                             }
                                             else
@@ -1275,11 +1283,11 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 Win32ClearDebugText(&Window);
                 if (PauseState == pause_state::None)
                 {
-                    Win32AppendDebugText(&Window, Str("Running | <F5> Pause/Debug\n"));
+                    Win32AppendDebugText(&Window, Str("Running | <F5> Pause/Debug | <Esc> Exit\n"));
                 }
                 else
                 {
-                    Win32AppendDebugText(&Window, Str("Paused | <F10>/<F11>: Single Step | <F5> Unpause\n"));
+                    Win32AppendDebugText(&Window, Str("Paused | <F10>/<F11>: Single Step | <F5> Unpause | <Esc> Exit\n"));
                     Win32AppendDebugText(&Window, Str("Commands:\n"));
                     Win32AppendDebugText(&Window, Str("\"break 123\" Set a new breakpoint on line 123\n"));
                     Win32AppendDebugText(&Window, Str("\"show\" show all breakpoints.\n"));

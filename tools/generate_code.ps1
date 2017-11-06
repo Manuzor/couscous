@@ -1,7 +1,8 @@
 param(
   [string]$RepoRoot = "$PSScriptRoot/..",
   [string]$OutDir = "$RepoRoot/code/_generated",
-  [switch]$StaticFunctions = $true,
+  [string[]]$FuncCommonSpecfiers = @("static";),
+  [string[]]$FuncInlineSpecifiers = @("inline";),
   [switch]$Clean
 )
 
@@ -17,7 +18,8 @@ if($Clean)
 $UmbrellaHeaderIncludes = @()
 $UmbrellaIncludes = @()
 
-$FunctionQualifiers = "$(if($StaticFunctions) { "static " })"
+$CommonFuncPrefix = if($FuncCommonSpecfiers.Length){ ($FuncCommonSpecfiers -join " ") + " " }
+$InlineFuncPrefix = if($FuncInlineSpecifiers.Length){ ($FuncInlineSpecifiers -join " ") + " " }
 $DateStamp = Get-Date -f "yyyy-MM-dd HH:mm:ss"
 
 #
@@ -40,7 +42,7 @@ foreach($Array in $Arrays)
 {
   $HasFixed = $Array.FixedCapacity -gt 0;
   $MinCapacity = if($HasFixed) { $Array.FixedCapacity } else { 32 }
-  $IncludeGuard = "GUARD_GENEREATED_$($Array.Name)"
+  $IncludeGuard = "GUARD_GENERATED_$($Array.Name)"
 
   $HeaderContent = @"
 // Generated on $DateStamp
@@ -67,29 +69,41 @@ else
 "@})
 };
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}void
 Reserve($($Array.Name)* Array, int RequiredCapacity);
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}void
 SetNumElements($($Array.Name)* Array, int NewNumElements);
 
-${FunctionQualifiers}$($Array.Type)*
+${InlineFuncPrefix}bool
+IsValidIndex($($Array.Name)* Array, int Index) { return 0 <= Index && Index < Array->NumElements; }
+
+${CommonFuncPrefix}$($Array.Type)*
 AddN($($Array.Name)* Array, int NumToAdd);
 
-inline $($Array.Type)*
+${InlineFuncPrefix}$($Array.Type)*
 Add($($Array.Name)* Array) { return AddN(Array, 1); }
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}bool
+RemoveRange($($Array.Name)* Array, int FirstIndex, int OnePastLastIndex);
+
+${InlineFuncPrefix}bool
+RemoveN($($Array.Name)* Array, int FirstIndex, int NumToRemove) { RemoveRange(Array, FirstIndex, FirstIndex + NumToRemove); }
+
+${InlineFuncPrefix}bool
+Remove($($Array.Name)* Array, int Index) { return RemoveRange(Array, Index, Index + 1); }
+
+${CommonFuncPrefix}void
 Clear($($Array.Name)* Array);
 
-${FunctionQualifiers}$($Array.Type)*
+${CommonFuncPrefix}$($Array.Type)*
 At($($Array.Name)* Array, int Index);
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}void
 Deallocate($($Array.Name)* Array);
 
 template<typename predicate>
-${FunctionQualifiers}$($Array.Type)*
+${CommonFuncPrefix}$($Array.Type)*
 Find($($Array.Name)* Array, predicate Predicate)
 {
     for (int Index = 0; Index < Array->NumElements; ++Index)
@@ -115,7 +129,7 @@ Find($($Array.Name)* Array, predicate Predicate)
 
 #if defined($IncludeGuard)
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}void
 Reserve($($Array.Name)* Array, int RequiredCapacity)
 {
 $(if($HasFixed)
@@ -156,14 +170,14 @@ $(if($HasFixed)
   }
 }
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}void
 SetNumElements($($Array.Name)* Array, int NewNumElements)
 {
     Reserve(Array, NewNumElements);
     Array->NumElements = NewNumElements;
 }
 
-${FunctionQualifiers}$($Array.Type)*
+${CommonFuncPrefix}$($Array.Type)*
 AddN($($Array.Name)* Array, int NumToAdd)
 {
   Reserve(Array, Array->NumElements + NumToAdd);
@@ -173,13 +187,30 @@ AddN($($Array.Name)* Array, int NumToAdd)
   return Result;
 }
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}bool
+RemoveRange($($Array.Name)* Array, int FirstIndex, int OnePastLastIndex)
+{
+  bool Result = false;
+
+  if(OnePastLastIndex > FirstIndex && IsValidIndex(Array, FirstIndex) && IsValidIndex(Array, OnePastLastIndex - 1))
+  {
+      int NumTrailing = Array->NumElements - OnePastLastIndex;
+      mtb_CopyBytes(NumTrailing * sizeof($($Array.Type)), Array->Data() + FirstIndex, Array->Data() + OnePastLastIndex);
+      Array->NumElements -= OnePastLastIndex - FirstIndex;
+
+      Result = true;
+  }
+
+  return Result;
+}
+
+${CommonFuncPrefix}void
 Clear($($Array.Name)* Array)
 {
   Array->NumElements = 0;
 }
 
-${FunctionQualifiers}$($Array.Type)*
+${CommonFuncPrefix}$($Array.Type)*
 At($($Array.Name)* Array, int Index)
 {
   MTB_AssertDebug(Index >= 0);
@@ -187,7 +218,7 @@ At($($Array.Name)* Array, int Index)
   return Array->Data() + Index;
 }
 
-${FunctionQualifiers}void
+${CommonFuncPrefix}void
 Deallocate($($Array.Name)* Array)
 {
   if (Array->_Data)
@@ -233,27 +264,27 @@ struct $($Text.Name)
 };
 
 // "Constructor"
-${FunctionQualifiers}$($Text.Name) $($CtorName)(strc String);
+${CommonFuncPrefix}$($Text.Name) $($CtorName)(strc String);
 
 // To str
-${FunctionQualifiers}str Str($($Text.Name) Text);
+${CommonFuncPrefix}str Str($($Text.Name) Text);
 
 // EnsureZeroTerminated
-${FunctionQualifiers}void EnsureZeroTerminated($($Text.Name)* Text);
+${CommonFuncPrefix}void EnsureZeroTerminated($($Text.Name)* Text);
 
 // Clear
-${FunctionQualifiers}void Clear($($Text.Name)* Text);
+${CommonFuncPrefix}void Clear($($Text.Name)* Text);
 
 // Trim
-${FunctionQualifiers}$($Text.Name) Trim($($Text.Name) Text);
+${CommonFuncPrefix}$($Text.Name) Trim($($Text.Name) Text);
 
 // Append
-${FunctionQualifiers}int Append($($Text.Name)* Text, strc String);
-${FunctionQualifiers}int Append($($Text.Name)* Text, char Char);
+${CommonFuncPrefix}int Append($($Text.Name)* Text, strc String);
+${CommonFuncPrefix}int Append($($Text.Name)* Text, char Char);
 
 // Comparison
-${FunctionQualifiers}int Compare($($Text.Name)* A, $($Text.Name)* B);
-${FunctionQualifiers}bool AreEqual($($Text.Name)* A, $($Text.Name)* B);
+${CommonFuncPrefix}int Compare($($Text.Name)* A, $($Text.Name)* B);
+${CommonFuncPrefix}bool AreEqual($($Text.Name)* A, $($Text.Name)* B);
 
 "@
   $HeaderFilePath = "$OutDir/$($Text.Name).h"
@@ -265,7 +296,7 @@ ${FunctionQualifiers}bool AreEqual($($Text.Name)* A, $($Text.Name)* B);
 
 #include "$($Text.Name).h"
 
-${FunctionQualifiers}$($Text.Name)
+${CommonFuncPrefix}$($Text.Name)
 $($CtorName)(strc String)
 {
     $($Text.Name) Result{};
@@ -273,7 +304,7 @@ $($CtorName)(strc String)
     return Result;
 }
 
-${FunctionQualifiers}str
+${CommonFuncPrefix}str
 Str($($Text.Name) Text)
 {
   str Result{ Text.Size, Text.Data };
@@ -304,7 +335,7 @@ Trim($($Text.Name) Text)
   return Result;
 }
 
-${FunctionQualifiers}int
+${CommonFuncPrefix}int
 Append($($Text.Name)* Text, strc String)
 {
   int NewSize = Text->Size + String.Size;
@@ -321,7 +352,7 @@ Append($($Text.Name)* Text, strc String)
   return NumCopies;
 }
 
-${FunctionQualifiers}int
+${CommonFuncPrefix}int
 Append($($Text.Name)* Text, char Char)
 {
   int Result = Append(Text, str{ 1, &Char });
@@ -329,14 +360,14 @@ Append($($Text.Name)* Text, char Char)
   return Result;
 }
 
-${FunctionQualifiers}int Compare($($Text.Name)* A, $($Text.Name)* B)
+${CommonFuncPrefix}int Compare($($Text.Name)* A, $($Text.Name)* B)
 {
   int Result = mtb_StringCompare(A->Size, A->Data, B->Size, B->Data);
 
   return Result;
 }
 
-${FunctionQualifiers}bool AreEqual($($Text.Name)* A, $($Text.Name)* B)
+${CommonFuncPrefix}bool AreEqual($($Text.Name)* A, $($Text.Name)* B)
 {
   int ComparisonResult = Compare(A, B);
 
