@@ -1,16 +1,14 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stddef.h>
+#include <stdio.h>
+
 #define MTB_IMPLEMENTATION
 #include "mtb.h"
-
-#if MTB_FLAG(INTERNAL)
-    // printf, snprintf, freopen
-    #include <stdio.h>
-#endif
 
 #if !defined(COUSCOUSC)
     #define COUSCOUSC 1
 #endif
 
-#include "mtb.h"
 using u8 = mtb_u08;
 using u16 = mtb_u16;
 using u32 = mtb_u32;
@@ -36,6 +34,8 @@ using bool32 = int;
     #include "couscous_tests.cpp"
 #endif
 
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
 #if !defined(COUSCOUS_TESTS)
@@ -563,7 +563,7 @@ Win32MessagePump(win32_window* Window)
         {
             case WM_QUIT:
             {
-                ::quick_exit(0);
+                ::exit(0);
             } break;
             default:
             {

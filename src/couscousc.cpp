@@ -1,3 +1,6 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include <stddef.h>
+
 #define MTB_IMPLEMENTATION
 #include "mtb.h"
 
@@ -5,7 +8,6 @@
 
 #define COUSCOUSC 1
 
-#include "mtb.h"
 using u8 = mtb_u08;
 using u16 = mtb_u16;
 using u32 = mtb_u32;
@@ -252,131 +254,137 @@ int main(int NumArgs, char const* Args[])
     //
     //
     //
-    char* ContentsBegin = nullptr;
-    char* ContentsEnd = nullptr;
-
-    FILE* InFile = fopen(Files[0], "rb");
-    fseek(InFile, 0, SEEK_END);
-    int InFileSize = ftell(InFile);
-    fseek(InFile, 0, SEEK_SET);
-
-    ContentsBegin = (char*)malloc(InFileSize);
-    ContentsEnd = ContentsBegin + InFileSize;
-    fread(ContentsBegin, InFileSize, 1, InFile);
-
-    fclose(InFile);
-
     {
-        FILE* OutFile = nullptr;
-        if (mtb_StringsAreEqual(Files[1], "-"))
+        char* ContentsBegin = nullptr;
+        char* ContentsEnd = nullptr;
+
+        FILE* InFile = fopen(Files[0], "rb");
+        fseek(InFile, 0, SEEK_END);
+        int InFileSize = ftell(InFile);
+        fseek(InFile, 0, SEEK_SET);
+
+        ContentsBegin = (char*)malloc(InFileSize);
+        ContentsEnd = ContentsBegin + InFileSize;
+        fread(ContentsBegin, InFileSize, 1, InFile);
+
+        fclose(InFile);
+
         {
-            OutFile = stdout;
-            GenerateDebugInfos = false;
-        }
-        else
-        {
-            OutFile = fopen(Files[1], "wb");
-        }
-
-        if (Mode == commandline_mode::Assemble)
-        {
-            my_parser_context Context{};
-            Context.BaseContext.ErrorHandler = OnError;
-            Context.BaseContext.FileId = 1;
-            Context.BaseContext.BaseMemoryOffset = 0x200u;
-            Context.BaseContext.GatherDebugInfo = GenerateDebugInfos;
-            Context.CurrentFileName = Str(Files[0]);
-            Context.ErrorFile = stderr;
-            assemble_code_result Assembled = AssembleCode((parser_context*)&Context, ContentsBegin, ContentsEnd);
-            MTB_DEFER[&]{ Deallocate(&Assembled); };
-
-            Result = (int)Context.LastErrorType;
-
-            // Write the result!
-            fwrite(Assembled.ByteCode.Data(), Assembled.ByteCode.NumElements, 1, OutFile);
-
-            if (GenerateDebugInfos && Context.LastErrorType == ERR_NONE)
+            FILE* OutFile = nullptr;
+            if (mtb_StringsAreEqual(Files[1], "-"))
             {
-                text1024 ChdPath = CreateText1024(Str(Files[1]));
-                ChangeFileNameExtension(&ChdPath, Str(".chd"));
-                FILE* ChdFile = fopen(ChdPath.Data, "wb");
-                if (ChdFile)
-                {
-                    fprintf(ChdFile, "# BaseMemoryOffset;NumSourceFiles;NumTargetFiles;NumLabels;NumInfos\n");
-                    fprintf(ChdFile, "0x%X;%d;%d;%d;%d\n",
-                        Context.BaseContext.BaseMemoryOffset,
-                        1,
-                        1,
-                        Assembled.Labels.NumElements,
-                        Assembled.DebugInfos.NumElements
-                    );
-
-                    fprintf(ChdFile, "\n");
-                    fprintf(ChdFile, "# SourceFiles (FileId;FilePath)\n");
-                    fprintf(ChdFile, "1;%s\n", Files[1]);
-
-                    fprintf(ChdFile, "\n");
-                    fprintf(ChdFile, "# TargetFiles (FileId;FilePath)\n");
-                    fprintf(ChdFile, "1;%s\n", ChdPath.Data);
-
-                    fprintf(ChdFile, "\n");
-                    fprintf(ChdFile, "# Labels (LabelName;MemoryOffset)\n");
-                    for (int LabelIndex = 0;
-                        LabelIndex < Assembled.Labels.NumElements;
-                        ++LabelIndex)
-                    {
-                        label* Label = Assembled.Labels.Data() + LabelIndex;
-                        strc LabelName = Str(Label->NameCursor);
-                        fprintf(ChdFile, STR_FMT ";0x%04X\n", STR_FMTARG(LabelName), Label->MemoryOffset);
-                    }
-
-                    fprintf(ChdFile, "\n");
-                    fprintf(ChdFile, "# Infos (FileId;Line;Column;MemoryOffset;GeneratedInstruction;SourceString)\n");
-                    for (int InfoIndex = 0;
-                        InfoIndex < Assembled.DebugInfos.NumElements;
-                        ++InfoIndex)
-                    {
-                        debug_info* Info = Assembled.DebugInfos.Data() + InfoIndex;
-                        fprintf(ChdFile, "%d;%d;%d;0x%04X;%04X;\"" STR_FMT "\"\n", Info->FileId, Info->Line, Info->Column, Info->MemoryOffset, Info->GeneratedInstruction, STR_FMTARG(Info->SourceLine));
-                    }
-                    fclose(ChdFile);
-                }
-                else
-                {
-                    fprintf(stderr, "Unable to open file for writing: %s", (char const*)ChdPath.Data);
-                }
+                OutFile = stdout;
+                GenerateDebugInfos = false;
             }
-        }
-        else if (Mode == commandline_mode::Disassemble)
-        {
-            char* Current = ContentsBegin;
-            while (Current < ContentsEnd)
+            else
             {
-                instruction_decoder Decoder{};
-                Decoder.Data = ReadWord(Current);
-                Current += sizeof(u16);
-
-                // Can only trigger if Current and ContentsEnd are not aligned to 2 bytes relative to each other!
-                MTB_AssertDebug(Current <= ContentsEnd);
-
-                instruction Instruction = DecodeInstruction(Decoder);
-                text Code = DisassembleInstruction(Instruction);
-                fprintf(OutFile, STR_FMT "\n", STR_FMTARG(Code));
+                OutFile = fopen(Files[1], "wb");
             }
 
-            Result = 0;
-        }
-        else
-        {
-            MTB_INVALID_CODE_PATH;
+            if (Mode == commandline_mode::Assemble)
+            {
+                my_parser_context Context{};
+                Context.BaseContext.ErrorHandler = OnError;
+                Context.BaseContext.FileId = 1;
+                Context.BaseContext.BaseMemoryOffset = 0x200u;
+                Context.BaseContext.GatherDebugInfo = GenerateDebugInfos;
+                Context.CurrentFileName = Str(Files[0]);
+                Context.ErrorFile = stderr;
+                assemble_code_result Assembled = AssembleCode((parser_context*)&Context, ContentsBegin, ContentsEnd);
+                MTB_DEFER[&]{ Deallocate(&Assembled); };
+
+                Result = (int)Context.LastErrorType;
+
+                // Write the result!
+                fwrite(Assembled.ByteCode.Data(), Assembled.ByteCode.NumElements, 1, OutFile);
+
+                if (GenerateDebugInfos && Context.LastErrorType == ERR_NONE)
+                {
+                    text1024 ChdPath = CreateText1024(Str(Files[1]));
+                    ChangeFileNameExtension(&ChdPath, Str(".chd"));
+                    FILE* ChdFile = fopen(ChdPath.Data, "wb");
+                    if (ChdFile)
+                    {
+                        fprintf(ChdFile, "# BaseMemoryOffset;NumSourceFiles;NumTargetFiles;NumLabels;NumInfos\n");
+                        fprintf(ChdFile, "0x%X;%d;%d;%d;%d\n",
+                            Context.BaseContext.BaseMemoryOffset,
+                            1,
+                            1,
+                            Assembled.Labels.NumElements,
+                            Assembled.DebugInfos.NumElements
+                        );
+
+                        fprintf(ChdFile, "\n");
+                        fprintf(ChdFile, "# SourceFiles (FileId;FilePath)\n");
+                        fprintf(ChdFile, "1;%s\n", Files[1]);
+
+                        fprintf(ChdFile, "\n");
+                        fprintf(ChdFile, "# TargetFiles (FileId;FilePath)\n");
+                        fprintf(ChdFile, "1;%s\n", ChdPath.Data);
+
+                        fprintf(ChdFile, "\n");
+                        fprintf(ChdFile, "# Labels (LabelName;MemoryOffset)\n");
+                        for (int LabelIndex = 0;
+                            LabelIndex < Assembled.Labels.NumElements;
+                            ++LabelIndex)
+                        {
+                            label* Label = Assembled.Labels.Data() + LabelIndex;
+                            strc LabelName = Str(Label->NameCursor);
+                            fprintf(ChdFile, STR_FMT ";0x%04X\n", STR_FMTARG(LabelName), Label->MemoryOffset);
+                        }
+
+                        fprintf(ChdFile, "\n");
+                        fprintf(ChdFile, "# Infos (FileId;Line;Column;MemoryOffset;GeneratedInstruction;SourceString)\n");
+                        for (int InfoIndex = 0;
+                            InfoIndex < Assembled.DebugInfos.NumElements;
+                            ++InfoIndex)
+                        {
+                            debug_info* Info = Assembled.DebugInfos.Data() + InfoIndex;
+                            fprintf(ChdFile, "%d;%d;%d;0x%04X;%04X;\"" STR_FMT "\"\n", Info->FileId, Info->Line, Info->Column, Info->MemoryOffset, Info->GeneratedInstruction, STR_FMTARG(Info->SourceLine));
+                        }
+                        fclose(ChdFile);
+                    }
+                    else
+                    {
+                        fprintf(stderr, "Unable to open file for writing: %s", (char const*)ChdPath.Data);
+                    }
+                }
+            }
+            else if (Mode == commandline_mode::Disassemble)
+            {
+                char* Current = ContentsBegin;
+                while (Current < ContentsEnd)
+                {
+                    instruction_decoder Decoder{};
+                    Decoder.Data = ReadWord(Current);
+                    Current += sizeof(u16);
+
+                    // Can only trigger if Current and ContentsEnd are not aligned to 2 bytes relative to each other!
+                    MTB_AssertDebug(Current <= ContentsEnd);
+
+                    instruction Instruction = DecodeInstruction(Decoder);
+                    text Code = DisassembleInstruction(Instruction);
+                    fprintf(OutFile, STR_FMT "\n", STR_FMTARG(Code));
+                }
+
+                Result = 0;
+            }
+            else
+            {
+                MTB_INVALID_CODE_PATH;
+            }
+
+            if (OutFile != stdout)
+            {
+                fclose(OutFile);
+            }
         }
 
-        if (OutFile != stdout)
-            fclose(OutFile);
+        if (ContentsBegin)
+        {
+            free(ContentsBegin);
+        }
     }
-
-    if (ContentsBegin)
-        free(ContentsBegin);
 
     //
     //

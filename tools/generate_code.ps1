@@ -1,6 +1,6 @@
 param(
   [string]$RepoRoot = "$PSScriptRoot/..",
-  [string]$OutDir = "$RepoRoot/code/_generated",
+  [string]$OutDir = "$RepoRoot/src/_generated",
   [string[]]$FuncCommonSpecfiers = @("static";),
   [string[]]$FuncInlineSpecifiers = @("inline";),
   [switch]$Clean
@@ -88,7 +88,7 @@ ${CommonFuncPrefix}bool
 RemoveRange($($Array.Name)* Array, int FirstIndex, int OnePastLastIndex);
 
 ${InlineFuncPrefix}bool
-RemoveN($($Array.Name)* Array, int FirstIndex, int NumToRemove) { RemoveRange(Array, FirstIndex, FirstIndex + NumToRemove); }
+RemoveN($($Array.Name)* Array, int FirstIndex, int NumToRemove) { return RemoveRange(Array, FirstIndex, FirstIndex + NumToRemove); }
 
 ${InlineFuncPrefix}bool
 Remove($($Array.Name)* Array, int Index) { return RemoveRange(Array, Index, Index + 1); }

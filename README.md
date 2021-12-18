@@ -15,26 +15,26 @@ Generated directories start with an underscore `_` and are ignored by the versio
 
 # Build Instructions
 
-Platform requirements:
+Build artifacts can be found in the `_out` directory.
+
+Requirements:
 * **Windows 10** or higher
-  * Needs **Visual Studio 2017** or higher installed
-  * An active **internet connection** the first time you execute the build script. See below for details.
+  * Needs zig 0.9 or higher (https://ziglang.org/)
+  * Needs some flavor of **Visual Studio** (until zig eliminates that dependency). The latest Build Tools are probably fine.
 
 Other platforms may or may not be supported in the future.
 
 ## TL;DR
 ~~~
-> ./build.ps1
+> ./configure.bat
 ~~~
 
-Generate a Visual Studio project file in `_workspace/vsXY` (e.g. `_workspace/vs15`):
+Compile executables:
 ~~~
-> ./build.ps1 vs
+> ./build.bat
 ~~~
 
-## Details
-The underlying build system is [FASTBuild](https://fastbuild.org). You do not have to have it installed because the build script downloads an appropriate version automatically when it can't find FASTBuild in `_workspace/fastbuild`. This only needs to be done the first time the build script is executed. But of course, this requires an active internet connection. If you don't have a connection and still want to build, either make sure FASTBuild is in your path or put the binaries into the directory `_workspace/fastbuild`.
-
-Arguments to the build script are forwarded to FASTBuild, i.e. you can use `./build.ps1 -showtargets` to show all defined targets.
-
-Build artifacts can be found in the `_build` directory.
+Generate a top-level Visual Studio Solution file:
+~~~
+> ./sln.bat
+~~~

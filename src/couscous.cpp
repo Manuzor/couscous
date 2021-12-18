@@ -1,3 +1,6 @@
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wswitch"
+
 //
 // argument_type
 //
@@ -1833,10 +1836,10 @@ int GetNumArguments(instruction Instruction)
 
 #if COUSCOUSC
 
-#define I0(Hint, InstructionType)                               { Hint, MTB_CONCAT(instruction_type::, InstructionType), 0 }
-#define I1(Hint, InstructionType, ArgType0)                     { Hint, MTB_CONCAT(instruction_type::, InstructionType), 1, { MTB_CONCAT(argument_type::, ArgType0) } }
-#define I2(Hint, InstructionType, ArgType0, ArgType1)           { Hint, MTB_CONCAT(instruction_type::, InstructionType), 2, { MTB_CONCAT(argument_type::, ArgType0), MTB_CONCAT(argument_type::, ArgType1) } }
-#define I3(Hint, InstructionType, ArgType0, ArgType1, ArgType2) { Hint, MTB_CONCAT(instruction_type::, InstructionType), 3, { MTB_CONCAT(argument_type::, ArgType0), MTB_CONCAT(argument_type::, ArgType1), MTB_CONCAT(argument_type::, ArgType2) } }
+#define I0(Hint, InstructionType)                               { Hint, instruction_type::InstructionType, 0 }
+#define I1(Hint, InstructionType, ArgType0)                     { Hint, instruction_type::InstructionType, 1, { argument_type::ArgType0 } }
+#define I2(Hint, InstructionType, ArgType0, ArgType1)           { Hint, instruction_type::InstructionType, 2, { argument_type::ArgType0, argument_type::ArgType1 } }
+#define I3(Hint, InstructionType, ArgType0, ArgType1, ArgType2) { Hint, instruction_type::InstructionType, 3, { argument_type::ArgType0, argument_type::ArgType1, argument_type::ArgType2 } }
 
 static instruction_signature InstructionSignatures[] =
 {
@@ -2150,7 +2153,7 @@ ChangeFileNameExtension(text1024* FileName, strc NewExtension)
 }
 
 cursor_array
-Tokenize(parser_cursor Code, eat_flags TokenDelimiters, char* AdditionalTokenDelimiters)
+Tokenize(parser_cursor Code, eat_flags TokenDelimiters, char const* AdditionalTokenDelimiters)
 {
     cursor_array Tokens{};
 
@@ -2751,3 +2754,5 @@ EndOfContentParsing:
 }
 
 #endif // COUSCOUSC
+
+#pragma GCC diagnostic pop

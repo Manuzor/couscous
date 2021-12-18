@@ -1,9 +1,15 @@
-# Directories starting with an underscore are ignored by default.
-_*/
-
 # FASTBuild database
 *.fdb
 
 # Visual Studio stuff.
 .vs/
 *.sln
+
+# Sublime
+.subl/
+
+# Generated files and directories
+_out/
+src/_generated/
+sln.bat
+build.bat
