@@ -51,6 +51,7 @@ goto :eof
 
 :sln-script-template
 echo @echo off
+echo md %OUT_DIR% 2^> NUL
 echo call :bff-template ^> %OUT_DIR%\sln.bff
 echo fbuild -ide -config %OUT_DIR%\sln.bff
 echo goto :eof
