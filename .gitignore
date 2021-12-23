@@ -10,6 +10,8 @@
 
 # Generated files and directories
 _out/
+zig-out/
+zig-cache/
 src/_generated/
 sln.bat
 build.bat
