@@ -18,7 +18,7 @@ pub fn newFrame() void {
 
 pub fn framePrint(comptime fmt: []const u8, args: anytype) void {
     var state = &global_state;
-    state.last_frame_print_len = (std.fmt.bufPrint(state.last_frame_print_buf[state.last_frame_print_len..], fmt, args) catch unreachable).len;
+    state.last_frame_print_len += (std.fmt.bufPrint(state.last_frame_print_buf[state.last_frame_print_len..], fmt, args) catch unreachable).len;
 }
 
 const W = 64;
@@ -36,6 +36,8 @@ var global_state: struct {
     cpu: chip8.Cpu = .{},
     memory_buf: [4096]u8 = [_]u8{0} ** 4096,
     display_buf: [H * W]u1 = [_]u1{0} ** (H * W),
+    keyboard: chip8.Keyboard = .{},
+    keyboard_layout: u8 = 0,
 
     last_frame_print_buf: [4096]u8 = undefined,
     last_frame_print_len: usize = 0,
@@ -46,6 +48,45 @@ var global_state: struct {
         pass_action: sg.PassAction = .{},
     } = .{},
 } = .{};
+
+const keyboard_layouts = [_][16]sapp.Keycode{
+    [_]sapp.Keycode{
+        ._0, // 0x0
+        ._1, // 0x1
+        ._2, // 0x2
+        ._3, // 0x3
+        ._4, // 0x4
+        ._5, // 0x5
+        ._6, // 0x6
+        ._7, // 0x7
+        ._8, // 0x8
+        ._9, // 0x9
+        .A, // 0xA
+        .B, // 0xB
+        .C, // 0xC
+        .D, // 0xD
+        .E, // 0xE
+        .F, // 0xF
+    },
+    [_]sapp.Keycode{
+        .X, // 0x0
+        ._1, // 0x1
+        ._2, // 0x2
+        ._3, // 0x3
+        .Q, // 0x4
+        .W, // 0x5
+        .E, // 0x6
+        .A, // 0x7
+        .S, // 0x8
+        .D, // 0x9
+        .Z, // 0xA
+        .C, // 0xB
+        ._4, // 0xC
+        .R, // 0xD
+        .F, // 0xE
+        .V, // 0xF
+    },
+};
 
 // sokol-app callbacks {
 
@@ -166,6 +207,20 @@ export fn input(ev: ?*const sapp.Event) void {
         const key_pressed = event.type == .KEY_DOWN;
         const key_repeat = event.key_repeat;
         const key_code = event.key_code;
+
+        if (!key_repeat) {
+            const layout = &keyboard_layouts[state.keyboard_layout];
+            var key_index: u8 = 0x0;
+            while (key_index <= 0xF) : (key_index += 1) {
+                if (key_code == layout[key_index]) {
+                    state.keyboard.state[key_index] = key_pressed;
+                    state.keyboard.last = key_index;
+                    state.keyboard.block = false;
+                    break;
+                }
+            }
+        }
+
         if (key_pressed and !key_repeat) {
             switch (key_code) {
                 .ESCAPE => {
@@ -193,6 +248,10 @@ export fn input(ev: ?*const sapp.Event) void {
 fn tickChip8() void {
     var state = &global_state;
 
+    if (state.keyboard.block) {
+        return;
+    }
+
     newFrame();
 
     framePrint("Tick #{}\n", .{state.tick_counter});
@@ -203,7 +262,8 @@ fn tickChip8() void {
         .height = H,
         .data = @as([]u1, &state.display_buf),
     };
-    state.cpu.tick(memory, display, state.rng.random());
+    var keyboard = &state.keyboard;
+    state.cpu.tick(memory, display, keyboard, state.rng.random());
 
     state.tick_counter += 1;
 }
