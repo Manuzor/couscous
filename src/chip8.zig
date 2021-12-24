@@ -190,18 +190,19 @@ pub const Cpu = struct {
                     cpu.v[0xF] = 0;
                 }
                 if (step < n) {
-                    const display_base = cpu.v[y] * display.width + cpu.v[x];
-                    const index = step;
-                    const byte_value = memory[cpu.i + index];
-                    comptime var bit = 8;
-                    inline while (bit > 0) {
-                        comptime bit -= 1;
+                    const display_y = (cpu.v[y] + step) % display.height;
+                    const byte_value = memory[cpu.i + step];
+                    const display_x0 = cpu.v[x];
+                    comptime var bit = 0;
+                    inline while (bit < 8) : (bit += 1) {
+                        const display_x = (display_x0 + bit) % display.width;
                         const value = @truncate(u1, byte_value >> bit);
-                        const pixel = display.data[display_base + index + bit];
+                        const display_index = display_y * display.width + display_x;
+                        const pixel = display.data[display_index];
                         if (pixel == 1 and value == 1) {
                             cpu.v[0xF] = 1;
                         }
-                        display.data[display_base + index + bit] = pixel ^ value;
+                        display.data[display_index] = pixel ^ value;
                     }
                 } else {
                     cpu.v[0xF] = if (carry) 1 else 0;

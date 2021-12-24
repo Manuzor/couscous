@@ -88,6 +88,40 @@ const keyboard_layouts = [_][16]sapp.Keycode{
     },
 };
 
+const RenderBox = struct {
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
+};
+
+pub fn aspectRatioFit(window_width: f32, window_height: f32, render_width: f32, render_height: f32) ?RenderBox {
+    if (render_width <= 0 or render_height <= 0 or window_width <= 0 or window_height <= 0) {
+        return null;
+    }
+
+    const optimal_window_width = window_height * (render_width / render_height);
+    const optimal_window_height = window_width * (render_height / render_width);
+
+    if (optimal_window_width > window_width) {
+        const half_empty = 0.5 * (window_height - optimal_window_height);
+        return RenderBox{
+            .min_x = 0,
+            .min_y = half_empty,
+            .max_x = window_width,
+            .max_y = half_empty + optimal_window_height,
+        };
+    } else {
+        const half_empty = 0.5 * (window_width - optimal_window_width);
+        return RenderBox{
+            .min_x = half_empty,
+            .min_y = 0,
+            .max_x = half_empty + optimal_window_width,
+            .max_y = window_height,
+        };
+    }
+}
+
 // sokol-app callbacks {
 
 export fn init() void {
@@ -119,18 +153,12 @@ export fn init() void {
         .data = sg.asRange(quad_indices),
     });
 
-    const tex_pixels = [4 * 4]u8{
-        1, 0, 1, 0,
-        0, 1, 0, 1,
-        1, 0, 1, 0,
-        0, 1, 0, 1,
-    };
     var tex_desc = sg.ImageDesc{
-        .width = 4,
-        .height = 4,
+        .width = W,
+        .height = H,
         .pixel_format = .R8,
+        .usage = .STREAM,
     };
-    tex_desc.data.subimage[0][0] = sg.asRange(tex_pixels);
     state.gfx.bindings.fs_images[shader.SLOT_tex] = sg.makeImage(tex_desc);
 
     var pip_desc = sg.PipelineDesc{
@@ -178,8 +206,12 @@ export fn frame() void {
 
     const canvas_width = sapp.widthf();
     const canvas_height = sapp.heightf();
+    const render_scale: f32 = 1.0;
+    const viewport = aspectRatioFit(canvas_width, canvas_height, render_scale * W, render_scale * H).?;
+    const render_width = viewport.max_x - viewport.min_x;
+    const render_height = viewport.max_y - viewport.min_y;
 
-    sdtx.canvas(canvas_width, canvas_height);
+    sdtx.canvas(render_width, render_height);
     sdtx.origin(3, 3);
     sdtx.font(0);
 
@@ -189,7 +221,17 @@ export fn frame() void {
 
     sdtx.print("{s}", .{state.last_frame_print_buf[0..state.last_frame_print_len]});
 
+    var tex_pixels = [_]u8{undefined} ** (H * W);
+    var tex_index: usize = 0;
+    while (tex_index < tex_pixels.len) : (tex_index += 1) {
+        tex_pixels[tex_index] = @truncate(u1, (tex_index & 1) ^ ((tex_index / W) & 1));
+    }
+    var tex_data = sg.ImageData{};
+    tex_data.subimage[0][0] = sg.asRange(tex_pixels);
+    sg.updateImage(state.gfx.bindings.fs_images[shader.SLOT_tex], tex_data);
+
     sg.beginDefaultPassf(state.gfx.pass_action, canvas_width, canvas_height);
+    sg.applyViewportf(viewport.min_x, viewport.min_y, render_width, render_height, false);
     sg.applyPipeline(state.gfx.pipeline);
     sg.applyBindings(state.gfx.bindings);
     sg.draw(0, 6, 1);
@@ -276,8 +318,8 @@ pub fn main() anyerror!void {
         .frame_cb = frame,
         .event_cb = input,
         .cleanup_cb = cleanup,
-        .width = 640,
-        .height = 480,
+        .width = 20 * W,
+        .height = 20 * H,
         .window_title = "couscous CHIP-8 in zig powered by sokol",
     });
 }

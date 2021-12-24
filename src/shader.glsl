@@ -16,7 +16,10 @@ out vec4 frag_color;
 uniform sampler2D tex;
 
 void main() {
-    frag_color = texture(tex, uv);
+    const vec4 off_color = vec4(16, 64, 16, 255) / 255;
+    const vec4 on_color = vec4(8, 16, 8, 255) / 255;
+    const float bit = texture(tex, uv).r * 255.0;
+    frag_color = mix(off_color, on_color, bit);
 }
 #pragma sokol @end
 
