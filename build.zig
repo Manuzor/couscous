@@ -20,6 +20,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.setBuildMode(mode);
     exe.linkLibrary(sokol);
     exe.addPackagePath("sokol", sokol_package_path);
+    exe.addPackagePath("clap", "lib/zig-clap/clap.zig");
     exe.install();
 
     const run_cmd = exe.run();

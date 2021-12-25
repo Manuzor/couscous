@@ -40,7 +40,7 @@ pub const Cpu = struct {
         const code = mem.readIntSliceBig(u16, memory[cpu.pc..]);
         root.framePrint("cpu: pc={x:0>4} i={x:0>4} sp={x:0>4} dt={x:0>2} st={x:0>2}\n", .{ cpu.pc, cpu.i, cpu.sp, cpu.dt, cpu.st });
         root.framePrint("     v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
-        root.framePrint("fetched opcode {} 0x{x} 0b{b} step={}\n", .{ code, code, code, cpu.step });
+        root.framePrint("opcode={x:0>4} step={}\n", .{ code, cpu.step });
 
         const h = @truncate(u4, code >> 12);
         const x = @truncate(u4, code >> 8);

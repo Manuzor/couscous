@@ -8,6 +8,8 @@ const stm = @import("sokol").time;
 const saudio = @import("sokol").audio;
 const sdtx = @import("sokol").debugtext;
 
+const clap = @import("clap");
+
 const shader = @import("shader.zig");
 const chip8 = @import("chip8.zig");
 
@@ -25,6 +27,9 @@ const W = 64;
 const H = 32;
 
 var global_state: struct {
+    initialized: bool = false,
+    rom_loaded: bool = false,
+
     is_single_stepping: bool = true,
     frame_counter: u64 = 0,
     laptime_store: u64 = 0,
@@ -128,6 +133,27 @@ export fn init() void {
     var state = &global_state;
     _ = state;
 
+    const params = comptime [_]clap.Param(clap.Help){
+        clap.parseParam("-h, --help    Display this help and exit") catch unreachable,
+        clap.parseParam("<POS>...      Path to a ROM to load.") catch unreachable,
+    };
+    var diag = clap.Diagnostic{};
+    var args = clap.parse(clap.Help, &params, .{ .diagnostic = &diag }) catch |err| {
+        diag.report(std.io.getStdErr().writer(), err) catch {};
+        log.err("error parsing command line.", .{});
+        return;
+    };
+    defer args.deinit();
+
+    if (args.flag("--help")) {
+        var writer = std.io.getStdErr().writer();
+        writer.print("usage: couscous ", .{}) catch {};
+        clap.usage(writer, &params) catch {};
+        writer.print("\noptions:\n", .{}) catch {};
+        clap.help(writer, &params) catch {};
+        return;
+    }
+
     stm.setup();
 
     sg.setup(.{
@@ -180,22 +206,41 @@ export fn init() void {
     sdtx_desc.fonts[0] = sdtx.fontOric();
     sdtx.setup(sdtx_desc);
 
+    for (args.positionals()) |rom_path| {
+        if(state.rom_loaded) {
+            log.warn("ignore loading of additional ROMs.", .{});
+            break;
+        }
+        loadRomFromFile(state.memory_buf[0x200..], rom_path) catch {
+            return;
+        };
+    }
     std.mem.writeIntSliceBig(u16, state.memory_buf[0..2], 0x1200);
 
     framePrint("press ENTER to run, press SPACE to single-step\n", .{});
+
+    state.initialized = true;
 }
 
 export fn cleanup() void {
     var state = &global_state;
     _ = state;
 
-    sdtx.shutdown();
-    saudio.shutdown();
-    sg.shutdown();
+    if (state.initialized) {
+        sdtx.shutdown();
+        saudio.shutdown();
+        sg.shutdown();
+    }
 }
 
 export fn frame() void {
     var state = &global_state;
+
+    if (!state.initialized) {
+        sapp.quit();
+        return;
+    }
+
     state.frame_counter += 1;
 
     // run at a fixed tick rate regardless of frame rate
@@ -287,6 +332,21 @@ export fn input(ev: ?*const sapp.Event) void {
     }
 }
 
+// }
+
+fn loadRomFromFile(dest: []u8, path: []const u8) !void {
+    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+        log.err("{}: Failed to open ROM file '{s}'", .{ err, path });
+        return error.RomLoad;
+    };
+    defer file.close();
+    const bytes_read = file.readAll(dest) catch |err| {
+        log.err("{}: Failed to read ROM file '{s}'", .{ err, path });
+        return error.RomLoad;
+    };
+    log.debug("loaded ROM with {} bytes: '{s}'", .{ bytes_read, path });
+}
+
 fn tickChip8() void {
     var state = &global_state;
 
@@ -309,8 +369,6 @@ fn tickChip8() void {
 
     state.tick_counter += 1;
 }
-
-// }
 
 pub fn main() anyerror!void {
     sapp.run(.{
