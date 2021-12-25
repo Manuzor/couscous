@@ -6,6 +6,7 @@ const root = @import("root");
 const stack_base_address: u16 = 0x0000;
 const charmap_base_address: u16 = 0x0010;
 const display_base_address: u16 = 0x0100;
+const user_base_address: u16 = 0x0100;
 
 pub const Display = struct {
     width: u16 = 64,
@@ -24,11 +25,12 @@ pub const Cpu = struct {
     dt: u8 = 0,
     st: u8 = 0,
 
-    pc: u16 = 0,
+    pc: u16 = 0x200,
     sp: u16 = 0,
 
     i: u16 = 0,
 
+    opcode: u16 = 0,
     step: u16 = 0,
 
     pub fn setPc(cpu: *Cpu, pc: u16) void {
@@ -38,9 +40,7 @@ pub const Cpu = struct {
 
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
         const code = mem.readIntSliceBig(u16, memory[cpu.pc..]);
-        root.framePrint("cpu: pc={x:0>4} i={x:0>4} sp={x:0>4} dt={x:0>2} st={x:0>2}\n", .{ cpu.pc, cpu.i, cpu.sp, cpu.dt, cpu.st });
-        root.framePrint("     v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
-        root.framePrint("opcode={x:0>4} step={}\n", .{ code, cpu.step });
+        cpu.opcode = code;
 
         const h = @truncate(u4, code >> 12);
         const x = @truncate(u4, code >> 8);
@@ -50,7 +50,7 @@ pub const Cpu = struct {
         const nnn = @truncate(u12, code);
 
         const mask_table = [16]u16{
-            0x0000, // h: 0
+            0xFFFF, // h: 0
             0xF000, // h: 1
             0xF000, // h: 2
             0xF000, // h: 3
@@ -74,8 +74,9 @@ pub const Cpu = struct {
 
         switch (code & mask) {
             0x00E0 => { // 00E0 - CLS
-                if (step < display.width * display.height) {
-                    display.data[step] = 0;
+                if (step < display.height * display.width / 8) {
+                    const index = step * 8;
+                    mem.set(u1, display.data[index .. index + 8], 0);
                 } else {
                     cpu.setPc(cpu.pc + 2);
                 }
@@ -83,14 +84,14 @@ pub const Cpu = struct {
             0x00EE => { // 00EE - RET
                 std.debug.assert(cpu.sp > 0); // stack overflow
                 cpu.sp -= 1;
-                cpu.setPc(mem.readIntSliceBig(u16, memory[cpu.sp..2]));
+                cpu.setPc(mem.readIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2]));
             },
             0x1000 => { // 1nnn - JP addr
-                cpu.pc = nnn;
+                cpu.setPc(nnn);
             },
             0x2000 => { // 2nnn - CALL addr
                 std.debug.assert(cpu.sp < 16); // stack overflow
-                mem.writeIntSliceBig(u16, memory[cpu.sp..2], cpu.pc);
+                mem.writeIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2], cpu.pc);
                 cpu.sp += 1;
                 cpu.setPc(nnn);
             },
@@ -176,8 +177,7 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xB000 => { // Bnnn - JP V0, addr
-                cpu.pc = @as(u16, nnn) + @as(u16, cpu.v[0]);
-                cpu.setPc(cpu.pc + 2);
+                cpu.setPc(@as(u16, nnn) + @as(u16, cpu.v[0]));
             },
             0xC000 => { // Cxkk - RND Vx, byte
                 // #TODO get rid of the std.rand.Random dependency by requesting a random number another way.
@@ -193,10 +193,11 @@ pub const Cpu = struct {
                     const display_y = (cpu.v[y] + step) % display.height;
                     const byte_value = memory[cpu.i + step];
                     const display_x0 = cpu.v[x];
-                    comptime var bit = 0;
-                    inline while (bit < 8) : (bit += 1) {
+                    comptime var bit = 8;
+                    inline while (bit > 0) {
+                        comptime bit -= 1;
                         const display_x = (display_x0 + bit) % display.width;
-                        const value = @truncate(u1, byte_value >> bit);
+                        const value = @truncate(u1, byte_value >> 7 - bit);
                         const display_index = display_y * display.width + display_x;
                         const pixel = display.data[display_index];
                         if (pixel == 1 and value == 1) {
@@ -261,12 +262,12 @@ pub const Cpu = struct {
             },
             0xF055 => { // Fx55 - LD [I], Vx
                 // #TODO step
-                mem.copy(u8, memory[cpu.i..16], &cpu.v);
+                mem.copy(u8, memory[cpu.i .. cpu.i + 16], &cpu.v);
                 cpu.setPc(cpu.pc + 2);
             },
             0xF065 => { // Fx65 - LD Vx, [I]
                 // #TODO step
-                mem.copy(u8, &cpu.v, memory[cpu.i..16]);
+                mem.copy(u8, &cpu.v, memory[cpu.i .. cpu.i + 16]);
                 cpu.setPc(cpu.pc + 2);
             },
             else => {
