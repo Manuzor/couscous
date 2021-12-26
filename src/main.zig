@@ -1,3 +1,5 @@
+//! #NOTE All time values are in seconds if not noted otherwise.
+
 const std = @import("std");
 const log = std.log;
 
@@ -19,12 +21,18 @@ const chip8 = @import("chip8.zig");
 //     state.last_frame_print_len += (std.fmt.bufPrint(state.last_frame_print_buf[state.last_frame_print_len..], fmt, args) catch unreachable).len;
 // }
 
+const max_frame_time = 1.0 / 30.0;
+const tick_duration = 1.0 / 60.0;
+const tick_epsilon = 0.001;
+const cpu_timer_interval = 1.0 / 60.0;
+
 const W = 64;
 const H = 32;
 
 var global_state: struct {
     initialized: bool = false,
     rom_loaded: bool = false,
+    debug: bool = false,
 
     pause: bool = false,
     remaining_steps: u32 = std.math.maxInt(u32),
@@ -35,6 +43,8 @@ var global_state: struct {
     rng: std.rand.DefaultPrng = std.rand.DefaultPrng.init(0),
 
     tick_counter: u32 = 0,
+    tick_time_remaining: f64 = 0.0,
+    cpu_timer_remaining: f64 = 0.0,
     cpu: chip8.Cpu = .{},
     memory_buf: [4096]u8 = [_]u8{0} ** 4096,
     display_buf: [H * W]u1 = [_]u1{0} ** (H * W),
@@ -134,7 +144,8 @@ export fn init() void {
     const params = comptime [_]clap.Param(clap.Help){
         clap.parseParam("-h, --help    Display this help and exit") catch unreachable,
         clap.parseParam("-p, --pause   Start in pause mode") catch unreachable,
-        clap.parseParam("<POS>...      Path to a ROM to load.") catch unreachable,
+        clap.parseParam("--debug       Show debug information") catch unreachable,
+        clap.parseParam("<POS>...      Path to a ROM file to load") catch unreachable,
     };
     var diag = clap.Diagnostic{};
     var args = clap.parse(clap.Help, &params, .{ .diagnostic = &diag }) catch |err| {
@@ -156,6 +167,8 @@ export fn init() void {
     if (args.flag("--pause")) {
         setPause(true);
     }
+
+    state.debug = args.flag("--debug");
 
     stm.setup();
 
@@ -250,8 +263,8 @@ export fn frame() void {
     state.frame_counter += 1;
 
     // run at a fixed tick rate regardless of frame rate
-    var dt = stm.sec(stm.laptime(&state.laptime_store));
-    _ = dt;
+    // #NOTE clamp frame time so debug breakpoints don't screw up timing.
+    const delta_time = std.math.min(stm.sec(stm.laptime(&state.laptime_store)), max_frame_time);
 
     const canvas_width = sapp.widthf();
     const canvas_height = sapp.heightf();
@@ -260,7 +273,8 @@ export fn frame() void {
     const render_width = viewport.max_x - viewport.min_x;
     const render_height = viewport.max_y - viewport.min_y;
 
-    sdtx.canvas(render_width, render_height);
+    const debug_font_scale = 1.0 / 2.0;
+    sdtx.canvas(debug_font_scale * render_width, debug_font_scale * render_height);
     sdtx.origin(3, 3);
     sdtx.font(0);
 
@@ -268,21 +282,55 @@ export fn frame() void {
         sdtx.print("=== PAUSED ===\n", .{});
         sdtx.print("Tick #{}\n", .{state.tick_counter});
         sdtx.print("press SPACE to step {} times\n", .{state.remaining_steps});
-        sdtx.print("press 1|2|3|4 to increase step by 1|10|100|{}, hold SHIFT to decrement, hold ALT to set\n", .{H * W});
+        sdtx.print("press 1|2|3|4 to increase step by 1|10|100|{}\n", .{(H * W) / 8});
+        sdtx.print("    hold SHIFT to decrement, hold ALT to set\n", .{});
         sdtx.print("press ENTER to unpause\n", .{});
         sdtx.print("\n", .{});
-        var cpu = &state.cpu;
+        const cpu = &state.cpu;
         sdtx.print("CPU pc={x:0>4} i={x:0>4} sp={x:0>4} dt={x:0>2} st={x:0>2}\n", .{ cpu.pc, cpu.i, cpu.sp, cpu.dt, cpu.st });
+        sdtx.print("       0 1 2 3 4 5 6 7 8 9 A B C D E F\n", .{});
         sdtx.print("    v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
-        sdtx.print("    opcode={x:0>4} step={}\n", .{ cpu.opcode, cpu.step });
+        sdtx.print("    opcode={x:0>4} step={}\n", .{ cpu.loadOpcode(&state.memory_buf), cpu.step });
+    }
+    if (state.keyboard.block) {
+        sdtx.print("!!! waiting for input\n", .{});
     }
 
-    if (!state.keyboard.block) {
-        if (!state.pause and state.remaining_steps > 0) {
-            tickChip8();
+    if (!state.pause and state.remaining_steps > 0) {
+        state.tick_time_remaining += delta_time;
+
+        var cpu = &state.cpu;
+        var memory = @as([]u8, &state.memory_buf);
+        var display = chip8.Display{
+            .width = W,
+            .height = H,
+            .data = @as([]u1, &state.display_buf),
+        };
+        var keyboard = &state.keyboard;
+
+        // #TODO wrap this in the tick-loop below?
+        state.cpu_timer_remaining -= delta_time;
+        if (state.cpu_timer_remaining <= 0) {
+            state.cpu_timer_remaining += cpu_timer_interval;
+            if (cpu.dt > 0) {
+                cpu.dt -= 1;
+            }
+            if (cpu.st > 0) {
+                cpu.st -= 1;
+            }
+        }
+
+        while (state.tick_time_remaining > -tick_epsilon) {
+            state.tick_time_remaining -= tick_duration;
+            cpu.opcode = cpu.loadOpcode(memory);
+            cpu.tick(memory, display, keyboard, state.rng.random());
+
+            state.tick_counter += 1;
+
             state.remaining_steps -= 1;
             if (state.remaining_steps == 0) {
                 setPause(true);
+                break;
             }
         }
     }
@@ -405,24 +453,6 @@ fn setPause(pause: bool) void {
         state.pause = false;
         state.remaining_steps = std.math.maxInt(u32);
     }
-}
-
-fn tickChip8() void {
-    var state = &global_state;
-
-    // #CLEANUP
-    // state.last_frame_print_len = 0;
-
-    var memory = @as([]u8, &state.memory_buf);
-    var display = chip8.Display{
-        .width = W,
-        .height = H,
-        .data = @as([]u1, &state.display_buf),
-    };
-    var keyboard = &state.keyboard;
-    state.cpu.tick(memory, display, keyboard, state.rng.random());
-
-    state.tick_counter += 1;
 }
 
 pub fn main() anyerror!void {

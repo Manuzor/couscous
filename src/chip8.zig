@@ -38,9 +38,12 @@ pub const Cpu = struct {
         cpu.step = 0;
     }
 
+    pub fn loadOpcode(cpu: Cpu, memory: []u8) u16 {
+        return mem.readIntSliceBig(u16, memory[cpu.pc..]);
+    }
+
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
-        const code = mem.readIntSliceBig(u16, memory[cpu.pc..]);
-        cpu.opcode = code;
+        const code = cpu.opcode;
 
         const h = @truncate(u4, code >> 12);
         const x = @truncate(u4, code >> 8);
@@ -74,10 +77,12 @@ pub const Cpu = struct {
 
         switch (code & mask) {
             0x00E0 => { // 00E0 - CLS
-                if (step < display.height * display.width / 8) {
+                const end = display.height * display.width / 8;
+                if (step < end) {
                     const index = step * 8;
                     mem.set(u1, display.data[index .. index + 8], 0);
-                } else {
+                }
+                if (step + 1 == end) {
                     cpu.setPc(cpu.pc + 2);
                 }
             },
@@ -205,9 +210,10 @@ pub const Cpu = struct {
                         }
                         display.data[display_index] = pixel ^ value;
                     }
-                } else {
-                    cpu.v[0xF] = if (carry) 1 else 0;
-                    cpu.setPc(cpu.pc + 2);
+                    if (step + 1 == n) {
+                        cpu.v[0xF] = if (carry) 1 else 0;
+                        cpu.setPc(cpu.pc + 2);
+                    }
                 }
             },
             0xE09E => { // Ex9E - SKP Vx
@@ -231,7 +237,6 @@ pub const Cpu = struct {
             0xF00A => { // Fx0A - LD Vx, K
                 if (step == 0) {
                     keyboard.block = true;
-                    cpu.step = 1;
                 } else if (!keyboard.block) {
                     cpu.v[x] = keyboard.last;
                     cpu.setPc(cpu.pc + 2);
