@@ -254,7 +254,7 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF029 => { // Fx29 - LD F, Vx
-                cpu.i = charmap_base_address + cpu.v[x];
+                cpu.i = charmap_base_address + 5 * cpu.v[x];
                 cpu.setPc(cpu.pc + 2);
             },
             0xF033 => { // Fx33 - LD B, Vx
