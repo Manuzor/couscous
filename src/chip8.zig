@@ -3,10 +3,9 @@ const mem = std.mem;
 const log = std.log.scoped(.chip8);
 const root = @import("root");
 
-const stack_base_address: u16 = 0x0000;
-const charmap_base_address: u16 = 0x0010;
-const display_base_address: u16 = 0x0100;
-const user_base_address: u16 = 0x0100;
+pub const stack_base_address: u16 = 0x0000;
+pub const charmap_base_address: u16 = 0x0010;
+pub const user_base_address: u16 = 0x0200;
 
 pub const Display = struct {
     width: u16 = 64,
@@ -25,13 +24,13 @@ pub const Cpu = struct {
     dt: u8 = 0,
     st: u8 = 0,
 
-    pc: u16 = 0x200,
-    sp: u16 = 0,
+    pc: u16 = undefined,
+    sp: u16 = undefined,
 
     i: u16 = 0,
 
-    opcode: u16 = 0,
-    step: u16 = 0,
+    opcode: u16 = undefined,
+    step: u16 = undefined,
 
     pub fn setPc(cpu: *Cpu, pc: u16) void {
         cpu.pc = pc;

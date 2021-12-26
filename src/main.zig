@@ -6,7 +6,6 @@ const log = std.log;
 const sg = @import("sokol").gfx;
 const sapp = @import("sokol").app;
 const sgapp = @import("sokol").app_gfx_glue;
-const stm = @import("sokol").time;
 const saudio = @import("sokol").audio;
 const sdtx = @import("sokol").debugtext;
 
@@ -14,15 +13,15 @@ const clap = @import("clap");
 
 const shader = @import("shader.zig");
 const chip8 = @import("chip8.zig");
-
-// #CLEANUP
-// pub fn framePrint(comptime fmt: []const u8, args: anytype) void {
-//     var state = &global_state;
-//     state.last_frame_print_len += (std.fmt.bufPrint(state.last_frame_print_buf[state.last_frame_print_len..], fmt, args) catch unreachable).len;
-// }
+const chip8_charmap = @import("chip8_charmap.zig");
 
 const max_frame_time = 1.0 / 30.0;
-const tick_duration = 1.0 / 60.0;
+// #TODO What frequency do we want to run the interpreter at?
+// #NOTE On wikipedia I read some numbers along the lines of 3.2 MHz and 6.4 MHz. I also read that most instructions
+// took about 16 clock cycles. So we roughly take those numbers as our tick frequency.
+const clock_speed = 6_400_000;
+const avg_cycles_per_instruction = 16;
+const tick_duration = 1.0 / @as(comptime_float, clock_speed / avg_cycles_per_instruction);
 const tick_epsilon = 0.001;
 const cpu_timer_interval = 1.0 / 60.0;
 
@@ -35,14 +34,15 @@ var global_state: struct {
     debug: bool = false,
 
     pause: bool = false,
-    remaining_steps: u32 = std.math.maxInt(u32),
+    remaining_steps: u64 = std.math.maxInt(u64),
     frame_counter: u64 = 0,
-    laptime_store: u64 = 0,
+    // laptime_store: u64 = 0,
+    frame_timer: std.time.Timer = undefined,
 
     // #TODO random seed?
     rng: std.rand.DefaultPrng = std.rand.DefaultPrng.init(0),
 
-    tick_counter: u32 = 0,
+    tick_counter: u64 = 0,
     tick_time_remaining: f64 = 0.0,
     cpu_timer_remaining: f64 = 0.0,
     cpu: chip8.Cpu = .{},
@@ -51,9 +51,7 @@ var global_state: struct {
     keyboard: chip8.Keyboard = .{},
     keyboard_layout: u8 = 0,
 
-    // #CLEANUP
-    // last_frame_print_buf: [8192]u8 = undefined,
-    // last_frame_print_len: usize = 0,
+    last_pc: u16 = 0,
 
     gfx: struct {
         bindings: sg.Bindings = .{},
@@ -170,7 +168,10 @@ export fn init() void {
 
     state.debug = args.flag("--debug");
 
-    stm.setup();
+    state.frame_timer = std.time.Timer.start() catch |err| {
+        log.err("{} - Unable to start timer", .{err});
+        return;
+    };
 
     sg.setup(.{
         .context = sgapp.context(),
@@ -222,20 +223,22 @@ export fn init() void {
     sdtx_desc.fonts[0] = sdtx.fontOric();
     sdtx.setup(sdtx_desc);
 
+    initializeCpu(&state.cpu);
+
     // initialize display with test pattern.
-    var tex_index: usize = 0;
-    while (tex_index < (H * W)) : (tex_index += 1) {
-        state.display_buf[tex_index] = @truncate(u1, (tex_index & 1) ^ ((tex_index / W) & 1));
-    }
+    loadDisplayTestPattern(&state.display_buf, W);
+
+    loadCharmap(state.memory_buf[chip8.charmap_base_address..]);
 
     for (args.positionals()) |rom_path| {
         if (state.rom_loaded) {
             log.warn("ignore loading of additional ROMs.", .{});
             break;
         }
-        loadRomFromFile(state.memory_buf[0x200..], rom_path) catch {
+        loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
             return;
         };
+        state.cpu.opcode = state.cpu.loadOpcode(&state.memory_buf);
     }
 
     state.initialized = true;
@@ -260,11 +263,20 @@ export fn frame() void {
         return;
     }
 
+    var cpu = &state.cpu;
+    var memory = @as([]u8, &state.memory_buf);
+    var display = chip8.Display{
+        .width = W,
+        .height = H,
+        .data = @as([]u1, &state.display_buf),
+    };
+    var keyboard = &state.keyboard;
+
     state.frame_counter += 1;
 
     // run at a fixed tick rate regardless of frame rate
     // #NOTE clamp frame time so debug breakpoints don't screw up timing.
-    const delta_time = std.math.min(stm.sec(stm.laptime(&state.laptime_store)), max_frame_time);
+    const delta_time = std.math.min(@intToFloat(f64, state.frame_timer.lap()) * std.time.ns_per_s, max_frame_time);
 
     const canvas_width = sapp.widthf();
     const canvas_height = sapp.heightf();
@@ -273,40 +285,36 @@ export fn frame() void {
     const render_width = viewport.max_x - viewport.min_x;
     const render_height = viewport.max_y - viewport.min_y;
 
-    const debug_font_scale = 1.0 / 2.0;
-    sdtx.canvas(debug_font_scale * render_width, debug_font_scale * render_height);
-    sdtx.origin(3, 3);
-    sdtx.font(0);
+    if (state.debug) {
+        sdtx.setContext(sdtx.defaultContext());
+        const debug_font_scale = 1.0 / 2.0;
+        sdtx.canvas(debug_font_scale * render_width, debug_font_scale * render_height);
+        sdtx.origin(3, 3);
+        sdtx.font(0);
+    } else {
+        sdtx.setContext(.{});
+    }
 
+    // #TODO make use of state.debug
+    sdtx.print("tick #{}\n", .{state.tick_counter});
     if (state.pause) {
         sdtx.print("=== PAUSED ===\n", .{});
-        sdtx.print("Tick #{}\n", .{state.tick_counter});
         sdtx.print("press SPACE to step {} times\n", .{state.remaining_steps});
         sdtx.print("press 1|2|3|4 to increase step by 1|10|100|{}\n", .{(H * W) / 8});
         sdtx.print("    hold SHIFT to decrement, hold ALT to set\n", .{});
         sdtx.print("press ENTER to unpause\n", .{});
         sdtx.print("\n", .{});
-        const cpu = &state.cpu;
         sdtx.print("CPU pc={x:0>4} i={x:0>4} sp={x:0>4} dt={x:0>2} st={x:0>2}\n", .{ cpu.pc, cpu.i, cpu.sp, cpu.dt, cpu.st });
         sdtx.print("       0 1 2 3 4 5 6 7 8 9 A B C D E F\n", .{});
         sdtx.print("    v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
-        sdtx.print("    opcode={x:0>4} step={}\n", .{ cpu.loadOpcode(&state.memory_buf), cpu.step });
+        sdtx.print("    opcode={x:0>4} step={}\n", .{ cpu.opcode, cpu.step });
     }
-    if (state.keyboard.block) {
+    if (keyboard.block) {
         sdtx.print("!!! waiting for input\n", .{});
     }
 
     if (!state.pause and state.remaining_steps > 0) {
         state.tick_time_remaining += delta_time;
-
-        var cpu = &state.cpu;
-        var memory = @as([]u8, &state.memory_buf);
-        var display = chip8.Display{
-            .width = W,
-            .height = H,
-            .data = @as([]u1, &state.display_buf),
-        };
-        var keyboard = &state.keyboard;
 
         // #TODO wrap this in the tick-loop below?
         state.cpu_timer_remaining -= delta_time;
@@ -322,10 +330,13 @@ export fn frame() void {
 
         while (state.tick_time_remaining > -tick_epsilon) {
             state.tick_time_remaining -= tick_duration;
-            cpu.opcode = cpu.loadOpcode(memory);
+            state.last_pc = cpu.pc;
             cpu.tick(memory, display, keyboard, state.rng.random());
+            if (cpu.step == 0) {
+                cpu.opcode = cpu.loadOpcode(memory);
+            }
 
-            state.tick_counter += 1;
+            state.tick_counter +%= 1;
 
             state.remaining_steps -= 1;
             if (state.remaining_steps == 0) {
@@ -335,8 +346,12 @@ export fn frame() void {
         }
     }
 
+    if (cpu.pc == state.last_pc and cpu.step == 0) {
+        sdtx.print("loop\n", .{});
+    }
+
     var tex_data = sg.ImageData{};
-    tex_data.subimage[0][0] = sg.asRange(state.display_buf);
+    tex_data.subimage[0][0] = sg.asRange(display.data);
     sg.updateImage(state.gfx.bindings.fs_images[shader.SLOT_tex], tex_data);
 
     sg.beginDefaultPassf(state.gfx.pass_action, canvas_width, canvas_height);
@@ -361,61 +376,79 @@ export fn input(ev: ?*const sapp.Event) void {
         const key_repeat = event.key_repeat;
         const key_code = event.key_code;
 
-        if (!key_repeat) {
-            const layout = &keyboard_layouts[state.keyboard_layout];
-            var key_index: u8 = 0x0;
-            while (key_index <= 0xF) : (key_index += 1) {
-                if (key_code == layout[key_index]) {
-                    state.keyboard.state[key_index] = key_pressed;
-                    state.keyboard.last = key_index;
-                    state.keyboard.block = false;
-                    break;
+        switch (key_code) { // Handle host input first, regardless of state.
+            .ESCAPE => {
+                if (key_pressed and !key_repeat) {
+                    log.debug("exiting - ESCAPE was pressed", .{});
+                    sapp.quit();
                 }
-            }
-        }
-
-        if (key_pressed) {
-            var step_input: i64 = 0;
-            switch (key_code) {
-                ._1 => {
-                    step_input = 1;
-                },
-                ._2 => {
-                    step_input = 10;
-                },
-                ._3 => {
-                    step_input = 100;
-                },
-                ._4 => {
-                    step_input = H * W / 8;
-                },
-                .ESCAPE => {
-                    if (!key_repeat) {
-                        log.debug("exiting - ESCAPE was pressed", .{});
-                        sapp.quit();
-                    }
-                },
-                .ENTER => {
-                    if (!key_repeat) {
-                        setPause(false);
-                    }
-                },
-                .SPACE => {
+            },
+            .ENTER => {
+                if (key_pressed and !key_repeat) {
+                    setPause(false);
+                }
+            },
+            .SPACE => {
+                if (key_pressed) {
                     if (state.pause) {
                         log.debug("single step", .{});
                         state.pause = false;
                     } else if (!key_repeat and !state.pause) {
                         setPause(true);
                     }
-                },
-                else => {},
+                }
+            },
+            else => {},
+        }
+
+        // Handle pause input.
+        if (state.pause) {
+            var step_input: u64 = 0;
+            if (key_pressed) {
+                switch (key_code) {
+                    ._1 => {
+                        step_input = 1;
+                    },
+                    ._2 => {
+                        step_input = 10;
+                    },
+                    ._3 => {
+                        step_input = 100;
+                    },
+                    ._4 => {
+                        step_input = H * W / 8;
+                    },
+                    else => {},
+                }
             }
-            if (step_input != 0 and state.pause) {
+            if (step_input != 0) {
                 if (alt) {
-                    state.remaining_steps = @intCast(u32, step_input);
+                    state.remaining_steps = step_input;
                 } else {
-                    const sign: i64 = if (shift) -1 else 1;
-                    state.remaining_steps = @intCast(u32, std.math.max(1, @as(i64, state.remaining_steps) + sign * step_input));
+                    if (shift) {
+                        state.remaining_steps -|= step_input;
+                        if (state.remaining_steps == 0) {
+                            state.remaining_steps = 1;
+                        }
+                    } else {
+                        state.remaining_steps += step_input;
+                    }
+                }
+            }
+        }
+
+        // Handle regular CHIP-8 input.
+        if (!state.pause) {
+            if (!key_repeat) {
+                const layout = &keyboard_layouts[state.keyboard_layout];
+                var key_index: u8 = 0x0;
+                while (key_index <= 0xF) : (key_index += 1) {
+                    if (key_code == layout[key_index]) {
+                        state.keyboard.state[key_index] = key_pressed;
+                        state.keyboard.last = key_index;
+                        state.keyboard.block = false;
+                        break;
+                    }
                 }
             }
         }
@@ -423,6 +456,15 @@ export fn input(ev: ?*const sapp.Event) void {
 }
 
 // }
+
+fn initializeCpu(cpu: *chip8.Cpu) void {
+    cpu.setPc(chip8.user_base_address);
+    cpu.sp = chip8.stack_base_address;
+}
+
+fn loadCharmap(dest: []u8) void {
+    std.mem.copy(u8, dest, &chip8_charmap.charmap);
+}
 
 fn loadRomFromFile(dest: []u8, path: []const u8) !void {
     const file = std.fs.cwd().openFile(path, .{}) catch |err| {
@@ -435,6 +477,13 @@ fn loadRomFromFile(dest: []u8, path: []const u8) !void {
         return error.RomLoad;
     };
     log.debug("loaded ROM with {} bytes: '{s}'", .{ bytes_read, path });
+}
+
+fn loadDisplayTestPattern(display_data: []u1, stride: usize) void {
+    var index: usize = 0;
+    while (index < (H * W)) : (index += 1) {
+        display_data[index] = @truncate(u1, (index & 1) ^ ((index / stride) & 1));
+    }
 }
 
 fn setPause(pause: bool) void {
@@ -451,7 +500,7 @@ fn setPause(pause: bool) void {
     } else {
         log.debug("unpause", .{});
         state.pause = false;
-        state.remaining_steps = std.math.maxInt(u32);
+        state.remaining_steps = std.math.maxInt(u64);
     }
 }
 
@@ -463,7 +512,7 @@ pub fn main() anyerror!void {
         .cleanup_cb = cleanup,
         .width = 20 * W,
         .height = 20 * H,
-        .window_title = "couscous CHIP-8 in zig powered by sokol",
+        .window_title = "couscous // CHIP-8 interpreter // written in zig // powered by sokol",
     });
 }
 
