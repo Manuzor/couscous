@@ -142,6 +142,7 @@ export fn init() void {
     const params = comptime [_]clap.Param(clap.Help){
         clap.parseParam("-h, --help    Display this help and exit") catch unreachable,
         clap.parseParam("-p, --pause   Start in pause mode") catch unreachable,
+        clap.parseParam("--nocls       Do not start with a clear display.") catch unreachable,
         clap.parseParam("--debug       Show debug information") catch unreachable,
         clap.parseParam("<POS>...      Path to a ROM file to load") catch unreachable,
     };
@@ -225,8 +226,13 @@ export fn init() void {
 
     initializeCpu(&state.cpu);
 
-    // initialize display with test pattern.
-    loadDisplayTestPattern(&state.display_buf, W);
+    if (args.flag("--nocls")) {
+        // Initialize display with test pattern.
+        loadDisplayTestPattern(&state.display_buf, W);
+    } else {
+        // Clear screen.
+        std.mem.set(u1, &state.display_buf, 0);
+    }
 
     loadCharmap(state.memory_buf[chip8.charmap_base_address..]);
 
