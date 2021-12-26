@@ -5,7 +5,7 @@ out vec2 uv;
 
 void main() {
     gl_Position = vec4(position.x, -position.y, 0.0, 1.0);
-    uv = position;
+    uv = 0.5*(position + vec2(1.0));
 }
 #pragma sokol @end
 
