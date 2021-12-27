@@ -86,8 +86,11 @@ pub const Cpu = struct {
                 }
             },
             0x00EE => { // 00EE - RET
-                std.debug.assert(cpu.sp > 0); // stack overflow
-                cpu.sp -= 1;
+                if (cpu.sp > 0) {
+                    cpu.sp -= 1;
+                } else {
+                    log.warn("00EE - unable to return: sp is already 0.", .{});
+                }
                 cpu.setPc(mem.readIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2]));
             },
             0x1000 => { // 1nnn - JP addr
@@ -95,8 +98,12 @@ pub const Cpu = struct {
             },
             0x2000 => { // 2nnn - CALL addr
                 std.debug.assert(cpu.sp < 16); // stack overflow
-                mem.writeIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2], cpu.pc);
-                cpu.sp += 1;
+                if (cpu.sp < 16) {
+                    mem.writeIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2], cpu.pc);
+                    cpu.sp += 1;
+                } else {
+                    log.warn("2nnn - stack overflow.", .{});
+                }
                 cpu.setPc(nnn);
             },
             0x3000 => { // 3xkk - SE Vx, byte
@@ -189,45 +196,60 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xD000 => { // Dxyn - DRW Vx, Vy, nibble
-                var carry = false;
-                if (step == 0) {
-                    cpu.v[0xF] = 0;
-                }
-                if (step < n) {
-                    const display_y = (cpu.v[y] + step) % display.height;
-                    const byte_value = memory[cpu.i + step];
-                    const display_x0 = cpu.v[x];
-                    comptime var bit = 8;
-                    inline while (bit > 0) {
-                        comptime bit -= 1;
-                        const display_x = (display_x0 + bit) % display.width;
-                        const value = @truncate(u1, byte_value >> 7 - bit);
-                        const display_index = display_y * display.width + display_x;
-                        const pixel = display.data[display_index];
-                        if (pixel == 1 and value == 1) {
-                            cpu.v[0xF] = 1;
+                if (cpu.i + n < memory.len) {
+                    var carry = false;
+                    if (step == 0) {
+                        cpu.v[0xF] = 0;
+                    }
+                    if (step < n) {
+                        const display_y = (cpu.v[y] + step) % display.height;
+                        const byte_value = memory[cpu.i + step];
+                        const display_x0 = cpu.v[x];
+                        comptime var bit = 8;
+                        inline while (bit > 0) {
+                            comptime bit -= 1;
+                            const display_x = (display_x0 + bit) % display.width;
+                            const value = @truncate(u1, byte_value >> 7 - bit);
+                            const display_index = display_y * display.width + display_x;
+                            const pixel = display.data[display_index];
+                            if (pixel == 1 and value == 1) {
+                                cpu.v[0xF] = 1;
+                            }
+                            display.data[display_index] = pixel ^ value;
                         }
-                        display.data[display_index] = pixel ^ value;
+                        if (step + 1 == n) {
+                            cpu.v[0xF] = if (carry) 1 else 0;
+                            cpu.setPc(cpu.pc + 2);
+                        }
                     }
-                    if (step + 1 == n) {
-                        cpu.v[0xF] = if (carry) 1 else 0;
-                        cpu.setPc(cpu.pc + 2);
-                    }
+                } else {
+                    log.warn("Dxyn - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + n });
+                    cpu.setPc(cpu.pc + 2);
                 }
             },
             0xE09E => { // Ex9E - SKP Vx
-                if (keyboard.state[cpu.v[x]]) {
-                    cpu.setPc(cpu.pc + 4);
+                var next_pc = cpu.pc + 2;
+                const index = cpu.v[x];
+                if (index < keyboard.state.len) {
+                    if (keyboard.state[index]) {
+                        next_pc += 2;
+                    }
                 } else {
-                    cpu.setPc(cpu.pc + 2);
+                    log.warn("Ex9E - index '0x{x}' is out of range.", .{index});
                 }
+                cpu.setPc(next_pc);
             },
             0xE0A1 => { // ExA1 - SKNP Vx
-                if (!keyboard.state[cpu.v[x]]) {
-                    cpu.setPc(cpu.pc + 4);
+                var next_pc = cpu.pc + 2;
+                const index = cpu.v[x];
+                if (index < keyboard.state.len) {
+                    if (!keyboard.state[index]) {
+                        next_pc += 2;
+                    }
                 } else {
-                    cpu.setPc(cpu.pc + 2);
+                    log.warn("ExA1 - index '0x{x}' is out of range.", .{index});
                 }
+                cpu.setPc(next_pc);
             },
             0xF007 => { // Fx07 - LD Vx, DT
                 cpu.v[x] = cpu.dt;
@@ -259,19 +281,31 @@ pub const Cpu = struct {
             },
             0xF033 => { // Fx33 - LD B, Vx
                 // #TODO step
-                memory[cpu.i + 0] = cpu.v[x] / 100;
-                memory[cpu.i + 1] = (cpu.v[x] / 10) % 10;
-                memory[cpu.i + 2] = cpu.v[x] % 10;
+                if (cpu.i + 2 < memory.len) {
+                    memory[cpu.i + 0] = cpu.v[x] / 100;
+                    memory[cpu.i + 1] = (cpu.v[x] / 10) % 10;
+                    memory[cpu.i + 2] = cpu.v[x] % 10;
+                } else {
+                    log.warn("Fx33 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + 2 });
+                }
                 cpu.setPc(cpu.pc + 2);
             },
             0xF055 => { // Fx55 - LD [I], Vx
                 // #TODO step
-                mem.copy(u8, memory[cpu.i .. cpu.i + 16], &cpu.v);
+                if (cpu.i + 16 < memory.len) {
+                    mem.copy(u8, memory[cpu.i .. cpu.i + 16], &cpu.v);
+                } else {
+                    log.warn("Fx55 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + 16 });
+                }
                 cpu.setPc(cpu.pc + 2);
             },
             0xF065 => { // Fx65 - LD Vx, [I]
                 // #TODO step
-                mem.copy(u8, &cpu.v, memory[cpu.i .. cpu.i + 16]);
+                if (cpu.i + 16 < memory.len) {
+                    mem.copy(u8, &cpu.v, memory[cpu.i .. cpu.i + 16]);
+                } else {
+                    log.warn("Fx55 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + 16 });
+                }
                 cpu.setPc(cpu.pc + 2);
             },
             else => {

@@ -17,11 +17,9 @@ const chip8_charmap = @import("chip8_charmap.zig");
 
 const max_frame_time = 1.0 / 30.0;
 // #TODO What frequency do we want to run the interpreter at?
-// #NOTE On wikipedia I read some numbers along the lines of 3.2 MHz and 6.4 MHz. I also read that most instructions
-// took about 16 clock cycles. So we roughly take those numbers as our tick frequency.
-const clock_speed = 6_400_000;
-const avg_cycles_per_instruction = 16;
-const tick_duration = 1.0 / @as(comptime_float, clock_speed / avg_cycles_per_instruction);
+// const tick_duration = 1.0 / 500.0;
+// const tick_duration = 1.0 / 60.0;
+const tick_duration = 1.0 / 120.0;
 const tick_epsilon = 0.001;
 const cpu_timer_interval = 1.0 / 60.0;
 
@@ -29,9 +27,12 @@ const W = 64;
 const H = 32;
 
 var global_state: struct {
+    allocator: std.mem.Allocator = undefined,
+
     initialized: bool = false,
-    rom_loaded: bool = false,
     debug: bool = false,
+    display_test_pattern: bool = false,
+    rom_path: ?[]const u8 = null,
 
     pause: bool = false,
     remaining_steps: u64 = std.math.maxInt(u64),
@@ -58,9 +59,47 @@ var global_state: struct {
         pipeline: sg.Pipeline = .{},
         pass_action: sg.PassAction = .{},
     } = .{},
+
+    fn setPause(state: *@This(), pause: bool) void {
+        if (state.pause == pause) {
+            return;
+        }
+
+        if (pause) {
+            log.debug("pause", .{});
+            state.pause = true;
+            state.remaining_steps = 1;
+        } else {
+            log.debug("unpause", .{});
+            state.pause = false;
+            state.remaining_steps = std.math.maxInt(u64);
+        }
+    }
 } = .{};
 
 const keyboard_layouts = [_][16]sapp.Keycode{
+    [_]sapp.Keycode{
+        // 1 2 3 4  ->  1 2 3 C
+        // Q W E R  ->  4 5 6 D
+        // A S D F  ->  7 8 9 E
+        // Z X C V  ->  A 0 B F
+        .X, // 0x0
+        ._1, // 0x1
+        ._2, // 0x2
+        ._3, // 0x3
+        .Q, // 0x4
+        .W, // 0x5
+        .E, // 0x6
+        .A, // 0x7
+        .S, // 0x8
+        .D, // 0x9
+        .Z, // 0xA
+        .C, // 0xB
+        ._4, // 0xC
+        .R, // 0xD
+        .F, // 0xE
+        .V, // 0xF
+    },
     [_]sapp.Keycode{
         ._0, // 0x0
         ._1, // 0x1
@@ -78,24 +117,6 @@ const keyboard_layouts = [_][16]sapp.Keycode{
         .D, // 0xD
         .E, // 0xE
         .F, // 0xF
-    },
-    [_]sapp.Keycode{
-        .X, // 0x0
-        ._1, // 0x1
-        ._2, // 0x2
-        ._3, // 0x3
-        .Q, // 0x4
-        .W, // 0x5
-        .E, // 0x6
-        .A, // 0x7
-        .S, // 0x8
-        .D, // 0x9
-        .Z, // 0xA
-        .C, // 0xB
-        ._4, // 0xC
-        .R, // 0xD
-        .F, // 0xE
-        .V, // 0xF
     },
 };
 
@@ -138,36 +159,6 @@ pub fn aspectRatioFit(window_width: f32, window_height: f32, render_width: f32, 
 export fn init() void {
     var state = &global_state;
     _ = state;
-
-    const params = comptime [_]clap.Param(clap.Help){
-        clap.parseParam("-h, --help    Display this help and exit") catch unreachable,
-        clap.parseParam("-p, --pause   Start in pause mode") catch unreachable,
-        clap.parseParam("--nocls       Do not start with a clear display.") catch unreachable,
-        clap.parseParam("--debug       Show debug information") catch unreachable,
-        clap.parseParam("<POS>...      Path to a ROM file to load") catch unreachable,
-    };
-    var diag = clap.Diagnostic{};
-    var args = clap.parse(clap.Help, &params, .{ .diagnostic = &diag }) catch |err| {
-        diag.report(std.io.getStdErr().writer(), err) catch {};
-        log.err("error parsing command line.", .{});
-        return;
-    };
-    defer args.deinit();
-
-    if (args.flag("--help")) {
-        var writer = std.io.getStdErr().writer();
-        writer.print("usage: couscous ", .{}) catch {};
-        clap.usage(writer, &params) catch {};
-        writer.print("\noptions:\n", .{}) catch {};
-        clap.help(writer, &params) catch {};
-        return;
-    }
-
-    if (args.flag("--pause")) {
-        setPause(true);
-    }
-
-    state.debug = args.flag("--debug");
 
     state.frame_timer = std.time.Timer.start() catch |err| {
         log.err("{} - Unable to start timer", .{err});
@@ -226,7 +217,7 @@ export fn init() void {
 
     initializeCpu(&state.cpu);
 
-    if (args.flag("--nocls")) {
+    if (state.display_test_pattern) {
         // Initialize display with test pattern.
         loadDisplayTestPattern(&state.display_buf, W);
     } else {
@@ -236,11 +227,7 @@ export fn init() void {
 
     loadCharmap(state.memory_buf[chip8.charmap_base_address..]);
 
-    for (args.positionals()) |rom_path| {
-        if (state.rom_loaded) {
-            log.warn("ignore loading of additional ROMs.", .{});
-            break;
-        }
+    if (state.rom_path) |rom_path| {
         loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
             return;
         };
@@ -346,7 +333,7 @@ export fn frame() void {
 
             state.remaining_steps -= 1;
             if (state.remaining_steps == 0) {
-                setPause(true);
+                state.setPause(true);
                 break;
             }
         }
@@ -391,7 +378,7 @@ export fn input(ev: ?*const sapp.Event) void {
             },
             .ENTER => {
                 if (key_pressed and !key_repeat) {
-                    setPause(false);
+                    state.setPause(false);
                 }
             },
             .SPACE => {
@@ -400,7 +387,7 @@ export fn input(ev: ?*const sapp.Event) void {
                         log.debug("single step", .{});
                         state.pause = false;
                     } else if (!key_repeat and !state.pause) {
-                        setPause(true);
+                        state.setPause(true);
                     }
                 }
             },
@@ -492,25 +479,76 @@ fn loadDisplayTestPattern(display_data: []u1, stride: usize) void {
     }
 }
 
-fn setPause(pause: bool) void {
-    var state = &global_state;
-
-    if (state.pause == pause) {
-        return;
-    }
-
-    if (pause) {
-        log.debug("pause", .{});
-        state.pause = true;
-        state.remaining_steps = 1;
-    } else {
-        log.debug("unpause", .{});
-        state.pause = false;
-        state.remaining_steps = std.math.maxInt(u64);
-    }
-}
-
 pub fn main() anyerror!void {
+    var state = &global_state;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (gpa.deinit()) unreachable;
+    var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    state.allocator = arena.allocator();
+    defer arena.deinit();
+
+    {
+        const params = comptime [_]clap.Param(clap.Help){
+            clap.parseParam("-h, --help    Display this help and exit") catch unreachable,
+            clap.parseParam("-p, --pause   Start in pause mode") catch unreachable,
+            clap.parseParam("--nocls       Do not start with a clear display.") catch unreachable,
+            clap.parseParam("--debug       Show debug information") catch unreachable,
+            clap.parseParam("<POS>...      Path to a ROM file to load") catch unreachable,
+        };
+        var diag = clap.Diagnostic{};
+        var args = clap.parse(clap.Help, &params, .{ .diagnostic = &diag }) catch |err| {
+            diag.report(std.io.getStdErr().writer(), err) catch {};
+            log.err("error parsing command line.", .{});
+            return;
+        };
+        defer args.deinit();
+
+        if (args.flag("--help")) {
+            var writer = std.io.getStdErr().writer();
+            writer.print("usage: couscous ", .{}) catch {};
+            clap.usage(writer, &params) catch {};
+            writer.print("\noptions:\n", .{}) catch {};
+            clap.help(writer, &params) catch {};
+            return;
+        }
+
+        if (args.flag("--pause")) {
+            state.setPause(true);
+        }
+
+        state.debug = args.flag("--debug");
+        if (args.flag("--nocls")) {
+            state.display_test_pattern = true;
+        }
+
+        if (std.process.getEnvMap(state.allocator) catch null) |*env| {
+            defer env.deinit();
+            if (env.get("COUSCOUS_PAUSE")) |val| {
+                if (std.mem.eql(u8, val, "1")) {
+                    state.setPause(true);
+                }
+            }
+            if (env.get("COUSCOUS_DEBUG")) |val| {
+                if (std.mem.eql(u8, val, "1")) {
+                    state.debug = true;
+                }
+            }
+            if (env.get("COUSCOUS_NOCLS")) |val| {
+                if (std.mem.eql(u8, val, "1")) {
+                    state.display_test_pattern = true;
+                }
+            }
+        }
+
+        for (args.positionals()) |rom_path| {
+            if (state.rom_path != null) {
+                log.warn("ignore loading of additional ROMs.", .{});
+                break;
+            }
+            state.rom_path = try state.allocator.dupe(u8, rom_path);
+        }
+    }
+
     sapp.run(.{
         .init_cb = init,
         .frame_cb = frame,
