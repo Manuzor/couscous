@@ -7,6 +7,25 @@ pub const stack_base_address: u16 = 0x0000;
 pub const charmap_base_address: u16 = 0x0010;
 pub const user_base_address: u16 = 0x0200;
 
+pub const opcode_mask_table = [16]u16{
+    0xFFFF, // h: 0
+    0xF000, // h: 1
+    0xF000, // h: 2
+    0xF000, // h: 3
+    0xF000, // h: 4
+    0xF00F, // h: 5
+    0xF000, // h: 6
+    0xF000, // h: 7
+    0xF00F, // h: 8
+    0xF00F, // h: 9
+    0xF000, // h: A
+    0xF000, // h: B
+    0xF000, // h: C
+    0xF000, // h: D
+    0xF0FF, // h: E
+    0xF0FF, // h: F
+};
+
 pub const Display = struct {
     width: u16 = 64,
     height: u16 = 32,
@@ -37,53 +56,26 @@ pub const Cpu = struct {
         cpu.step = 0;
     }
 
-    pub fn loadOpcode(cpu: Cpu, memory: []u8) u16 {
-        return mem.readIntSliceBig(u16, memory[cpu.pc..]);
-    }
-
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
-        const code = cpu.opcode;
+        const opcode = cpu.opcode;
 
-        const h = @truncate(u4, code >> 12);
-        const x = @truncate(u4, code >> 8);
-        const y = @truncate(u4, code >> 4);
-        const n = @truncate(u4, code);
-        const kk = @truncate(u8, code);
-        const nnn = @truncate(u12, code);
+        const h = @truncate(u4, opcode >> 12);
+        const x = @truncate(u4, opcode >> 8);
+        const y = @truncate(u4, opcode >> 4);
+        const n = @truncate(u4, opcode);
+        const kk = @truncate(u8, opcode);
+        const nnn = @truncate(u12, opcode);
 
-        const mask_table = [16]u16{
-            0xFFFF, // h: 0
-            0xF000, // h: 1
-            0xF000, // h: 2
-            0xF000, // h: 3
-            0xF000, // h: 4
-            0xF00F, // h: 5
-            0xF000, // h: 6
-            0xF000, // h: 7
-            0xF00F, // h: 8
-            0xF00F, // h: 9
-            0xF000, // h: A
-            0xF000, // h: B
-            0xF000, // h: C
-            0xF000, // h: D
-            0xF0FF, // h: E
-            0xF0FF, // h: F
-        };
-        const mask = mask_table[h];
+        const mask = opcode_mask_table[h];
 
         const step = cpu.step;
         cpu.step +%= 1;
 
-        switch (code & mask) {
+        switch (opcode & mask) {
             0x00E0 => { // 00E0 - CLS
-                const end = display.height * display.width / 8;
-                if (step < end) {
-                    const index = step * 8;
-                    mem.set(u1, display.data[index .. index + 8], 0);
-                }
-                if (step + 1 == end) {
-                    cpu.setPc(cpu.pc + 2);
-                }
+                // #NOTE Could use `step` here but what's the point seeing the screen get cleared?
+                mem.set(u1, display.data, 0);
+                cpu.setPc(cpu.pc + 2);
             },
             0x00EE => { // 00EE - RET
                 if (cpu.sp > 0) {
@@ -91,7 +83,8 @@ pub const Cpu = struct {
                 } else {
                     log.warn("00EE - unable to return: sp is already 0.", .{});
                 }
-                cpu.setPc(mem.readIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2]));
+                const restored_pc = mem.readIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2]);
+                cpu.setPc(restored_pc + 2);
             },
             0x1000 => { // 1nnn - JP addr
                 cpu.setPc(nnn);
@@ -309,7 +302,7 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             else => {
-                log.err("unknown opcode '0x{x}' (mask is '0x{x}')", .{ code, mask });
+                log.err("unknown opcode '0x{x}' (mask is '0x{x}')", .{ opcode, mask });
                 cpu.setPc(cpu.pc + 2);
             },
         }

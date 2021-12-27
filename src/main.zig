@@ -13,6 +13,7 @@ const clap = @import("clap");
 
 const shader = @import("shader.zig");
 const chip8 = @import("chip8.zig");
+const chip8_asm = @import("chip8_asm.zig");
 const chip8_charmap = @import("chip8_charmap.zig");
 
 const max_frame_time = 1.0 / 30.0;
@@ -22,6 +23,7 @@ const max_frame_time = 1.0 / 30.0;
 const tick_duration = 1.0 / 120.0;
 const tick_epsilon = 0.001;
 const cpu_timer_interval = 1.0 / 60.0;
+const history_len = 16;
 
 const W = 64;
 const H = 32;
@@ -52,7 +54,9 @@ var global_state: struct {
     keyboard: chip8.Keyboard = .{},
     keyboard_layout: u8 = 0,
 
-    last_pc: u16 = 0,
+    exec_counter: u64 = 0,
+    pc_history: [history_len]u16 = [_]u16{0} ** history_len,
+    opcode_history: [history_len]u16 = [_]u16{0} ** history_len,
 
     gfx: struct {
         bindings: sg.Bindings = .{},
@@ -74,6 +78,26 @@ var global_state: struct {
             state.pause = false;
             state.remaining_steps = std.math.maxInt(u64);
         }
+    }
+
+    fn nextOpcode(state: *@This()) void {
+        var cpu = &state.cpu;
+        var memory = &state.memory_buf;
+
+        cpu.opcode = std.mem.readIntSliceBig(u16, memory[cpu.pc..]);
+        if (!state.looping()) {
+            state.exec_counter +%= 1;
+            state.pc_history[state.exec_counter & (history_len - 1)] = cpu.pc;
+            state.opcode_history[state.exec_counter & (history_len - 1)] = cpu.opcode;
+        }
+    }
+
+    fn looping(state: @This()) bool {
+        const cpu = &state.cpu;
+        const index = (state.exec_counter -| 1);
+        const last_pc = state.pc_history[index & (history_len - 1)];
+        const last_opcode = state.opcode_history[index & (history_len - 1)];
+        return last_pc == cpu.pc and last_opcode == cpu.opcode and cpu.step == 0;
     }
 } = .{};
 
@@ -231,7 +255,7 @@ export fn init() void {
         loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
             return;
         };
-        state.cpu.opcode = state.cpu.loadOpcode(&state.memory_buf);
+        _ = state.nextOpcode();
     }
 
     state.initialized = true;
@@ -300,6 +324,7 @@ export fn frame() void {
         sdtx.print("CPU pc={x:0>4} i={x:0>4} sp={x:0>4} dt={x:0>2} st={x:0>2}\n", .{ cpu.pc, cpu.i, cpu.sp, cpu.dt, cpu.st });
         sdtx.print("       0 1 2 3 4 5 6 7 8 9 A B C D E F\n", .{});
         sdtx.print("    v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
+        // #TODO Don't need to print the opcode here anymore because we have the history now.
         sdtx.print("    opcode={x:0>4} step={}\n", .{ cpu.opcode, cpu.step });
     }
     if (keyboard.block) {
@@ -323,10 +348,9 @@ export fn frame() void {
 
         while (state.tick_time_remaining > -tick_epsilon) {
             state.tick_time_remaining -= tick_duration;
-            state.last_pc = cpu.pc;
             cpu.tick(memory, display, keyboard, state.rng.random());
             if (cpu.step == 0) {
-                cpu.opcode = cpu.loadOpcode(memory);
+                state.nextOpcode();
             }
 
             state.tick_counter +%= 1;
@@ -339,8 +363,20 @@ export fn frame() void {
         }
     }
 
-    if (cpu.pc == state.last_pc and cpu.step == 0) {
+    if (state.looping()) {
         sdtx.print("loop\n", .{});
+    }
+
+    {
+        sdtx.print("\n#Exec PC   OPCODE", .{});
+        var offset: usize = 0;
+        while (offset < history_len) : (offset += 1) {
+            const exec_index = state.exec_counter -| offset;
+            const index = exec_index & (history_len - 1);
+            var buffer: [64]u8 = undefined;
+            const opcode_desc = chip8_asm.disassemble(state.opcode_history[index], &buffer);
+            sdtx.print("\n{:>5} {x:0>4} {s}", .{ exec_index, state.pc_history[index], opcode_desc });
+        }
     }
 
     var tex_data = sg.ImageData{};
