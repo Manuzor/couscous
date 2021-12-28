@@ -3,9 +3,12 @@ const mem = std.mem;
 const log = std.log.scoped(.chip8);
 const root = @import("root");
 
-pub const stack_base_address: u16 = 0x0000;
-pub const charmap_base_address: u16 = 0x0010;
-pub const user_base_address: u16 = 0x0200;
+pub const charmap_base_address = 0x0000;
+pub const charmap_size = 0x0050;
+pub const stack_base_address = 0x0050;
+pub const stack_size = 0x0010;
+pub const user_base_address = 0x0200;
+pub const mem_size = 0x1000;
 
 pub const opcode_mask_table = [16]u16{
     0xFFFF, // h: 0
@@ -27,8 +30,8 @@ pub const opcode_mask_table = [16]u16{
 };
 
 pub const Display = struct {
-    width: u16 = 64,
-    height: u16 = 32,
+    width: usize = 64,
+    height: usize = 32,
     data: []u1,
 };
 
@@ -43,24 +46,35 @@ pub const Cpu = struct {
     dt: u8 = 0,
     st: u8 = 0,
 
-    pc: u16 = undefined,
-    sp: u16 = undefined,
+    pc: u16 = user_base_address,
+    sp: u16 = stack_base_address,
 
     i: u16 = 0,
 
     opcode: u16 = undefined,
-    step: u16 = undefined,
+    step: u16 = 0,
 
     pub fn setPc(cpu: *Cpu, pc: u16) void {
-        // #TODO Clamp pc to 0x0FFF?
+        const user_range = mem_size - user_base_address;
         cpu.pc = pc;
+        // wrap back into usable range.
+        if (cpu.pc < user_base_address) {
+            cpu.pc += user_range;
+        }
+        if (cpu.pc > mem_size) {
+            cpu.pc -= user_range;
+        }
         cpu.step = 0;
     }
 
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
         const opcode = cpu.opcode;
 
-        const ShiftSrc = enum { x, y };
+        // #NOTE Some ROMs seem to have different expectations of how the SHL/SHR instructions work.
+        const ShiftSrc = enum {
+            x, // Read from Vx, perform the shift, store the result in Vx.
+            y, // Read from Vy, perform the shift, store the result in Vx.
+        };
         const shift_src: ShiftSrc = .y;
 
         const h = @truncate(u4, opcode >> 12);
@@ -70,22 +84,22 @@ pub const Cpu = struct {
         const kk = @truncate(u8, opcode);
         const nnn = @truncate(u12, opcode);
 
-        const mask = opcode_mask_table[h];
+        const opcode_mask = opcode_mask_table[h];
 
         const step = cpu.step;
         cpu.step +%= 1;
 
-        switch (opcode & mask) {
+        switch (opcode & opcode_mask) {
             0x00E0 => { // 00E0 - CLS
                 // #NOTE Could use `step` here but what's the point seeing the screen get cleared?
                 mem.set(u1, display.data, 0);
                 cpu.setPc(cpu.pc + 2);
             },
             0x00EE => { // 00EE - RET
-                if (cpu.sp > 0) {
-                    cpu.sp -= 1;
-                } else {
-                    log.warn("00EE - unable to return: sp is already 0.", .{});
+                cpu.sp -= 1;
+                // #NOTE Handle stack underflow by wrapping.
+                if (cpu.sp < stack_base_address) {
+                    cpu.sp += stack_size;
                 }
                 const restored_pc = mem.readIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2]);
                 cpu.setPc(restored_pc + 2);
@@ -94,11 +108,11 @@ pub const Cpu = struct {
                 cpu.setPc(nnn);
             },
             0x2000 => { // 2nnn - CALL addr
-                if (cpu.sp < 16) {
-                    mem.writeIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2], cpu.pc);
-                    cpu.sp += 1;
-                } else {
-                    log.warn("2nnn - stack overflow.", .{});
+                mem.writeIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2], cpu.pc);
+                cpu.sp += 1;
+                // #NOTE Handle stack overflow by wrapping.
+                if (cpu.sp > stack_base_address + stack_size) {
+                    cpu.sp -= stack_size;
                 }
                 cpu.setPc(nnn);
             },
@@ -195,42 +209,34 @@ pub const Cpu = struct {
                 cpu.setPc(@as(u16, nnn) + @as(u16, cpu.v[0]));
             },
             0xC000 => { // Cxkk - RND Vx, byte
-                // #TODO get rid of the std.rand.Random dependency by requesting a random number another way.
                 cpu.v[x] = rand.int(u8) & kk;
                 cpu.setPc(cpu.pc + 2);
             },
             0xD000 => { // Dxyn - DRW Vx, Vy, nibble
-                if (cpu.i + n < memory.len) {
-                    if (step == 0) {
-                        cpu.v[0xF] = 0;
+                cpu.v[0xF] = 0;
+                var sprite_y: usize = 0;
+                while (sprite_y < n) : (sprite_y += 1) {
+                    if (cpu.i + sprite_y >= memory.len) {
+                        log.warn("Dxyn - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + n });
+                        break;
                     }
-                    if (step < n) {
-                        const display_width = @as(usize, display.width);
-                        const display_height = @as(usize, display.height);
-                        const display_y = (@as(usize, cpu.v[y]) + step) % display_height;
-                        const display_x0 = @as(usize, cpu.v[x]);
-                        const draw_byte = memory[cpu.i + step];
-                        var bit: usize = 0;
-                        while (bit < 8) : (bit += 1) {
-                            const display_x = (display_x0 + (7 - bit)) % display_width;
-                            const value = @truncate(u1, draw_byte >> @intCast(u3, bit));
-                            if (value == 1) {
-                                const display_index = display_y * display_width + display_x;
-                                var pixel = &display.data[display_index];
-                                if (pixel.* == 1) {
-                                    cpu.v[0xF] = 1;
-                                }
-                                pixel.* ^= 1;
+                    const sprite_value = memory[cpu.i + sprite_y];
+                    var sprite_x: usize = 0;
+                    while (sprite_x < 8) : (sprite_x += 1) {
+                        const mask = @as(u8, 0b1000_0000) >> @intCast(u3, sprite_x);
+                        if (sprite_value & mask != 0) {
+                            const display_x = (@as(usize, cpu.v[x]) + sprite_x) % display.width;
+                            const display_y = (cpu.v[y] + sprite_y) % display.height;
+                            const display_index = display_y * display.width + display_x;
+                            var pixel = &display.data[display_index];
+                            if (pixel.* == 1) {
+                                cpu.v[0xF] = 1;
                             }
-                        }
-                        if (step + 1 == n) {
-                            cpu.setPc(cpu.pc + 2);
+                            pixel.* ^= 1;
                         }
                     }
-                } else {
-                    log.warn("Dxyn - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + n });
-                    cpu.setPc(cpu.pc + 2);
                 }
+                cpu.setPc(cpu.pc + 2);
             },
             0xE09E => { // Ex9E - SKP Vx
                 var next_pc = cpu.pc + 2;
@@ -285,7 +291,6 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF033 => { // Fx33 - LD B, Vx
-                // #TODO step
                 if (cpu.i + 2 < memory.len) {
                     memory[cpu.i + 0] = cpu.v[x] / 100;
                     memory[cpu.i + 1] = (cpu.v[x] / 10) % 10;
@@ -296,25 +301,25 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF055 => { // Fx55 - LD [I], Vx
-                // #TODO step
-                if (cpu.i + 16 < memory.len) {
-                    mem.copy(u8, memory[cpu.i .. cpu.i + 16], &cpu.v);
+                const count = @as(usize, x) + 1;
+                if (cpu.i + count < memory.len) {
+                    mem.copy(u8, memory[cpu.i .. cpu.i + count], cpu.v[0..count]);
                 } else {
-                    log.warn("Fx55 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + 16 });
+                    log.warn("Fx55 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + count });
                 }
                 cpu.setPc(cpu.pc + 2);
             },
             0xF065 => { // Fx65 - LD Vx, [I]
-                // #TODO step
-                if (cpu.i + 16 < memory.len) {
-                    mem.copy(u8, &cpu.v, memory[cpu.i .. cpu.i + 16]);
+                const count = @as(usize, x) + 1;
+                if (cpu.i + count < memory.len) {
+                    mem.copy(u8, cpu.v[0..count], memory[cpu.i .. cpu.i + count]);
                 } else {
-                    log.warn("Fx55 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + 16 });
+                    log.warn("Fx65 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + count });
                 }
                 cpu.setPc(cpu.pc + 2);
             },
             else => {
-                log.err("unknown opcode '0x{x}' (mask is '0x{x}')", .{ opcode, mask });
+                log.err("unknown opcode '0x{x}' (mask is '0x{x}')", .{ opcode, opcode_mask });
                 cpu.setPc(cpu.pc + 2);
             },
         }

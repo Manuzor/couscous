@@ -1,4 +1,6 @@
-pub const charmap = [_]u8{
+const chip8 = @import("chip8.zig");
+
+pub const charmap = [chip8.charmap_size]u8{
     // 0
     0b11110000,
     0b10010000,

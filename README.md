@@ -38,3 +38,9 @@ Generate a top-level Visual Studio Solution file:
 ~~~
 > ./sln.bat
 ~~~
+
+# TODO
+
+* Better separation between C++ and Zig sources.
+* Cleanup roms directory to only include tested roms. Also try to credit the authors.
+* WASM?

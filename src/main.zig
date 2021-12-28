@@ -32,7 +32,6 @@ var global_state: struct {
     allocator: std.mem.Allocator = undefined,
 
     initialized: bool = false,
-    debug: bool = false,
     display_test_pattern: bool = false,
     rom_path: ?[]const u8 = null,
 
@@ -86,7 +85,7 @@ var global_state: struct {
         }
     }
 
-    fn nextOpcode(state: *@This()) void {
+    fn fetchOpcode(state: *@This()) void {
         var cpu = &state.cpu;
         var memory = &state.memory_buf;
 
@@ -245,24 +244,22 @@ export fn init() void {
     sdtx_desc.fonts[0] = sdtx.fontOric();
     sdtx.setup(sdtx_desc);
 
-    initializeCpu(&state.cpu);
-
     if (state.display_test_pattern) {
         // Initialize display with test pattern.
-        loadDisplayTestPattern(&state.display_buf, W);
-    } else {
-        // Clear screen.
-        std.mem.set(u1, &state.display_buf, 0);
+        var index: usize = 0;
+        while (index < (H * W)) : (index += 1) {
+            state.display_buf[index] = @truncate(u1, (index & 1) ^ ((index / W) & 1));
+        }
     }
 
-    loadCharmap(state.memory_buf[chip8.charmap_base_address..]);
+    std.mem.copy(u8, state.memory_buf[chip8.charmap_base_address .. chip8.charmap_base_address + chip8.charmap_size], &chip8_charmap.charmap);
 
     if (state.rom_path) |rom_path| {
         const bytes_read = loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
             return;
         };
         log.debug("loaded ROM with {} bytes: '{s}'", .{ bytes_read, rom_path });
-        _ = state.nextOpcode();
+        _ = state.fetchOpcode();
     }
 
     state.initialized = true;
@@ -310,7 +307,7 @@ export fn frame() void {
     const render_width = viewport.max_x - viewport.min_x;
     const render_height = viewport.max_y - viewport.min_y;
 
-    if (state.debug) {
+    if (state.pause) {
         sdtx.setContext(sdtx.defaultContext());
         const debug_font_scale = 1.0 / 2.0;
         sdtx.canvas(debug_font_scale * render_width, debug_font_scale * render_height);
@@ -320,7 +317,6 @@ export fn frame() void {
         sdtx.setContext(.{});
     }
 
-    // #TODO make use of state.debug
     sdtx.print("tick #{}\n", .{state.tick_counter});
     if (state.pause) {
         sdtx.print("=== PAUSED ===\n", .{});
@@ -358,7 +354,7 @@ export fn frame() void {
             state.tick_time_remaining -= tick_duration;
             cpu.tick(memory, display, keyboard, state.rng.random());
             if (cpu.step == 0) {
-                state.nextOpcode();
+                state.fetchOpcode();
             }
 
             state.tick_counter +%= 1;
@@ -516,15 +512,6 @@ export fn input(ev: ?*const sapp.Event) void {
 
 // }
 
-fn initializeCpu(cpu: *chip8.Cpu) void {
-    cpu.setPc(chip8.user_base_address);
-    cpu.sp = chip8.stack_base_address;
-}
-
-fn loadCharmap(dest: []u8) void {
-    std.mem.copy(u8, dest, &chip8_charmap.charmap);
-}
-
 fn loadRomFromFile(dest: []u8, path: []const u8) !usize {
     const file = std.fs.cwd().openFile(path, .{}) catch |err| {
         log.err("{}: Failed to open ROM file '{s}'", .{ err, path });
@@ -536,13 +523,6 @@ fn loadRomFromFile(dest: []u8, path: []const u8) !usize {
         return error.RomLoad;
     };
     return bytes_read;
-}
-
-fn loadDisplayTestPattern(display_data: []u1, stride: usize) void {
-    var index: usize = 0;
-    while (index < (H * W)) : (index += 1) {
-        display_data[index] = @truncate(u1, (index & 1) ^ ((index / stride) & 1));
-    }
 }
 
 pub fn main() anyerror!void {
@@ -558,7 +538,6 @@ pub fn main() anyerror!void {
             clap.parseParam("-h, --help    Display this help and exit") catch unreachable,
             clap.parseParam("-p, --pause   Start in pause mode") catch unreachable,
             clap.parseParam("--nocls       Do not start with a clear display.") catch unreachable,
-            clap.parseParam("--debug       Show debug information") catch unreachable,
             clap.parseParam("--dis <OUT>   Disassemble the input ROM and write to <OUT>. Use - to print to stdout.") catch unreachable,
             clap.parseParam("--asm <OUT>   Assemble the input file and write to <OUT>. Use - to print to stdout.") catch unreachable,
             clap.parseParam("<POS>...      Path to a ROM file to load") catch unreachable,
@@ -584,7 +563,6 @@ pub fn main() anyerror!void {
             state.setPause(true);
         }
 
-        state.debug = args.flag("--debug");
         if (args.flag("--nocls")) {
             state.display_test_pattern = true;
         }
@@ -594,11 +572,6 @@ pub fn main() anyerror!void {
             if (env.get("COUSCOUS_PAUSE")) |val| {
                 if (std.mem.eql(u8, val, "1")) {
                     state.setPause(true);
-                }
-            }
-            if (env.get("COUSCOUS_DEBUG")) |val| {
-                if (std.mem.eql(u8, val, "1")) {
-                    state.debug = true;
                 }
             }
             if (env.get("COUSCOUS_NOCLS")) |val| {
