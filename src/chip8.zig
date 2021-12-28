@@ -189,7 +189,6 @@ pub const Cpu = struct {
             },
             0xD000 => { // Dxyn - DRW Vx, Vy, nibble
                 if (cpu.i + n < memory.len) {
-                    var carry = false;
                     if (step == 0) {
                         cpu.v[0xF] = 0;
                     }
@@ -210,7 +209,6 @@ pub const Cpu = struct {
                             display.data[display_index] = pixel ^ value;
                         }
                         if (step + 1 == n) {
-                            cpu.v[0xF] = if (carry) 1 else 0;
                             cpu.setPc(cpu.pc + 2);
                         }
                     }
