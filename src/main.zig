@@ -41,6 +41,7 @@ var global_state: struct {
     frame_counter: u64 = 0,
     // laptime_store: u64 = 0,
     frame_timer: std.time.Timer = undefined,
+    total_time_elapsed: f64 = 0.0,
 
     // #TODO random seed?
     rng: std.rand.DefaultPrng = std.rand.DefaultPrng.init(0),
@@ -62,6 +63,11 @@ var global_state: struct {
         bindings: sg.Bindings = .{},
         pipeline: sg.Pipeline = .{},
         pass_action: sg.PassAction = .{},
+    } = .{},
+
+    audio: struct {
+        samples: [32]f32 = undefined,
+        sample_index: usize = 0,
     } = .{},
 
     fn setPause(state: *@This(), pause: bool) void {
@@ -295,6 +301,7 @@ export fn frame() void {
     // run at a fixed tick rate regardless of frame rate
     // #NOTE clamp frame time so debug breakpoints don't screw up timing.
     const delta_time = std.math.min(@intToFloat(f64, state.frame_timer.lap()) * std.time.ns_per_s, max_frame_time);
+    state.total_time_elapsed += delta_time;
 
     const canvas_width = sapp.widthf();
     const canvas_height = sapp.heightf();
@@ -395,6 +402,25 @@ export fn frame() void {
     sdtx.draw();
     sg.endPass();
     sg.commit();
+
+    const num_samples = saudio.expect();
+    var sample_gen_index: i32 = 0;
+    var audio = &state.audio;
+    while (sample_gen_index < num_samples) : (sample_gen_index += 1) {
+        if (audio.sample_index == audio.samples.len) {
+            audio.sample_index = 0;
+            _ = saudio.push(&audio.samples[0], @intCast(i32, audio.samples.len));
+        }
+        audio.samples[audio.sample_index] = blk: {
+            if (cpu.st > 0) {
+                const mag = 0.1;
+                break :blk mag * @sin((@intToFloat(f32, audio.sample_index) / @intToFloat(f32, audio.samples.len)) * std.math.tau);
+            } else {
+                break :blk 0;
+            }
+        };
+        audio.sample_index += 1;
+    }
 }
 
 export fn input(ev: ?*const sapp.Event) void {
