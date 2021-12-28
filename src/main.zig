@@ -605,10 +605,10 @@ pub fn main() anyerror!void {
                 return err;
             };
             defer out_file.close();
-            var index: usize = 0;
+            var index: usize = 2;
             while (index < rom.len) : (index += 2) {
-                const opcode = std.mem.readIntSliceBig(u16, rom[index..]);
-                const addr = chip8.user_base_address + index;
+                const opcode = std.mem.readIntSliceBig(u16, rom[index - 2 .. index]);
+                const addr = chip8.user_base_address + index - 2;
 
                 var line_buf: [128]u8 = undefined;
                 var line_index: usize = 0;

@@ -52,12 +52,16 @@ pub const Cpu = struct {
     step: u16 = undefined,
 
     pub fn setPc(cpu: *Cpu, pc: u16) void {
+        // #TODO Clamp pc to 0x0FFF?
         cpu.pc = pc;
         cpu.step = 0;
     }
 
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
         const opcode = cpu.opcode;
+
+        const ShiftSrc = enum { x, y };
+        const shift_src: ShiftSrc = .y;
 
         const h = @truncate(u4, opcode >> 12);
         const x = @truncate(u4, opcode >> 8);
@@ -154,8 +158,12 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x8006 => { // 8xy6 - SHR Vx {, Vy}
-                cpu.v[0xF] = @truncate(u1, cpu.v[x]);
-                cpu.v[x] >>= 1;
+                const src = switch (shift_src) {
+                    .x => x,
+                    .y => y,
+                };
+                cpu.v[0xF] = @truncate(u1, cpu.v[src]);
+                cpu.v[x] = cpu.v[src] >> 1;
                 cpu.setPc(cpu.pc + 2);
             },
             0x8007 => { // 8xy7 - SUBN Vx, Vy
@@ -164,8 +172,12 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x800E => { // 8xyE - SHL Vx {, Vy}
-                cpu.v[0xF] = @truncate(u1, cpu.v[x] >> 7);
-                cpu.v[x] <<= 1;
+                const src = switch (shift_src) {
+                    .x => x,
+                    .y => y,
+                };
+                cpu.v[0xF] = @truncate(u1, cpu.v[src] >> 7);
+                cpu.v[x] = cpu.v[src] << 1;
                 cpu.setPc(cpu.pc + 2);
             },
             0x9000 => { // 9xy0 - SNE Vx, Vy
@@ -193,20 +205,23 @@ pub const Cpu = struct {
                         cpu.v[0xF] = 0;
                     }
                     if (step < n) {
-                        const display_y = (cpu.v[y] + step) % display.height;
-                        const byte_value = memory[cpu.i + step];
-                        const display_x0 = cpu.v[x];
-                        comptime var bit = 8;
-                        inline while (bit > 0) {
-                            comptime bit -= 1;
-                            const display_x = (display_x0 + bit) % display.width;
-                            const value = @truncate(u1, byte_value >> 7 - bit);
-                            const display_index = display_y * display.width + display_x;
-                            const pixel = display.data[display_index];
-                            if (pixel == 1 and value == 1) {
-                                cpu.v[0xF] = 1;
+                        const display_width = @as(usize, display.width);
+                        const display_height = @as(usize, display.height);
+                        const display_y = (@as(usize, cpu.v[y]) + step) % display_height;
+                        const display_x0 = @as(usize, cpu.v[x]);
+                        const draw_byte = memory[cpu.i + step];
+                        var bit: usize = 0;
+                        while (bit < 8) : (bit += 1) {
+                            const display_x = (display_x0 + (7 - bit)) % display_width;
+                            const value = @truncate(u1, draw_byte >> @intCast(u3, bit));
+                            if (value == 1) {
+                                const display_index = display_y * display_width + display_x;
+                                var pixel = &display.data[display_index];
+                                if (pixel.* == 1) {
+                                    cpu.v[0xF] = 1;
+                                }
+                                pixel.* ^= 1;
                             }
-                            display.data[display_index] = pixel ^ value;
                         }
                         if (step + 1 == n) {
                             cpu.setPc(cpu.pc + 2);
