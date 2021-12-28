@@ -252,9 +252,10 @@ export fn init() void {
     loadCharmap(state.memory_buf[chip8.charmap_base_address..]);
 
     if (state.rom_path) |rom_path| {
-        loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
+        const bytes_read = loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
             return;
         };
+        log.debug("loaded ROM with {} bytes: '{s}'", .{ bytes_read, rom_path });
         _ = state.nextOpcode();
     }
 
@@ -373,9 +374,12 @@ export fn frame() void {
         while (offset < history_len) : (offset += 1) {
             const exec_index = state.exec_counter -| offset;
             const index = exec_index & (history_len - 1);
-            var buffer: [64]u8 = undefined;
-            const opcode_desc = chip8_asm.disassemble(state.opcode_history[index], &buffer);
-            sdtx.print("\n{:>5} {x:0>4} {s}", .{ exec_index, state.pc_history[index], opcode_desc });
+            var buf0: [64]u8 = undefined;
+            var buf1: [64]u8 = undefined;
+            const opcode = state.opcode_history[index];
+            const opcode_str = chip8_asm.opcodePrint(&buf1, opcode);
+            const opcode_desc = chip8_asm.disassemble(&buf0, opcode) orelse "???";
+            sdtx.print("\n{:>5} {x:0>4} {s} - {s}", .{ exec_index, state.pc_history[index], opcode_str, opcode_desc });
         }
     }
 
@@ -495,7 +499,7 @@ fn loadCharmap(dest: []u8) void {
     std.mem.copy(u8, dest, &chip8_charmap.charmap);
 }
 
-fn loadRomFromFile(dest: []u8, path: []const u8) !void {
+fn loadRomFromFile(dest: []u8, path: []const u8) !usize {
     const file = std.fs.cwd().openFile(path, .{}) catch |err| {
         log.err("{}: Failed to open ROM file '{s}'", .{ err, path });
         return error.RomLoad;
@@ -505,7 +509,7 @@ fn loadRomFromFile(dest: []u8, path: []const u8) !void {
         log.err("{}: Failed to read ROM file '{s}'", .{ err, path });
         return error.RomLoad;
     };
-    log.debug("loaded ROM with {} bytes: '{s}'", .{ bytes_read, path });
+    return bytes_read;
 }
 
 fn loadDisplayTestPattern(display_data: []u1, stride: usize) void {
@@ -529,6 +533,8 @@ pub fn main() anyerror!void {
             clap.parseParam("-p, --pause   Start in pause mode") catch unreachable,
             clap.parseParam("--nocls       Do not start with a clear display.") catch unreachable,
             clap.parseParam("--debug       Show debug information") catch unreachable,
+            clap.parseParam("--dis <OUT>   Disassemble the input ROM and write to <OUT>. Use - to print to stdout.") catch unreachable,
+            clap.parseParam("--asm <OUT>   Assemble the input file and write to <OUT>. Use - to print to stdout.") catch unreachable,
             clap.parseParam("<POS>...      Path to a ROM file to load") catch unreachable,
         };
         var diag = clap.Diagnostic{};
@@ -582,6 +588,97 @@ pub fn main() anyerror!void {
                 break;
             }
             state.rom_path = try state.allocator.dupe(u8, rom_path);
+        }
+
+        if (args.option("--dis")) |out_path| {
+            const rom_path = state.rom_path orelse {
+                log.err("--dis needs a valid rom to load.", .{});
+                return error.InvalidOperation;
+            };
+
+            var rom_buf: [4096]u8 = undefined;
+            const rom_len = try loadRomFromFile(&rom_buf, rom_path);
+            const rom = rom_buf[0..rom_len];
+
+            var out_file = std.fs.cwd().createFile(out_path, .{}) catch |err| {
+                log.err("failed to open output file for writing '{s}'", .{out_path});
+                return err;
+            };
+            defer out_file.close();
+            var index: usize = 0;
+            while (index < rom.len) : (index += 2) {
+                const opcode = std.mem.readIntSliceBig(u16, rom[index..]);
+                const addr = chip8.user_base_address + index;
+
+                var line_buf: [128]u8 = undefined;
+                var line_index: usize = 0;
+                line_index += (try std.fmt.bufPrint(line_buf[line_index..], "{X:0>4}  ", .{addr})).len;
+
+                if (chip8_asm.disassemble(line_buf[line_index..], opcode)) |dis| {
+                    line_index += dis.len;
+
+                    const min_width = 20;
+                    const pad = min_width -| line_index;
+                    if (pad > 0) {
+                        std.mem.set(u8, line_buf[line_index .. line_index + pad], ' ');
+                        line_index += pad;
+                    }
+                    line_index += (try std.fmt.bufPrint(line_buf[line_index..], " # ", .{})).len;
+                    line_index += (try chip8_asm.opcodePrint(line_buf[line_index..], opcode)).len;
+                } else {
+                    line_index += (try chip8_asm.opcodePrint(line_buf[line_index..], opcode)).len;
+                }
+                line_index += (try std.fmt.bufPrint(line_buf[line_index..], "\n", .{})).len;
+                try out_file.writeAll(line_buf[0..line_index]);
+            }
+            return;
+        }
+
+        if (args.option("--asm")) |code_path| {
+            const out_path = state.rom_path orelse {
+                log.err("--asm needs a rom path to write to.", .{});
+                return error.InvalidOperation;
+            };
+
+            var code_buf: [4096]u8 = undefined;
+            const code = blk: {
+                const code_file = std.fs.cwd().openFile(code_path, .{}) catch |err| {
+                    log.err("{}: Failed to open code file '{s}'", .{ err, code_path });
+                    return error.CodeLoad;
+                };
+                defer code_file.close();
+                const bytes_read = code_file.readAll(&code_buf) catch |err| {
+                    log.err("{}: Failed to read code file '{s}'", .{ err, code_path });
+                    return error.CodeLoad;
+                };
+                break :blk code_buf[0..bytes_read];
+            };
+
+            var out_file = std.fs.cwd().createFile(out_path, .{}) catch |err| {
+                log.err("failed to open output file for writing '{s}'", .{out_path});
+                return err;
+            };
+            defer out_file.close();
+
+            var line_iter = std.mem.tokenize(u8, code, "\r\n");
+            while (line_iter.next()) |line| {
+                var opstr = if (std.mem.indexOf(u8, std.mem.trimRight(u8, line, " "), " ") orelse 0 == 4) std.mem.trimLeft(u8, line[4..], " ") else line;
+                if (chip8_asm.assemble(opstr)) |opcode| {
+                    var opcode_buf: [2]u8 = undefined;
+                    std.mem.writeIntSliceBig(u16, &opcode_buf, opcode);
+                    log.debug("line='{s}' parsed={X:0>4} write={X:0>4}", .{ line, opcode, std.fmt.fmtSliceHexUpper(&opcode_buf) });
+                    try out_file.writeAll(&opcode_buf);
+                } else {
+                    std.debug.assert(opstr.len == 4);
+                    try out_file.writeAll(opstr);
+                }
+            }
+            return;
+        }
+
+        if (args.option("--asm")) |out_path| {
+            _ = out_path;
+            unreachable; // not implemented
         }
     }
 

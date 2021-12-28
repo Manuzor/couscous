@@ -90,7 +90,6 @@ pub const Cpu = struct {
                 cpu.setPc(nnn);
             },
             0x2000 => { // 2nnn - CALL addr
-                std.debug.assert(cpu.sp < 16); // stack overflow
                 if (cpu.sp < 16) {
                     mem.writeIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2], cpu.pc);
                     cpu.sp += 1;
