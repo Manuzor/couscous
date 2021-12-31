@@ -7,7 +7,7 @@ where /q pwsh || (
 
 set ROOT_DIR=%~dp0
 set ROOT_DIR=%ROOT_DIR:~0,-1%
-set OUT_DIR=%ROOT_DIR%\_out
+set OUT_DIR=%ROOT_DIR%\out
 
 set COMMON_FLAGS=-DCOUSCOUS_TESTS -luser32 -lgdi32
 set DEBUG_FLAGS=-DDEBUG %COMMON_FLAGS%
@@ -32,9 +32,6 @@ echo.
 echo rem move into out dir
 echo md %OUT_DIR% 2^> NUL
 echo cd %OUT_DIR%
-echo.
-echo rem code generation
-echo pwsh "%ROOT_DIR%\tools\generate_code.ps1"
 echo.
 echo if "%%BUILD_RELEASE%%"=="" (
 echo    rem debug build

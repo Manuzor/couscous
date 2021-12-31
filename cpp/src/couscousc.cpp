@@ -26,7 +26,7 @@ using bool32 = int;
 #include "couscous.h"
 
 #include "couscous.cpp"
-#include "_generated/all_generated.cpp"
+#include "generated/all_generated.cpp"
 
 struct my_parser_context
 {

@@ -258,7 +258,7 @@ struct win32_window_event
         u32 UnicodeCodePoint;
     };
 };
-#include "_generated/win32_window_event_array.h"
+#include "generated/win32_window_event_array.h"
 
 struct win32_window
 {
@@ -839,7 +839,7 @@ struct breakpoint
     int FileId;
     int Line;
 };
-#include "_generated/breakpoint_array.h"
+#include "generated/breakpoint_array.h"
 
 int
 WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
@@ -1446,4 +1446,4 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     return 0;
 }
 
-#include "_generated/all_generated.cpp"
+#include "generated/all_generated.cpp"

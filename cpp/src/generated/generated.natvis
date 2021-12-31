@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+    <Type Name="label_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="patch_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="u8_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="str_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="token_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="cursor_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="debug_info_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="win32_window_event_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+     <Type Name="breakpoint_array">
+        <DisplayString>{{ NumElements={NumElements} }}</DisplayString>
+        <Expand>
+            <Item Name="IsFixed">_Data ? false : true</Item>
+            <Item Name="NumElements">NumElements</Item>
+            <Item Name="Capacity">Capacity</Item>
+            <ArrayItems>
+                <Size>NumElements</Size>
+                <ValuePointer>_Data ? _Data : _Fixed</ValuePointer>
+            </ArrayItems>
+        </Expand>
+    </Type>
+
+</AutoVisualizer>

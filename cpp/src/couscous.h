@@ -226,7 +226,7 @@ IsCompatible(instruction Instruction, instruction_signature Signature);
 static instruction_signature*
 FindSignature(instruction instruction);
 
-#include "_generated/u8_array.h"
+#include "generated/u8_array.h"
 
 #define STR_FMT "%*.*s"
 #define STR_FMTARG(Str) (int)(Str).Size, (int)(Str).Size, (char const*)(Str).Data
@@ -245,12 +245,12 @@ struct str
     // Implicit conversion to const string.
     inline operator strc() const { return { Size, Data }; }
 };
-#include "_generated/str_array.h"
+#include "generated/str_array.h"
 
-#include "_generated/text.h"
-#include "_generated/text1024.h"
-#include "_generated/token.h"
-#include "_generated/token_array.h"
+#include "generated/text.h"
+#include "generated/text1024.h"
+#include "generated/token.h"
+#include "generated/token_array.h"
 
 static str
 Trim(str Text);
@@ -298,7 +298,7 @@ struct parser_cursor
     int NumLineBreaks; // Relative to Begin
     int LinePos; // Relative to Begin
 };
-#include "_generated/cursor_array.h"
+#include "generated/cursor_array.h"
 
 static str
 Str(parser_cursor Cursor);
@@ -343,14 +343,14 @@ struct label
     parser_cursor NameCursor;
     u16 MemoryOffset;
 };
-#include "_generated/label_array.h"
+#include "generated/label_array.h"
 
 struct patch
 {
     parser_cursor LabelNameCursor;
     u16 InstructionMemoryOffset;
 };
-#include "_generated/patch_array.h"
+#include "generated/patch_array.h"
 
 static cursor_array
 Tokenize(parser_cursor Code, eat_flags TokenizerEatFlags, char* AdditionalTokenDelimiters = nullptr);
@@ -407,7 +407,7 @@ struct debug_info
     u16 GeneratedInstruction;
     strc SourceLine;
 };
-#include "_generated/debug_info_array.h"
+#include "generated/debug_info_array.h"
 
 struct assemble_code_result
 {

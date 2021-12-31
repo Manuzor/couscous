@@ -1,6 +1,5 @@
 param(
-  [string]$RepoRoot = "$PSScriptRoot/..",
-  [string]$OutDir = "$RepoRoot/src/_generated",
+  [string]$OutDir = "$PSScriptRoot/src/generated",
   [string[]]$FuncCommonSpecfiers = @("static";),
   [string[]]$FuncInlineSpecifiers = @("inline";),
   [switch]$Clean
@@ -120,9 +119,9 @@ Find($($Array.Name)* Array, predicate Predicate)
 
 #endif // !defined($IncludeGuard)
 "@
-  $HeaderFilePath = "$OutDir/$($Array.Name).h"
-  $UmbrellaHeaderIncludes += $HeaderFilePath
-  Set-Content $HeaderFilePath $HeaderContent
+  $HeaderFileName = "$($Array.Name).h"
+  $UmbrellaHeaderIncludes += $HeaderFileName
+  Set-Content (Join-Path $OutDir $HeaderFileName) $HeaderContent
 
   $Content = @"
 // Generated on $DateStamp
@@ -230,9 +229,9 @@ Deallocate($($Array.Name)* Array)
 
 #endif // defined($IncludeGuard)
 "@
-  $FilePath = "$OutDir/$($Array.Name).cpp"
-  $UmbrellaIncludes += $FilePath
-  Set-Content $FilePath $Content
+  $FileName = "$($Array.Name).cpp"
+  $UmbrellaIncludes += $FileName
+  Set-Content (Join-Path $OutDir $FileName) $Content
 }
 
 #
@@ -287,9 +286,9 @@ ${CommonFuncPrefix}int Compare($($Text.Name)* A, $($Text.Name)* B);
 ${CommonFuncPrefix}bool AreEqual($($Text.Name)* A, $($Text.Name)* B);
 
 "@
-  $HeaderFilePath = "$OutDir/$($Text.Name).h"
-  $UmbrellaHeaderIncludes += $HeaderFilePath
-  Set-Content $HeaderFilePath $HeaderContent
+  $HeaderFileName = "$($Text.Name).h"
+  $UmbrellaHeaderIncludes += $HeaderFileName
+  Set-Content (Join-Path $OutDir $HeaderFileName) $HeaderContent
 
   $Content = @"
 // Generated on $DateStamp
@@ -375,9 +374,9 @@ ${CommonFuncPrefix}bool AreEqual($($Text.Name)* A, $($Text.Name)* B)
 }
 
 "@
-  $FilePath = "$OutDir/$($Text.Name).cpp"
-  $UmbrellaIncludes += $FilePath
-  Set-Content $FilePath $Content
+  $FileName = "$($Text.Name).cpp"
+  $UmbrellaIncludes += $FileName
+  Set-Content (Join-Path $OutDir $FileName) $Content
 }
 
 #
@@ -387,15 +386,15 @@ $UmbrellaBaseFilePath = "$OutDir/all_generated"
 
 $UmbrellaHeaderContent = @"
 // Generated on $DateStamp
-$($UmbrellaHeaderIncludes | % { "#include <$_>`n" })
+$($UmbrellaHeaderIncludes | % { "#include ""$_""`n" })
 "@
-Set-Content "$UmbrellaBaseFilePath.h" $UmbrellaHeaderContent
+Set-Content "${UmbrellaBaseFilePath}.h" $UmbrellaHeaderContent
 
 $UmbrellaContent = @"
 // Generated on $DateStamp
-$($UmbrellaIncludes | % { "#include <$_>`n" })
+$($UmbrellaIncludes | % { "#include ""$_""`n" })
 "@
-Set-Content "$UmbrellaBaseFilePath.cpp" $UmbrellaContent
+Set-Content "${UmbrellaBaseFilePath}.cpp" $UmbrellaContent
 
 #
 # Write the generated natvis file

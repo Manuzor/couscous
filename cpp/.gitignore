@@ -1,0 +1,11 @@
+# Generated stuff
+out/
+sln.bat
+build.bat
+
+# FASTBuild database
+*.fdb
+
+# Visual Studio stuff.
+.vs/
+*.sln
