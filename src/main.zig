@@ -535,12 +535,13 @@ pub fn main() anyerror!void {
 
     {
         const params = comptime [_]clap.Param(clap.Help){
-            clap.parseParam("-h, --help    Display this help and exit") catch unreachable,
-            clap.parseParam("-p, --pause   Start in pause mode") catch unreachable,
-            clap.parseParam("--nocls       Do not start with a clear display.") catch unreachable,
-            clap.parseParam("--dis <OUT>   Disassemble the input ROM and write to <OUT>. Use - to print to stdout.") catch unreachable,
-            clap.parseParam("--asm <OUT>   Assemble the input file and write to <OUT>. Use - to print to stdout.") catch unreachable,
-            clap.parseParam("<POS>...      Path to a ROM file to load") catch unreachable,
+            clap.parseParam("-h, --help         Display this help and exit") catch unreachable,
+            clap.parseParam("-p, --pause        Start in pause mode") catch unreachable,
+            clap.parseParam("--nocls            Do not start with a clear display.") catch unreachable,
+            clap.parseParam("--dis <OUT>        Disassemble the input ROM and write to <OUT>. Use - to print to stdout.") catch unreachable,
+            clap.parseParam("--asm <OUT>        Assemble the input file and write to <OUT>. Use - to print to stdout.") catch unreachable,
+            clap.parseParam("--shift-src <SRC>  Behavior of SHL/SHR instructions. Valid values are 'x' or 'y'. Default: 'y'") catch unreachable,
+            clap.parseParam("<POS>...           Path to a ROM file to load") catch unreachable,
         };
         var diag = clap.Diagnostic{};
         var args = clap.parse(clap.Help, &params, .{ .diagnostic = &diag }) catch |err| {
@@ -675,9 +676,20 @@ pub fn main() anyerror!void {
             return;
         }
 
-        if (args.option("--asm")) |out_path| {
-            _ = out_path;
-            unreachable; // not implemented
+        if (args.option("--shift-src")) |shift_src| {
+            var found = false;
+            inline for (@typeInfo(chip8.ShiftSrc).Enum.fields) |enum_field| {
+                if (std.mem.eql(u8, enum_field.name, shift_src)) {
+                    state.cpu.shift_src = @intToEnum(chip8.ShiftSrc, enum_field.value);
+                    found = true;
+                }
+            }
+            if (found) {
+                log.debug("cpu.shift_src is '{}'", .{state.cpu.shift_src});
+            } else {
+                log.err("invalid value for --shift-src '{s}'", .{shift_src});
+                return error.InvalidCommandLine;
+            }
         }
     }
 

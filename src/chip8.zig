@@ -41,6 +41,12 @@ pub const Keyboard = struct {
     state: [16]bool = [_]bool{false} ** 16,
 };
 
+// #NOTE Some ROMs seem to have different expectations of how the SHL/SHR instructions work.
+pub const ShiftSrc = enum {
+    x, // Read from Vx, perform the shift, store the result in Vx.
+    y, // Read from Vy, perform the shift, store the result in Vx.
+};
+
 pub const Cpu = struct {
     v: [16]u8 = [_]u8{0} ** 16,
     dt: u8 = 0,
@@ -53,6 +59,8 @@ pub const Cpu = struct {
 
     opcode: u16 = undefined,
     step: u16 = 0,
+
+    shift_src: ShiftSrc = .y,
 
     pub fn setPc(cpu: *Cpu, pc: u16) void {
         const user_range = mem_size - user_base_address;
@@ -69,13 +77,6 @@ pub const Cpu = struct {
 
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
         const opcode = cpu.opcode;
-
-        // #NOTE Some ROMs seem to have different expectations of how the SHL/SHR instructions work.
-        const ShiftSrc = enum {
-            x, // Read from Vx, perform the shift, store the result in Vx.
-            y, // Read from Vy, perform the shift, store the result in Vx.
-        };
-        const shift_src: ShiftSrc = .y;
 
         const h = @truncate(u4, opcode >> 12);
         const x = @truncate(u4, opcode >> 8);
@@ -172,7 +173,7 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x8006 => { // 8xy6 - SHR Vx {, Vy}
-                const src = switch (shift_src) {
+                const src = switch (cpu.shift_src) {
                     .x => x,
                     .y => y,
                 };
@@ -186,7 +187,7 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x800E => { // 8xyE - SHL Vx {, Vy}
-                const src = switch (shift_src) {
+                const src = switch (cpu.shift_src) {
                     .x => x,
                     .y => y,
                 };
