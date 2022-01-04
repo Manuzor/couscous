@@ -1,0 +1,94 @@
+#######################################
+# Display "NO ROM", then loop forever #
+#######################################
+
+LD Va E   # Drawing x coordinate
+LD Vb D   # Drawing y coordinate
+LD Vc 7   # Character width + letter space
+LD Vd 3   # Inter-word space
+LD Ve 8   # Line step
+LD V9 2A  # Blinking rate
+
+#
+# Draw "NO ROM"
+#
+
+LD I CHAR_N
+DRW Va Vb 5
+ADD Va Vc
+
+LD I CHAR_O
+DRW Va Vb 5
+ADD Va Vc
+
+ADD Va Vd
+
+LD I CHAR_R
+DRW Va Vb 5
+ADD Va Vc
+
+LD I CHAR_O
+DRW Va Vb 5
+ADD Va Vc
+
+LD I CHAR_M
+DRW Va Vb 5
+ADD Va Vc
+
+#
+# Draw a blinking cursor indefinitely
+#
+
+LD I CURSOR
+
+:LOOP
+LD V0 DT
+SE V0 0
+JP LOOP
+
+:DRAW_LINE
+DRW Va Vb 6
+
+:RESET_TIMER
+LD DT V9
+JP LOOP
+
+#
+# Data
+#
+
+:CHAR_N
+0b10001000
+0b11001000
+0b10101000
+0b10011000
+0b10001000
+
+:CHAR_R
+0b11110000
+0b10001000
+0b11110000
+0b10001000
+0b10001000
+
+:CHAR_O
+0b11110000
+0b10001000
+0b10001000
+0b10001000
+0b11111000
+
+:CHAR_M
+0b10001000
+0b11011000
+0b10101000
+0b10001000
+0b10001000
+
+:CURSOR
+0b00000000
+0b00000000
+0b00000000
+0b00000000
+0b00000000
+0b11111000

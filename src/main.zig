@@ -255,12 +255,15 @@ export fn init() void {
     std.mem.copy(u8, state.memory_buf[chip8.charmap_base_address .. chip8.charmap_base_address + chip8.charmap_size], &chip8_charmap.charmap);
 
     if (state.rom_path) |rom_path| {
-        const bytes_read = loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
+        const rom = loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
             return;
         };
-        log.debug("loaded ROM with {} bytes: '{s}'", .{ bytes_read, rom_path });
-        _ = state.fetchOpcode();
+        log.debug("loaded ROM with {} bytes: '{s}'", .{ rom.len, rom_path });
+    } else {
+        log.warn("no ROM file specified", .{});
+        std.mem.copy(u8, state.memory_buf[chip8.user_base_address..], @embedFile("roms/NOROM.ch8"));
     }
+    _ = state.fetchOpcode();
 
     state.initialized = true;
 }
@@ -377,11 +380,19 @@ export fn frame() void {
         while (offset < history_len) : (offset += 1) {
             const exec_index = state.exec_counter -| offset;
             const index = exec_index & (history_len - 1);
-            var buf0: [64]u8 = undefined;
-            var buf1: [64]u8 = undefined;
             const opcode = state.opcode_history[index];
-            const opcode_str = chip8_asm.opcodePrint(&buf1, opcode);
-            const opcode_desc = chip8_asm.disassemble(&buf0, opcode) orelse "???";
+            var buf: [128]u8 = undefined;
+
+            var opcode_str_stream = std.io.fixedBufferStream(buf[0..64]);
+            std.fmt.format(opcode_str_stream.writer(), "{X:0>4}", .{opcode}) catch unreachable;
+            const opcode_str = opcode_str_stream.getWritten();
+
+            var opcode_desc_stream = std.io.fixedBufferStream(buf[64..]);
+            const opcode_desc = if (chip8_asm.disassembleOpcode(opcode, opcode_desc_stream.writer()) catch unreachable)
+                opcode_desc_stream.getWritten()
+            else
+                opcode_str;
+
             sdtx.print("\n{:>5} {x:0>4} {s} - {s}", .{ exec_index, state.pc_history[index], opcode_str, opcode_desc });
         }
     }
@@ -512,7 +523,7 @@ export fn input(ev: ?*const sapp.Event) void {
 
 // }
 
-fn loadRomFromFile(dest: []u8, path: []const u8) !usize {
+fn loadRomFromFile(dest: []u8, path: []const u8) ![]u8 {
     const file = std.fs.cwd().openFile(path, .{}) catch |err| {
         log.err("{}: Failed to open ROM file '{s}'", .{ err, path });
         return error.RomLoad;
@@ -522,7 +533,7 @@ fn loadRomFromFile(dest: []u8, path: []const u8) !usize {
         log.err("{}: Failed to read ROM file '{s}'", .{ err, path });
         return error.RomLoad;
     };
-    return bytes_read;
+    return dest[0..bytes_read];
 }
 
 pub fn main() anyerror!void {
@@ -597,40 +608,14 @@ pub fn main() anyerror!void {
             };
 
             var rom_buf: [4096]u8 = undefined;
-            const rom_len = try loadRomFromFile(&rom_buf, rom_path);
-            const rom = rom_buf[0..rom_len];
+            const rom = try loadRomFromFile(&rom_buf, rom_path);
 
             var out_file = std.fs.cwd().createFile(out_path, .{}) catch |err| {
                 log.err("failed to open output file for writing '{s}'", .{out_path});
                 return err;
             };
             defer out_file.close();
-            var index: usize = 2;
-            while (index < rom.len) : (index += 2) {
-                const opcode = std.mem.readIntSliceBig(u16, rom[index - 2 .. index]);
-                const addr = chip8.user_base_address + index - 2;
-
-                var line_buf: [128]u8 = undefined;
-                var line_index: usize = 0;
-                line_index += (try std.fmt.bufPrint(line_buf[line_index..], "{X:0>4}  ", .{addr})).len;
-
-                if (chip8_asm.disassemble(line_buf[line_index..], opcode)) |dis| {
-                    line_index += dis.len;
-
-                    const min_width = 20;
-                    const pad = min_width -| line_index;
-                    if (pad > 0) {
-                        std.mem.set(u8, line_buf[line_index .. line_index + pad], ' ');
-                        line_index += pad;
-                    }
-                    line_index += (try std.fmt.bufPrint(line_buf[line_index..], " # ", .{})).len;
-                    line_index += (try chip8_asm.opcodePrint(line_buf[line_index..], opcode)).len;
-                } else {
-                    line_index += (try chip8_asm.opcodePrint(line_buf[line_index..], opcode)).len;
-                }
-                line_index += (try std.fmt.bufPrint(line_buf[line_index..], "\n", .{})).len;
-                try out_file.writeAll(line_buf[0..line_index]);
-            }
+            try chip8_asm.disassemble(rom, chip8.user_base_address, out_file.writer(), .{});
             return;
         }
 
@@ -660,19 +645,9 @@ pub fn main() anyerror!void {
             };
             defer out_file.close();
 
-            var line_iter = std.mem.tokenize(u8, code, "\r\n");
-            while (line_iter.next()) |line| {
-                var opstr = if (std.mem.indexOf(u8, std.mem.trimRight(u8, line, " "), " ") orelse 0 == 4) std.mem.trimLeft(u8, line[4..], " ") else line;
-                if (chip8_asm.assemble(opstr)) |opcode| {
-                    var opcode_buf: [2]u8 = undefined;
-                    std.mem.writeIntSliceBig(u16, &opcode_buf, opcode);
-                    log.debug("line='{s}' parsed={X:0>4} write={X:0>4}", .{ line, opcode, std.fmt.fmtSliceHexUpper(&opcode_buf) });
-                    try out_file.writeAll(&opcode_buf);
-                } else {
-                    std.debug.assert(opstr.len == 4);
-                    try out_file.writeAll(opstr);
-                }
-            }
+            try chip8_asm.assemble(arena.allocator(), code, chip8.user_base_address, out_file.writer(), .{
+                .file_name = code_path,
+            }, log);
             return;
         }
 
