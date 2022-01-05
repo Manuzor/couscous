@@ -1,0 +1,39 @@
+%YAML 1.2
+---
+# See http://www.sublimetext.com/docs/syntax.html
+file_extensions:
+  - asm8
+scope: source.asm8
+contexts:
+  main:
+    # Comments begin with a '#' and finish at the end of the line
+    - match: '#'
+      scope: punctuation.definition.comment.asm8
+      push: line_comment
+
+    # Labels begin with a ':' and finish at the end of the line
+    - match: ':'
+      scope: punctuation.separator.asm8
+      push: label
+
+    # Instructions
+    - match: '\b(?:CLS|RET|JP|CALL|SE|SNE|LD|ADD|OR|AND|XOR|SUB|SHR|SUBN|SHL|RND|DRW|SKP|SKN)\b'
+      scope: keyword.operator.word.asm8
+
+    # Register
+    - match: '\bV[0-9A-Fa-f]\b'
+      scope: constant.word.asm8
+
+    # Numbers
+    - match: '\b(?:0b|0x)?[0-9A-Fa-f]+\b'
+      scope: constant.numeric.asm8
+
+  line_comment:
+    - meta_scope: comment.line.asm8
+    - match: $
+      pop: true
+
+  label:
+    - meta_scope: entity.name.label.asm8
+    - match: $
+      pop: true
