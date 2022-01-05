@@ -1,0 +1,86 @@
+################################################################
+# Draw all built-in character sprites, then loop indefinitely. #
+################################################################
+
+# Row coordinates
+LD V0 0A
+LD V1 16
+LD V2 22
+LD V3 2E
+
+# Column coordinates
+LD V4 03
+LD V5 0A
+LD V6 11
+LD V7 18
+
+# Row 0
+LD Va 0
+LD F Va
+DRW V0 V4 5
+
+LD Va 1
+LD F Va
+DRW V1 V4 5
+
+LD Va 2
+LD F Va
+DRW V2 V4 5
+
+LD Va 3
+LD F Va
+DRW V3 V4 5
+
+# Row 1
+LD Va 4
+LD F Va
+DRW V0 V5 5
+
+LD Va 5
+LD F Va
+DRW V1 V5 5
+
+LD Va 6
+LD F Va
+DRW V2 V5 5
+
+LD Va 7
+LD F Va
+DRW V3 V5 5
+
+# Row 2
+LD Va 8
+LD F Va
+DRW V0 V6 5
+
+LD Va 9
+LD F Va
+DRW V1 V6 5
+
+LD Va A
+LD F Va
+DRW V2 V6 5
+
+LD Va B
+LD F Va
+DRW V3 V6 5
+
+# Row 3
+LD Va C
+LD F Va
+DRW V0 V7 5
+
+LD Va D
+LD F Va
+DRW V1 V7 5
+
+LD Va E
+LD F Va
+DRW V2 V7 5
+
+LD Va F
+LD F Va
+DRW V3 V7 5
+
+:LOOP
+JP LOOP
