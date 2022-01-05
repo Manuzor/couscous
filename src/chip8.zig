@@ -158,8 +158,8 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x8005 => { // 8xy5 - SUB Vx, Vy
-                const carry = @subWithOverflow(u8, cpu.v[x], cpu.v[y], &cpu.v[x]);
-                cpu.v[0xF] = if (carry) 1 else 0;
+                cpu.v[0xF] = if (cpu.v[x] > cpu.v[y]) 1 else 0;
+                cpu.v[x] -%= cpu.v[y];
                 cpu.setPc(cpu.pc + 2);
             },
             0x8006 => { // 8xy6 - SHR Vx {, Vy}
@@ -172,8 +172,8 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x8007 => { // 8xy7 - SUBN Vx, Vy
-                const carry = @subWithOverflow(u8, cpu.v[y], cpu.v[x], &cpu.v[x]);
-                cpu.v[0xF] = if (carry) 1 else 0;
+                cpu.v[0xF] = if (cpu.v[y] > cpu.v[x]) 1 else 0;
+                cpu.v[x] = cpu.v[y] -% cpu.v[x];
                 cpu.setPc(cpu.pc + 2);
             },
             0x800E => { // 8xyE - SHL Vx {, Vy}
