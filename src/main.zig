@@ -547,13 +547,15 @@ pub fn main() anyerror!void {
 
     {
         const params = comptime [_]clap.Param(clap.Help){
-            clap.parseParam("-h, --help         Display this help and exit") catch unreachable,
-            clap.parseParam("-p, --pause        Start in pause mode") catch unreachable,
-            clap.parseParam("--nocls            Do not start with a clear display.") catch unreachable,
-            clap.parseParam("--dis <OUT>        Disassemble the input ROM and write to <OUT>. Use - to print to stdout.") catch unreachable,
-            clap.parseParam("--asm <OUT>        Assemble the input file and write to <OUT>. Use - to print to stdout.") catch unreachable,
-            clap.parseParam("--shift-src <SRC>  Behavior of SHL/SHR instructions. Valid values are 'x' or 'y'. Default: 'y'") catch unreachable,
-            clap.parseParam("<POS>...           Path to a ROM file to load") catch unreachable,
+            clap.parseParam("-h, --help                   Display this help and exit") catch unreachable,
+            clap.parseParam("-p, --pause                  Start in pause mode") catch unreachable,
+            clap.parseParam("--nocls                      Do not start with a cleared display.") catch unreachable,
+            clap.parseParam("--dis <OUT_FILE>             Disassemble the <ROM_FILE> and write to <OUT_FILE>.") catch unreachable,
+            clap.parseParam("--asm <IN_FILE>              Assemble <IN_FILE> and write to <ROM_FILE>.") catch unreachable,
+            clap.parseParam("--shift-src <SRC>            Behavior of the shift instructions (8xy6/8xy7). Valid values are 'x' or 'y'. Default: 'y'") catch unreachable,
+            clap.parseParam("--jump-offset-src <MODE>     Behavior of the jump instructions with register offset (Bnnn). Valid values are '0' or 'x'. Default: '0'") catch unreachable,
+            clap.parseParam("--register-dump-mode <MODE>  Behavior of the register load and store instructions (Fx55/Fx65). Valid values are 'immutable' or 'increment'. Default: 'immutable'") catch unreachable,
+            clap.parseParam("<ROM_FILE>                Path to a ROM file to load") catch unreachable,
         };
         var diag = clap.Diagnostic{};
         var args = clap.parse(clap.Help, &params, .{ .diagnostic = &diag }) catch |err| {
@@ -664,6 +666,38 @@ pub fn main() anyerror!void {
                 log.debug("cpu.shift_src is '{}'", .{state.cpu.shift_src});
             } else {
                 log.err("invalid value for --shift-src '{s}'", .{shift_src});
+                return error.InvalidCommandLine;
+            }
+        }
+
+        if (args.option("--jump-offset-src")) |jump_offset_src| {
+            var found = false;
+            inline for (@typeInfo(chip8.JumpOffsetSrc).Enum.fields) |enum_field| {
+                if (std.mem.eql(u8, enum_field.name, jump_offset_src)) {
+                    state.cpu.jump_offset_src = @intToEnum(chip8.JumpOffsetSrc, enum_field.value);
+                    found = true;
+                }
+            }
+            if (found) {
+                log.debug("cpu.jump_offset_src is '{}'", .{state.cpu.jump_offset_src});
+            } else {
+                log.err("invalid value for --jump-offset-src '{s}'", .{jump_offset_src});
+                return error.InvalidCommandLine;
+            }
+        }
+
+        if (args.option("--register-dump-mode")) |register_dump_behavior| {
+            var found = false;
+            inline for (@typeInfo(chip8.RegisterDumpBehavior).Enum.fields) |enum_field| {
+                if (std.mem.eql(u8, enum_field.name, register_dump_behavior)) {
+                    state.cpu.register_dump_behavior = @intToEnum(chip8.RegisterDumpBehavior, enum_field.value);
+                    found = true;
+                }
+            }
+            if (found) {
+                log.debug("cpu.register_dump_behavior is '{}'", .{state.cpu.register_dump_behavior});
+            } else {
+                log.err("invalid value for --register-dump-mode '{s}'", .{register_dump_behavior});
                 return error.InvalidCommandLine;
             }
         }

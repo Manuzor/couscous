@@ -47,6 +47,16 @@ pub const ShiftSrc = enum {
     y, // Read from Vy, perform the shift, store the result in Vx.
 };
 
+pub const JumpOffsetSrc = enum {
+    @"0", // Offset is read from V0.
+    x, // Offset is read from Vx.
+};
+
+pub const RegisterDumpBehavior = enum {
+    immutable, // Do not modify I at all.
+    increment, // Increment I while dumping registers.
+};
+
 pub const Cpu = struct {
     v: [16]u8 = [_]u8{0} ** 16,
     dt: u8 = 0,
@@ -63,17 +73,12 @@ pub const Cpu = struct {
     waiting_for_input: bool = false,
 
     shift_src: ShiftSrc = .y,
+    jump_offset_src: JumpOffsetSrc = .@"0",
+    register_dump_behavior: RegisterDumpBehavior = .immutable,
 
     pub fn setPc(cpu: *Cpu, pc: u16) void {
-        const user_range = mem_size - user_base_address;
         cpu.pc = pc;
-        // wrap back into usable range.
-        if (cpu.pc < user_base_address) {
-            cpu.pc += user_range;
-        }
-        if (cpu.pc > mem_size) {
-            cpu.pc -= user_range;
-        }
+        cpu.pc = wrapAddress(pc, null);
     }
 
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
@@ -197,7 +202,12 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xB000 => { // Bnnn - JP V0, addr
-                cpu.setPc(@as(u16, nnn) + @as(u16, cpu.v[0]));
+                const src = switch(cpu.jump_offset_src) {
+                    .@"0" => 0,
+                    .x => x,
+                };
+                const pc = wrapAddress(@as(u16, nnn) + @as(u16, cpu.v[src]), null);
+                cpu.setPc(pc);
             },
             0xC000 => { // Cxkk - RND Vx, byte
                 cpu.v[x] = rand.int(u8) & kk;
@@ -205,18 +215,14 @@ pub const Cpu = struct {
             },
             0xD000 => { // Dxyn - DRW Vx, Vy, nibble
                 cpu.v[0xF] = 0;
-                var sprite_y: usize = 0;
+                var sprite_y: u16 = 0;
                 while (sprite_y < n) : (sprite_y += 1) {
-                    if (cpu.i + sprite_y >= memory.len) {
-                        log.warn("Dxyn - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + n });
-                        break;
-                    }
-                    const sprite_value = memory[cpu.i + sprite_y];
-                    var sprite_x: usize = 0;
+                    const sprite_value = memory[wrapAddress(cpu.i + sprite_y, null)];
+                    var sprite_x: u16 = 0;
                     while (sprite_x < 8) : (sprite_x += 1) {
                         const mask = @as(u8, 0b1000_0000) >> @intCast(u3, sprite_x);
                         if (sprite_value & mask != 0) {
-                            const display_x = (@as(usize, cpu.v[x]) + sprite_x) % display.width;
+                            const display_x = (@as(usize, cpu.v[x]) + @as(usize, sprite_x)) % display.width;
                             const display_y = (cpu.v[y] + sprite_y) % display.height;
                             const display_index = display_y * display.width + display_x;
                             var pixel = &display.data[display_index];
@@ -230,28 +236,24 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xE09E => { // Ex9E - SKP Vx
-                var next_pc = cpu.pc + 2;
-                const index = cpu.v[x];
-                if (index < keyboard.state.len) {
-                    if (keyboard.state[index]) {
-                        next_pc += 2;
-                    }
+                // #NOTE Only consider the lower 4 bits, i.e. values from 0 to 15 (inclusive) because we only have that
+                // many keys to check.
+                const index = cpu.v[x] & 0xF;
+                if (keyboard.state[index]) {
+                    cpu.setPc(cpu.pc + 4);
                 } else {
-                    log.warn("Ex9E - index '0x{x}' is out of range.", .{index});
+                    cpu.setPc(cpu.pc + 2);
                 }
-                cpu.setPc(next_pc);
             },
             0xE0A1 => { // ExA1 - SKNP Vx
-                var next_pc = cpu.pc + 2;
-                const index = cpu.v[x];
-                if (index < keyboard.state.len) {
-                    if (!keyboard.state[index]) {
-                        next_pc += 2;
-                    }
+                // #NOTE Only consider the lower 4 bits, i.e. values from 0 to 15 (inclusive) because we only have that
+                // many keys to check.
+                const index = cpu.v[x] & 0xF;
+                if (!keyboard.state[index]) {
+                    cpu.setPc(cpu.pc + 4);
                 } else {
-                    log.warn("ExA1 - index '0x{x}' is out of range.", .{index});
+                    cpu.setPc(cpu.pc + 2);
                 }
-                cpu.setPc(next_pc);
             },
             0xF007 => { // Fx07 - LD Vx, DT
                 cpu.v[x] = cpu.dt;
@@ -276,12 +278,7 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF01E => { // Fx1E - ADD I, Vx
-                cpu.v[0xF] = 0;
-                cpu.i += cpu.v[x];
-                if (cpu.i >= memory.len) {
-                    cpu.i -= user_base_address;
-                    cpu.v[0xF] = 1;
-                }
+                cpu.i = wrapAddress(cpu.i + cpu.v[x], &cpu.v[0xF]);
                 cpu.setPc(cpu.pc + 2);
             },
             0xF029 => { // Fx29 - LD F, Vx
@@ -291,30 +288,50 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF033 => { // Fx33 - LD B, Vx
-                if (cpu.i + 2 < memory.len) {
-                    memory[cpu.i + 0] = cpu.v[x] / 100;
-                    memory[cpu.i + 1] = (cpu.v[x] / 10) % 10;
-                    memory[cpu.i + 2] = cpu.v[x] % 10;
-                } else {
-                    log.warn("Fx33 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + 2 });
-                }
+                // #NOTE Wrap the address back the beginning of user-addressable memory on overflow.
+                const i = [_]usize{
+                    if (cpu.i + 0 < memory.len) cpu.i + 0 else user_base_address + (cpu.i + 0) - memory.len,
+                    if (cpu.i + 1 < memory.len) cpu.i + 1 else user_base_address + (cpu.i + 1) - memory.len,
+                    if (cpu.i + 2 < memory.len) cpu.i + 2 else user_base_address + (cpu.i + 2) - memory.len,
+                };
+                memory[i[0]] = cpu.v[x] / 100;
+                memory[i[1]] = (cpu.v[x] / 10) % 10;
+                memory[i[2]] = cpu.v[x] % 10;
                 cpu.setPc(cpu.pc + 2);
             },
             0xF055 => { // Fx55 - LD [I], Vx
-                const count = @as(usize, x) + 1;
-                if (cpu.i + count < memory.len) {
-                    mem.copy(u8, memory[cpu.i .. cpu.i + count], cpu.v[0..count]);
-                } else {
-                    log.warn("Fx55 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + count });
+                // #NOTE Wrap back around to user addressable memory if attempting to read/write past the end of RAM.
+                if (cpu.i >= memory.len) unreachable;
+                const count = @as(u16, x) + 1;
+                const left = std.math.min(@as(usize, count), memory.len - cpu.i);
+                const right = count - left;
+                mem.copy(u8, memory[cpu.i .. cpu.i + left], cpu.v[0..left]);
+                if (right > 0) {
+                    mem.copy(u8, memory[user_base_address .. user_base_address + right], cpu.v[left..count]);
+                }
+                switch (cpu.register_dump_behavior) {
+                    .immutable => {},
+                    .increment => {
+                        cpu.i = wrapAddress(cpu.i + count, &cpu.v[0xF]);
+                    },
                 }
                 cpu.setPc(cpu.pc + 2);
             },
             0xF065 => { // Fx65 - LD Vx, [I]
-                const count = @as(usize, x) + 1;
-                if (cpu.i + count < memory.len) {
-                    mem.copy(u8, cpu.v[0..count], memory[cpu.i .. cpu.i + count]);
-                } else {
-                    log.warn("Fx65 - range (0x{x}..0x{x}) is outside the valid memory region.", .{ cpu.i, cpu.i + count });
+                // #NOTE Wrap back around to user addressable memory if attempting to read/write past the end of RAM.
+                if (cpu.i >= memory.len) unreachable;
+                const count = @as(u16, x) + 1;
+                const left = std.math.min(@as(usize, count), memory.len - cpu.i);
+                const right = count - left;
+                mem.copy(u8, cpu.v[0..left], memory[cpu.i .. cpu.i + left]);
+                if (right > 0) {
+                    mem.copy(u8, cpu.v[left..count], memory[user_base_address .. user_base_address + right]);
+                }
+                switch (cpu.register_dump_behavior) {
+                    .immutable => {},
+                    .increment => {
+                        cpu.i = wrapAddress(cpu.i + count, &cpu.v[0xF]);
+                    },
                 }
                 cpu.setPc(cpu.pc + 2);
             },
@@ -325,3 +342,23 @@ pub const Cpu = struct {
         }
     }
 };
+
+fn wrapAddress(value: u16, carry_flag: ?*u8) u16 {
+    const min = user_base_address;
+    const max = mem_size;
+    const user_range = max - min;
+    var carry = false;
+    var result = value;
+    if (result < min) {
+        result += user_range;
+        carry = true;
+    }
+    if (result >= max) {
+        result -= user_range;
+        carry = true;
+    }
+    if (carry_flag) |flag| {
+        flag.* = if (carry) 1 else 0;
+    }
+    return result;
+}
