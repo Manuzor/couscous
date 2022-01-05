@@ -53,7 +53,7 @@ pub const Cpu = struct {
     st: u8 = 0,
 
     pc: u16 = user_base_address,
-    sp: u16 = 0,
+    sp: u4 = 0,
     stack: [16]u16 = undefined,
 
     i: u16 = 0,
