@@ -261,7 +261,7 @@ export fn init() void {
         log.debug("loaded ROM with {} bytes: '{s}'", .{ rom.len, rom_path });
     } else {
         log.warn("no ROM file specified", .{});
-        std.mem.copy(u8, state.memory_buf[chip8.user_base_address..], @embedFile("roms/NOROM.ch8"));
+        std.mem.copy(u8, state.memory_buf[chip8.user_base_address..], @embedFile("NOROM.ch8"));
     }
     _ = state.fetchOpcode();
 
