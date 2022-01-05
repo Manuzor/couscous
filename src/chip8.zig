@@ -53,7 +53,8 @@ pub const Cpu = struct {
     st: u8 = 0,
 
     pc: u16 = user_base_address,
-    sp: u16 = stack_base_address,
+    sp: u16 = 0,
+    stack: [16]u16 = undefined,
 
     i: u16 = 0,
 
@@ -97,24 +98,17 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x00EE => { // 00EE - RET
-                cpu.sp -= 1;
                 // #NOTE Handle stack underflow by wrapping.
-                if (cpu.sp < stack_base_address) {
-                    cpu.sp += stack_size;
-                }
-                const restored_pc = mem.readIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2]);
-                cpu.setPc(restored_pc + 2);
+                cpu.sp -%= 1;
+                cpu.setPc(cpu.stack[cpu.sp] + 2);
             },
             0x1000 => { // 1nnn - JP addr
                 cpu.setPc(nnn);
             },
             0x2000 => { // 2nnn - CALL addr
-                mem.writeIntSliceBig(u16, memory[cpu.sp .. cpu.sp + 2], cpu.pc);
-                cpu.sp += 1;
+                cpu.stack[cpu.sp] = cpu.pc;
                 // #NOTE Handle stack overflow by wrapping.
-                if (cpu.sp > stack_base_address + stack_size) {
-                    cpu.sp -= stack_size;
-                }
+                cpu.sp +%= 1;
                 cpu.setPc(nnn);
             },
             0x3000 => { // 3xkk - SE Vx, byte
