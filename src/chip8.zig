@@ -149,7 +149,7 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0x8003 => { // 8xy3 - XOR Vx, Vy
-                cpu.v[x] &= cpu.v[y];
+                cpu.v[x] ^= cpu.v[y];
                 cpu.setPc(cpu.pc + 2);
             },
             0x8004 => { // 8xy4 - ADD Vx, Vy
