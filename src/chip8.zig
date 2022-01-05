@@ -59,7 +59,8 @@ pub const Cpu = struct {
     i: u16 = 0,
 
     opcode: u16 = undefined,
-    step: u16 = 0,
+
+    waiting_for_input: bool = false,
 
     shift_src: ShiftSrc = .y,
 
@@ -73,7 +74,6 @@ pub const Cpu = struct {
         if (cpu.pc > mem_size) {
             cpu.pc -= user_range;
         }
-        cpu.step = 0;
     }
 
     pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
@@ -88,12 +88,8 @@ pub const Cpu = struct {
 
         const opcode_mask = opcode_mask_table[h];
 
-        const step = cpu.step;
-        cpu.step +%= 1;
-
         switch (opcode & opcode_mask) {
             0x00E0 => { // 00E0 - CLS
-                // #NOTE Could use `step` here but what's the point seeing the screen get cleared?
                 mem.set(u1, display.data, 0);
                 cpu.setPc(cpu.pc + 2);
             },
@@ -262,10 +258,11 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF00A => { // Fx0A - LD Vx, K
-                if (step == 0) {
+                if (!cpu.waiting_for_input) {
                     keyboard.block = true;
                 } else if (!keyboard.block) {
                     cpu.v[x] = keyboard.last;
+                    cpu.waiting_for_input = false;
                     cpu.setPc(cpu.pc + 2);
                 }
             },

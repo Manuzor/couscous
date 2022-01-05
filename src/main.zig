@@ -17,10 +17,10 @@ const chip8_asm = @import("chip8_asm.zig");
 const chip8_charmap = @import("chip8_charmap.zig");
 
 const max_frame_time = 1.0 / 30.0;
-// #TODO What frequency do we want to run the interpreter at?
-// const tick_duration = 1.0 / 500.0;
-// const tick_duration = 1.0 / 60.0;
-const tick_duration = 1.0 / 120.0;
+// #TODO What frequency do we want to run the interpreter at by default?
+// const default_tick_duration = 1.0 / 700.0;
+// const default_tick_duration = 1.0 / 120.0;
+const default_tick_duration = 1.0 / 60.0;
 const tick_epsilon = 0.001;
 const cpu_timer_interval = 1.0 / 60.0;
 const history_len = 16;
@@ -46,6 +46,7 @@ var global_state: struct {
     rng: std.rand.DefaultPrng = std.rand.DefaultPrng.init(0),
 
     tick_counter: u64 = 0,
+    tick_duration: f64 = default_tick_duration,
     tick_time_remaining: f64 = 0.0,
     cpu_timer_remaining: f64 = 0.0,
     cpu: chip8.Cpu = .{},
@@ -102,7 +103,7 @@ var global_state: struct {
         const index = (state.exec_counter -| 1);
         const last_pc = state.pc_history[index & (history_len - 1)];
         const last_opcode = state.opcode_history[index & (history_len - 1)];
-        return last_pc == cpu.pc and last_opcode == cpu.opcode and cpu.step == 0;
+        return last_pc == cpu.pc and last_opcode == cpu.opcode and !cpu.waiting_for_input;
     }
 } = .{};
 
@@ -331,8 +332,6 @@ export fn frame() void {
         sdtx.print("CPU pc={x:0>4} i={x:0>4} sp={x:0>4} dt={x:0>2} st={x:0>2}\n", .{ cpu.pc, cpu.i, cpu.sp, cpu.dt, cpu.st });
         sdtx.print("       0 1 2 3 4 5 6 7 8 9 A B C D E F\n", .{});
         sdtx.print("    v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
-        // #TODO Don't need to print the opcode here anymore because we have the history now.
-        sdtx.print("    opcode={x:0>4} step={}\n", .{ cpu.opcode, cpu.step });
     }
     if (keyboard.block) {
         sdtx.print("!!! waiting for input\n", .{});
@@ -354,9 +353,9 @@ export fn frame() void {
         }
 
         while (state.tick_time_remaining > -tick_epsilon) {
-            state.tick_time_remaining -= tick_duration;
+            state.tick_time_remaining -= state.tick_duration;
             cpu.tick(memory, display, keyboard, state.rng.random());
-            if (cpu.step == 0) {
+            if (!cpu.waiting_for_input) {
                 state.fetchOpcode();
             }
 
