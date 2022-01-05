@@ -2,8 +2,13 @@ const mem = @import("std").mem;
 const fmt = @import("std").fmt;
 const io = @import("std").io;
 const assert = @import("std").debug.assert;
-const StringHashMap = @import("std").StringHashMap;
 const chip8 = @import("chip8.zig");
+
+const Allocator = @import("std").mem.Allocator;
+const ArenaAllocator = @import("std").heap.ArenaAllocator;
+const FixedBufferAllocator = @import("std").heap.FixedBufferAllocator;
+const ArrayList = @import("std").ArrayList;
+const StringHashMap = @import("std").StringHashMap;
 
 pub fn opcodePrint(buffer: []u8, opcode: u16) ![]u8 {
     return fmt.bufPrint(buffer, "{X:0>4}", .{opcode});
@@ -102,11 +107,13 @@ pub const AssembleOptions = struct {
     file_name: ?[]const u8 = null,
 };
 
-pub fn assemble(allocator: mem.Allocator, input: []const u8, base_address: usize, writer: anytype, options: AssembleOptions, log: anytype) !void {
-    var label_map = StringHashMap(usize).init(allocator);
-    defer label_map.deinit();
-    try assemble_impl.parseCode(input, base_address, writer, &label_map, options, log, .label_prepass);
-    try assemble_impl.parseCode(input, base_address, writer, &label_map, options, log, .write);
+pub fn assemble(allocator: Allocator, input: []const u8, base_address: usize, writer: anytype, options: AssembleOptions, log: anytype) !void {
+    var subst_map = StringHashMap([]const u8).init(allocator);
+    defer subst_map.deinit();
+    var string_arena = ArenaAllocator.init(allocator);
+    defer string_arena.deinit();
+    try assemble_impl.parseCode(string_arena.allocator(), input, base_address, writer, &subst_map, options, log, .label_prepass);
+    try assemble_impl.parseCode(string_arena.allocator(), input, base_address, writer, &subst_map, options, log, .write);
 }
 
 const assemble_impl = struct {
@@ -271,7 +278,7 @@ const assemble_impl = struct {
         };
     }
 
-    fn parseCode(input: []const u8, base_address: usize, writer: anytype, label_map: *StringHashMap(usize), options: AssembleOptions, log: anytype, comptime mode: enum { label_prepass, write }) !void {
+    fn parseCode(str_allocator: Allocator, input: []const u8, base_address: usize, writer: anytype, subst_map: *StringHashMap([]const u8), options: AssembleOptions, log: anytype, comptime mode: enum { label_prepass, write }) !void {
         var line_iter = mem.tokenize(u8, input, "\r\n");
         var line_index: usize = 0;
         var address: usize = base_address;
@@ -296,7 +303,8 @@ const assemble_impl = struct {
                 switch (mode) {
                     .label_prepass => {
                         if (mem.startsWith(u8, instruction, ":")) {
-                            try label_map.put(instruction[1..], address);
+                            const address_str = try fmt.allocPrint(str_allocator, "{X}", .{address});
+                            try subst_map.put(instruction[1..], address_str);
                         } else if (mem.startsWith(u8, instruction, "0b")) {
                             address += @divExact((instruction.len - 2), 8);
                         } else if (mem.startsWith(u8, instruction, "0x")) {
@@ -309,15 +317,32 @@ const assemble_impl = struct {
                         if (mem.startsWith(u8, instruction, ":")) {
                             continue;
                         }
-                        var subst_buf: [64]u8 = undefined;
-                        var resolved = subst_buf[0..instruction.len];
-                        mem.copy(u8, &subst_buf, instruction);
-                        var kv_iterator = label_map.iterator();
-                        while (kv_iterator.next()) |kv| {
-                            var address_buf: [8]u8 = undefined;
-                            const address_str = try fmt.bufPrint(&address_buf, "{X}", .{kv.value_ptr.*});
-                            resolved = strReplace(u8, resolved, kv.key_ptr.*, address_str, &subst_buf);
+
+                        // log.debug("tokenizing '{s}'", .{instruction});
+
+                        // Run all tokens through the substitution map.
+                        const token_max_count = 4;
+                        var token_buf: [token_max_count * @sizeOf([]const u8)]u8 = undefined;
+                        var token_allocator = FixedBufferAllocator.init(&token_buf);
+                        var token_arr = ArrayList([]const u8).init(token_allocator.allocator());
+                        defer token_arr.deinit();
+                        try token_arr.ensureTotalCapacityPrecise(token_max_count);
+                        var token_iterator = mem.tokenize(u8, instruction, " ,");
+                        while (token_iterator.next()) |token| {
+                            var foo = try token_arr.addOne();
+                            foo.* = token;
+                            var kv_iterator = subst_map.iterator();
+                            while (kv_iterator.next()) |kv| {
+                                if (mem.eql(u8, foo.*, kv.key_ptr.*)) {
+                                    foo.* = kv.value_ptr.*;
+                                    break;
+                                }
+                            }
                         }
+                        var subst_buf: [64]u8 = undefined;
+                        var subst_allocator = FixedBufferAllocator.init(&subst_buf);
+                        var resolved = try mem.join(subst_allocator.allocator(), " ", token_arr.items);
+
                         if (mem.startsWith(u8, resolved, "0b")) {
                             // Raw binary number.
                             var value_index: usize = 2;
@@ -348,26 +373,3 @@ const assemble_impl = struct {
         }
     }
 };
-
-fn strReplace(comptime T: type, input: []const T, needle: []const T, replacement: []const T, output: []T) []T {
-    // Empty needle will loop until output buffer overflows.
-    assert(needle.len > 0);
-
-    var i: usize = 0;
-    var slide: usize = 0;
-    var replacements: usize = 0;
-    while (slide < input.len) {
-        if (mem.startsWith(T, input[slide..], needle)) {
-            mem.copy(T, output[i .. i + replacement.len], replacement);
-            i += replacement.len;
-            slide += needle.len;
-            replacements += 1;
-        } else {
-            output[i] = input[slide];
-            i += 1;
-            slide += 1;
-        }
-    }
-
-    return output[0..i];
-}
