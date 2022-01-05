@@ -1,0 +1,12 @@
+#######################
+# Display pressed key #
+#######################
+
+LD Va 1C
+LD Vb  D
+
+:LOOP
+LD V0 K
+LD F V0
+DRW Va Vb 5
+JP LOOP

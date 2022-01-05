@@ -259,6 +259,7 @@ pub const Cpu = struct {
             },
             0xF00A => { // Fx0A - LD Vx, K
                 if (!cpu.waiting_for_input) {
+                    cpu.waiting_for_input = true;
                     keyboard.block = true;
                 } else if (!keyboard.block) {
                     cpu.v[x] = keyboard.last;

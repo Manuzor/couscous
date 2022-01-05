@@ -103,7 +103,7 @@ var global_state: struct {
         const index = (state.exec_counter -| 1);
         const last_pc = state.pc_history[index & (history_len - 1)];
         const last_opcode = state.opcode_history[index & (history_len - 1)];
-        return last_pc == cpu.pc and last_opcode == cpu.opcode and !cpu.waiting_for_input;
+        return last_pc == cpu.pc and last_opcode == cpu.opcode;
     }
 } = .{};
 
@@ -264,7 +264,7 @@ export fn init() void {
         log.warn("no ROM file specified", .{});
         std.mem.copy(u8, state.memory_buf[chip8.user_base_address..], @embedFile("NOROM.ch8"));
     }
-    _ = state.fetchOpcode();
+    state.fetchOpcode();
 
     state.initialized = true;
 }
@@ -333,9 +333,6 @@ export fn frame() void {
         sdtx.print("       0 1 2 3 4 5 6 7 8 9 A B C D E F\n", .{});
         sdtx.print("    v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
     }
-    if (keyboard.block) {
-        sdtx.print("!!! waiting for input\n", .{});
-    }
 
     if (!state.pause and state.remaining_steps > 0) {
         state.tick_time_remaining += delta_time;
@@ -357,9 +354,8 @@ export fn frame() void {
             cpu.tick(memory, display, keyboard, state.rng.random());
             if (!cpu.waiting_for_input) {
                 state.fetchOpcode();
+                state.tick_counter +%= 1;
             }
-
-            state.tick_counter +%= 1;
 
             state.remaining_steps -= 1;
             if (state.remaining_steps == 0) {
@@ -370,7 +366,11 @@ export fn frame() void {
     }
 
     if (state.looping()) {
-        sdtx.print("loop\n", .{});
+        if (cpu.waiting_for_input) {
+            sdtx.print("waiting for input\n", .{});
+        } else {
+            sdtx.print("loop\n", .{});
+        }
     }
 
     {
@@ -511,7 +511,9 @@ export fn input(ev: ?*const sapp.Event) void {
                     if (key_code == layout[key_index]) {
                         state.keyboard.state[key_index] = key_pressed;
                         state.keyboard.last = key_index;
-                        state.keyboard.block = false;
+                        if (key_pressed) {
+                            state.keyboard.block = false;
+                        }
                         break;
                     }
                 }
