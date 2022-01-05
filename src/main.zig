@@ -337,7 +337,6 @@ export fn frame() void {
     if (!state.pause and state.remaining_steps > 0) {
         state.tick_time_remaining += delta_time;
 
-        // #TODO wrap this in the tick-loop below?
         state.cpu_timer_remaining -= delta_time;
         if (state.cpu_timer_remaining <= 0) {
             state.cpu_timer_remaining += cpu_timer_interval;
