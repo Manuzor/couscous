@@ -285,7 +285,9 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF029 => { // Fx29 - LD F, Vx
-                cpu.i = charmap_base_address + 5 * cpu.v[x];
+                // #NOTE We're only taking the lower 4 bits of VX, so if someone wanted the address of sprite 0xA3,
+                // they'll get the address of sprite 0x03.
+                cpu.i = charmap_base_address + 5 * (cpu.v[x] & 0xF);
                 cpu.setPc(cpu.pc + 2);
             },
             0xF033 => { // Fx33 - LD B, Vx
