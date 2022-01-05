@@ -276,7 +276,12 @@ pub const Cpu = struct {
                 cpu.setPc(cpu.pc + 2);
             },
             0xF01E => { // Fx1E - ADD I, Vx
+                cpu.v[0xF] = 0;
                 cpu.i += cpu.v[x];
+                if (cpu.i >= memory.len) {
+                    cpu.i -= user_base_address;
+                    cpu.v[0xF] = 1;
+                }
                 cpu.setPc(cpu.pc + 2);
             },
             0xF029 => { // Fx29 - LD F, Vx
