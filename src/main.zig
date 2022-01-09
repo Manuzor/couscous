@@ -16,17 +16,28 @@ const chip8 = @import("chip8.zig");
 const chip8_asm = @import("chip8_asm.zig");
 const chip8_charmap = @import("chip8_charmap.zig");
 
+const window_title_fmt = "couscous {s} // rom={}B dt=Ø{d:.3}s sim={}Hz";
 const max_frame_time = 1.0 / 30.0;
 // #TODO What frequency do we want to run the interpreter at by default?
-// const default_tick_duration = 1.0 / 700.0;
-// const default_tick_duration = 1.0 / 120.0;
-const default_tick_duration = 1.0 / 60.0;
-const tick_epsilon = 0.001;
-const cpu_timer_interval = 1.0 / 60.0;
-const history_len = 16;
+// const default_hz = 700;
+// const default_hz = 120;
+// const default_hz = 60;
+const default_hz = 120;
+const cpu_timer_hz = 60;
+const cooldown_tolerance = 0.001;
+const history_len = 32;
+const norom_file_path = "NOROM.ch8";
 
 const W = 64;
 const H = 32;
+
+const Snapshot = struct {
+    frame_index: u64,
+    tick_index: u64,
+    dt: u8,
+    pc: u16,
+    opcode: u16,
+};
 
 var global_state: struct {
     allocator: std.mem.Allocator = undefined,
@@ -34,6 +45,7 @@ var global_state: struct {
     initialized: bool = false,
     display_test_pattern: bool = false,
     rom_path: ?[]const u8 = null,
+    rom_size: usize = undefined,
 
     pause: bool = false,
     remaining_steps: u64 = std.math.maxInt(u64),
@@ -41,23 +53,26 @@ var global_state: struct {
     // laptime_store: u64 = 0,
     frame_timer: std.time.Timer = undefined,
     total_time_elapsed: f64 = 0.0,
+    step_button_down: bool = false,
 
-    // #TODO random seed?
-    rng: std.rand.DefaultPrng = std.rand.DefaultPrng.init(0),
+    rng_seed: ?u64 = null,
+    rng: std.rand.DefaultPrng = undefined,
+
+    delta_time_history: [60]f64 = [_]f64{0} ** 60,
 
     tick_counter: u64 = 0,
-    tick_duration: f64 = default_tick_duration,
-    tick_time_remaining: f64 = 0.0,
-    cpu_timer_remaining: f64 = 0.0,
+    tick_snapshots: [history_len]Snapshot = [_]Snapshot{undefined} ** history_len,
+    tick_hz_config: u64 = default_hz,
+    tick_hz: u64 = default_hz,
+    last_hz: u64 = 0,
+    tick_timer_cooldown: f64 = 0.0,
+    cpu_timer_cooldown: f64 = 0.0,
+
     cpu: chip8.Cpu = .{},
     memory_buf: [4096]u8 = [_]u8{0} ** 4096,
     display_buf: [H * W]u1 = [_]u1{0} ** (H * W),
     keyboard: chip8.Keyboard = .{},
     keyboard_layout: u8 = 0,
-
-    exec_counter: u64 = 0,
-    pc_history: [history_len]u16 = [_]u16{0} ** history_len,
-    opcode_history: [history_len]u16 = [_]u16{0} ** history_len,
 
     gfx: struct {
         bindings: sg.Bindings = .{},
@@ -71,39 +86,23 @@ var global_state: struct {
     } = .{},
 
     fn setPause(state: *@This(), pause: bool) void {
-        if (state.pause == pause) {
-            return;
-        }
-
         if (pause) {
-            log.debug("pause", .{});
             state.pause = true;
             state.remaining_steps = 1;
         } else {
-            log.debug("unpause", .{});
             state.pause = false;
             state.remaining_steps = std.math.maxInt(u64);
         }
     }
 
-    fn fetchOpcode(state: *@This()) void {
-        var cpu = &state.cpu;
-        var memory = &state.memory_buf;
-
-        cpu.opcode = std.mem.readIntSliceBig(u16, memory[cpu.pc..]);
-        if (!state.looping()) {
-            state.exec_counter +%= 1;
-            state.pc_history[state.exec_counter & (history_len - 1)] = cpu.pc;
-            state.opcode_history[state.exec_counter & (history_len - 1)] = cpu.opcode;
-        }
-    }
-
-    fn looping(state: @This()) bool {
-        const cpu = &state.cpu;
-        const index = (state.exec_counter -| 1);
-        const last_pc = state.pc_history[index & (history_len - 1)];
-        const last_opcode = state.opcode_history[index & (history_len - 1)];
-        return last_pc == cpu.pc and last_opcode == cpu.opcode;
+    fn takeSnapshot(state: @This()) Snapshot {
+        return .{
+            .frame_index = state.frame_counter,
+            .tick_index = state.tick_counter,
+            .dt = state.cpu.dt,
+            .pc = state.cpu.pc,
+            .opcode = chip8.readOpcode(&state.memory_buf, state.cpu.pc),
+        };
     }
 } = .{};
 
@@ -188,12 +187,13 @@ pub fn aspectRatioFit(window_width: f32, window_height: f32, render_width: f32, 
 
 export fn init() void {
     var state = &global_state;
-    _ = state;
 
     state.frame_timer = std.time.Timer.start() catch |err| {
         log.err("{} - Unable to start timer", .{err});
         return;
     };
+
+    state.rng = std.rand.DefaultPrng.init(state.rng_seed orelse std.crypto.random.int(u64));
 
     sg.setup(.{
         .context = sgapp.context(),
@@ -255,23 +255,24 @@ export fn init() void {
 
     std.mem.copy(u8, state.memory_buf[chip8.charmap_base_address .. chip8.charmap_base_address + chip8.charmap_size], &chip8_charmap.charmap);
 
-    if (state.rom_path) |rom_path| {
+    state.rom_size = if (state.rom_path) |rom_path| blk: {
         const rom = loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
             return;
         };
         log.debug("loaded ROM with {} bytes: '{s}'", .{ rom.len, rom_path });
-    } else {
+        break :blk rom.len;
+    } else blk: {
         log.warn("no ROM file specified", .{});
-        std.mem.copy(u8, state.memory_buf[chip8.user_base_address..], @embedFile("NOROM.ch8"));
-    }
-    state.fetchOpcode();
+        const rom = @embedFile(norom_file_path);
+        std.mem.copy(u8, state.memory_buf[chip8.user_base_address..], rom);
+        break :blk rom.len;
+    };
 
     state.initialized = true;
 }
 
 export fn cleanup() void {
     var state = &global_state;
-    _ = state;
 
     if (state.initialized) {
         sdtx.shutdown();
@@ -297,12 +298,15 @@ export fn frame() void {
     };
     var keyboard = &state.keyboard;
 
-    state.frame_counter += 1;
+    defer state.frame_counter += 1;
 
     // run at a fixed tick rate regardless of frame rate
     // #NOTE clamp frame time so debug breakpoints don't screw up timing.
-    const delta_time = std.math.min(@intToFloat(f64, state.frame_timer.lap()) * std.time.ns_per_s, max_frame_time);
+    const delta_time = std.math.min(@intToFloat(f64, state.frame_timer.lap()) / std.time.ns_per_s, max_frame_time);
     state.total_time_elapsed += delta_time;
+
+    const delta_time_history_index = (state.frame_counter) % state.delta_time_history.len;
+    state.delta_time_history[delta_time_history_index] = delta_time;
 
     const canvas_width = sapp.widthf();
     const canvas_height = sapp.heightf();
@@ -314,19 +318,23 @@ export fn frame() void {
     if (state.pause) {
         sdtx.setContext(sdtx.defaultContext());
         const debug_font_scale = 1.0 / 2.0;
-        sdtx.canvas(debug_font_scale * render_width, debug_font_scale * render_height);
+        sdtx.canvas(debug_font_scale * canvas_width, debug_font_scale * canvas_height);
         sdtx.origin(3, 3);
         sdtx.font(0);
     } else {
         sdtx.setContext(.{});
     }
 
-    sdtx.print("tick #{}\n", .{state.tick_counter});
     if (state.pause) {
         sdtx.print("=== PAUSED ===\n", .{});
+        sdtx.print("Executing at {}Hz\n", .{state.tick_hz});
+        sdtx.print("  press 0 to reset to {}Hz\n", .{state.tick_hz_config});
+        sdtx.print("  press 7|8|9 to increase by 1|10|60Hz\n", .{});
+        sdtx.print("  hold SHIFT to decrease, hold ALT to multiply the addend by 10\n", .{});
         sdtx.print("press SPACE to step {} times\n", .{state.remaining_steps});
-        sdtx.print("press 1|2|3|4 to increase step by 1|10|100|{}\n", .{(H * W) / 8});
-        sdtx.print("    hold SHIFT to decrement, hold ALT to set\n", .{});
+        sdtx.print("  press 1|2|3|4 to increase step by 1|10|100|{}\n", .{(H * W) / 8});
+        sdtx.print("  hold SHIFT to decrement, hold ALT to set\n", .{});
+        sdtx.print("hold J to run until released\n", .{});
         sdtx.print("press ENTER to unpause\n", .{});
         sdtx.print("\n", .{});
         sdtx.print("CPU pc={x:0>4} i={x:0>4} sp={x:0>4} dt={x:0>2} st={x:0>2}\n", .{ cpu.pc, cpu.i, cpu.sp, cpu.dt, cpu.st });
@@ -334,64 +342,90 @@ export fn frame() void {
         sdtx.print("    v={x}\n", .{std.fmt.fmtSliceHexLower(&cpu.v)});
     }
 
-    if (!state.pause and state.remaining_steps > 0) {
-        state.tick_time_remaining += delta_time;
+    var allow_tick = !state.pause and state.remaining_steps > 0;
+    if (state.pause and state.step_button_down) {
+        allow_tick = true;
+    }
 
-        state.cpu_timer_remaining -= delta_time;
-        if (state.cpu_timer_remaining <= 0) {
-            state.cpu_timer_remaining += cpu_timer_interval;
-            if (cpu.dt > 0) {
-                cpu.dt -= 1;
-            }
-            if (cpu.st > 0) {
-                cpu.st -= 1;
-            }
+    if (allow_tick) {
+        state.cpu_timer_cooldown -= delta_time;
+        const cpu_timer_interval = 1.0 / @intToFloat(f64, cpu_timer_hz);
+        while (state.cpu_timer_cooldown < cooldown_tolerance) {
+            state.cpu_timer_cooldown += cpu_timer_interval;
+            cpu.dt -|= 1;
+            cpu.st -|= 1;
         }
 
-        while (state.tick_time_remaining > -tick_epsilon) {
-            state.tick_time_remaining -= state.tick_duration;
-            cpu.tick(memory, display, keyboard, state.rng.random());
-            if (!cpu.waiting_for_input) {
-                state.fetchOpcode();
-                state.tick_counter +%= 1;
+        state.tick_timer_cooldown -= delta_time;
+        const tick_interval = 1 / @intToFloat(f64, state.tick_hz);
+        while (state.tick_timer_cooldown < cooldown_tolerance) {
+            state.tick_timer_cooldown += tick_interval;
+
+            if (keyboard.block) {
+                // Wait for input before ticking again.
+                continue;
             }
 
-            state.remaining_steps -= 1;
+            if (!cpu.isLooping(memory)) { // There's no point in ticking anymore if we're stuck in an endless loop.
+                const snapshot = state.takeSnapshot();
+                var save_snapshot = true;
+
+                const was_waiting_for_input = cpu.waiting_for_input;
+                cpu.tick(memory, display, keyboard, state.rng.random());
+
+                if (!was_waiting_for_input and cpu.waiting_for_input) {
+                    save_snapshot = false;
+                }
+
+                if (save_snapshot) {
+                    const snapshot_index = (state.tick_counter) % history_len;
+                    state.tick_snapshots[snapshot_index] = snapshot;
+                    state.tick_counter +%= 1;
+                }
+            }
+
+            state.remaining_steps -|= 1;
             if (state.remaining_steps == 0) {
                 state.setPause(true);
-                break;
+                if (!state.step_button_down) {
+                    break;
+                }
             }
         }
     }
 
-    if (state.looping()) {
-        if (cpu.waiting_for_input) {
-            sdtx.print("waiting for input\n", .{});
-        } else {
-            sdtx.print("loop\n", .{});
-        }
+    if (keyboard.block) {
+        sdtx.print("waiting for input\n", .{});
+    } else if (cpu.isLooping(memory)) {
+        sdtx.print("loop\n", .{});
     }
 
-    {
-        sdtx.print("\n#Exec PC   OPCODE", .{});
-        var offset: usize = 0;
-        while (offset < history_len) : (offset += 1) {
-            const exec_index = state.exec_counter -| offset;
-            const index = exec_index & (history_len - 1);
-            const opcode = state.opcode_history[index];
-            var buf: [128]u8 = undefined;
+    if (state.pause) {
+        sdtx.print("\nFrame  Tick DT PC   OPCODE", .{});
+        const util = struct {
+            fn printSnapshot(snapshot: Snapshot) void {
+                sdtx.print("\n{:>5} {:>5} {X:0>2} {X:0>4} {X:0>4} - ", .{ snapshot.frame_index, snapshot.tick_index, snapshot.dt, snapshot.pc, snapshot.opcode });
+                var buf: [64]u8 = undefined;
+                var buf_stream = std.io.fixedBufferStream(&buf);
+                if (chip8_asm.disassembleOpcode(snapshot.opcode, buf_stream.writer()) catch unreachable) {
+                    sdtx.print("{s}", .{buf_stream.getWritten()});
+                } else {
+                    sdtx.print("?", .{});
+                }
+            }
+        };
+        util.printSnapshot(state.takeSnapshot());
+        const sample_count = std.math.min(state.tick_counter, state.tick_snapshots.len);
+        var sample_index = state.tick_counter % state.tick_snapshots.len;
+        var iter: usize = 0;
+        while (iter < sample_count) : (iter += 1) {
+            if (sample_index == 0) {
+                sample_index = sample_count;
+            }
+            sample_index -= 1;
 
-            var opcode_str_stream = std.io.fixedBufferStream(buf[0..64]);
-            std.fmt.format(opcode_str_stream.writer(), "{X:0>4}", .{opcode}) catch unreachable;
-            const opcode_str = opcode_str_stream.getWritten();
-
-            var opcode_desc_stream = std.io.fixedBufferStream(buf[64..]);
-            const opcode_desc = if (chip8_asm.disassembleOpcode(opcode, opcode_desc_stream.writer()) catch unreachable)
-                opcode_desc_stream.getWritten()
-            else
-                opcode_str;
-
-            sdtx.print("\n{:>5} {x:0>4} {s} - {s}", .{ exec_index, state.pc_history[index], opcode_str, opcode_desc });
+            const snapshot = state.tick_snapshots[sample_index];
+            util.printSnapshot(snapshot);
         }
     }
 
@@ -426,34 +460,53 @@ export fn frame() void {
         };
         audio.sample_index += 1;
     }
+
+    if (delta_time_history_index == 0 or state.last_hz != state.tick_hz) blk: {
+        const sample_count = std.math.min(state.frame_counter, state.delta_time_history.len);
+        const tail_count = std.math.min(sample_count, state.delta_time_history.len - delta_time_history_index);
+        const head_count = sample_count - tail_count;
+        var sum: f64 = 0;
+        for (state.delta_time_history[delta_time_history_index .. delta_time_history_index + tail_count]) |value| {
+            sum += value;
+        }
+        for (state.delta_time_history[0..head_count]) |value| {
+            sum += value;
+        }
+        const delta_time_avg = sum / @intToFloat(f64, sample_count);
+
+        var buf: [128]u8 = undefined;
+        const rom_path = std.fs.path.basename(state.rom_path orelse norom_file_path);
+        var new_title = std.fmt.bufPrintZ(&buf, window_title_fmt, .{ rom_path, state.rom_size, delta_time_avg, state.tick_hz }) catch break :blk;
+        sapp.setWindowTitle(new_title);
+        state.last_hz = state.tick_hz;
+    }
 }
 
 export fn input(ev: ?*const sapp.Event) void {
     var state = &global_state;
-    _ = state;
 
     const event = ev.?;
     if ((event.type == .KEY_DOWN) or (event.type == .KEY_UP)) {
         const alt = event.modifiers & sapp.modifier_alt != 0;
         const shift = event.modifiers & sapp.modifier_shift != 0;
-        const key_pressed = event.type == .KEY_DOWN;
+        const key_down = event.type == .KEY_DOWN;
         const key_repeat = event.key_repeat;
         const key_code = event.key_code;
 
         switch (key_code) { // Handle host input first, regardless of state.
             .ESCAPE => {
-                if (key_pressed and !key_repeat) {
+                if (key_down and !key_repeat) {
                     log.debug("exiting - ESCAPE was pressed", .{});
                     sapp.quit();
                 }
             },
             .ENTER => {
-                if (key_pressed and !key_repeat) {
+                if (key_down and !key_repeat) {
                     state.setPause(false);
                 }
             },
             .SPACE => {
-                if (key_pressed) {
+                if (key_down) {
                     if (state.pause) {
                         log.debug("single step", .{});
                         state.pause = false;
@@ -462,42 +515,87 @@ export fn input(ev: ?*const sapp.Event) void {
                     }
                 }
             },
+            .J => {
+                state.step_button_down = key_down;
+            },
+            .T => {
+                if (key_down and !key_repeat) {
+                    var buf: [4096]u8 = undefined;
+                    var buf_index: usize = 0;
+                    const sample_count = std.math.min(state.frame_counter, state.delta_time_history.len);
+                    var sample_index = state.frame_counter % state.delta_time_history.len;
+                    var iter: usize = 0;
+                    while (iter < sample_count) : (iter += 1) {
+                        if (sample_index == 0) {
+                            sample_index = sample_count;
+                        }
+                        sample_index -= 1;
+                        buf_index += (std.fmt.bufPrint(buf[buf_index..], "\n  frame {:>5}: {d:>6.3}", .{ state.frame_counter - iter -| 1, state.delta_time_history[sample_index] }) catch unreachable).len;
+                    }
+                    log.debug("delta time history:{s}", .{buf[0..buf_index]});
+                }
+            },
             else => {},
         }
 
-        // Handle pause input.
-        if (state.pause) {
-            var step_input: u64 = 0;
-            if (key_pressed) {
-                switch (key_code) {
-                    ._1 => {
-                        step_input = 1;
-                    },
-                    ._2 => {
-                        step_input = 10;
-                    },
-                    ._3 => {
-                        step_input = 100;
-                    },
-                    ._4 => {
-                        step_input = H * W / 8;
-                    },
-                    else => {},
+        // Debug input
+        var step_input: u64 = 0;
+        var hz_input: u64 = 0;
+        if (key_down) {
+            switch (key_code) {
+                ._1 => {
+                    step_input = 1;
+                },
+                ._2 => {
+                    step_input = 10;
+                },
+                ._3 => {
+                    step_input = 100;
+                },
+                ._4 => {
+                    step_input = H * W / 8;
+                },
+
+                ._0 => {
+                    state.tick_hz = state.tick_hz_config;
+                },
+                ._7 => {
+                    hz_input += 1;
+                },
+                ._8 => {
+                    hz_input += 10;
+                },
+                ._9 => {
+                    hz_input += default_hz;
+                },
+                else => {},
+            }
+        }
+        if (state.pause and step_input != 0) {
+            if (alt) {
+                state.remaining_steps = step_input;
+            } else {
+                if (shift) {
+                    state.remaining_steps -|= step_input;
+                    if (state.remaining_steps == 0) {
+                        state.remaining_steps = 1;
+                    }
+                } else {
+                    state.remaining_steps += step_input;
                 }
             }
-            if (step_input != 0) {
-                if (alt) {
-                    state.remaining_steps = step_input;
-                } else {
-                    if (shift) {
-                        state.remaining_steps -|= step_input;
-                        if (state.remaining_steps == 0) {
-                            state.remaining_steps = 1;
-                        }
-                    } else {
-                        state.remaining_steps += step_input;
-                    }
+        }
+        if (hz_input != 0) {
+            if (alt) {
+                hz_input *= 10;
+            }
+            if (shift) {
+                state.tick_hz -|= hz_input;
+                if (state.tick_hz == 0) {
+                    state.tick_hz = 1;
                 }
+            } else {
+                state.tick_hz += hz_input;
             }
         }
 
@@ -508,9 +606,9 @@ export fn input(ev: ?*const sapp.Event) void {
                 var key_index: u8 = 0x0;
                 while (key_index <= 0xF) : (key_index += 1) {
                     if (key_code == layout[key_index]) {
-                        state.keyboard.state[key_index] = key_pressed;
+                        state.keyboard.state[key_index] = key_down;
                         state.keyboard.last = key_index;
-                        if (key_pressed) {
+                        if (key_down) {
                             state.keyboard.block = false;
                         }
                         break;
@@ -546,14 +644,16 @@ pub fn main() anyerror!void {
 
     {
         const params = comptime [_]clap.Param(clap.Help){
-            clap.parseParam("-h, --help                   Display this help and exit") catch unreachable,
             clap.parseParam("-p, --pause                  Start in pause mode") catch unreachable,
-            clap.parseParam("--nocls                      Do not start with a cleared display.") catch unreachable,
-            clap.parseParam("--dis <OUT_FILE>             Disassemble the <ROM_FILE> and write to <OUT_FILE>.") catch unreachable,
-            clap.parseParam("--asm <IN_FILE>              Assemble <IN_FILE> and write to <ROM_FILE>.") catch unreachable,
+            clap.parseParam("--hz <HZ>                    Number of instructions executed per second, i.e. the simulation speed. Default: " ++ std.fmt.comptimePrint("{}", .{default_hz})) catch unreachable,
             clap.parseParam("--shift-src <SRC>            Behavior of the shift instructions (8xy6/8xy7). Valid values are 'x' or 'y'. Default: 'y'") catch unreachable,
             clap.parseParam("--jump-offset-src <MODE>     Behavior of the jump instructions with register offset (Bnnn). Valid values are '0' or 'x'. Default: '0'") catch unreachable,
             clap.parseParam("--register-dump-mode <MODE>  Behavior of the register load and store instructions (Fx55/Fx65). Valid values are 'immutable' or 'increment'. Default: 'immutable'") catch unreachable,
+            clap.parseParam("--dis <OUT_FILE>             Disassemble the <ROM_FILE> and write to <OUT_FILE>.") catch unreachable,
+            clap.parseParam("--asm <IN_FILE>              Assemble <IN_FILE> and write to <ROM_FILE>.") catch unreachable,
+            clap.parseParam("--seed <SEED>                Unsigned 64-bit integer seed value used to initialize the PRNG.") catch unreachable,
+            clap.parseParam("--nocls                      Do not start with a cleared display.") catch unreachable,
+            clap.parseParam("-h, --help                   Display this help and exit") catch unreachable,
             clap.parseParam("<ROM_FILE>                Path to a ROM file to load") catch unreachable,
         };
         var diag = clap.Diagnostic{};
@@ -700,6 +800,25 @@ pub fn main() anyerror!void {
                 return error.InvalidCommandLine;
             }
         }
+
+        if (args.option("--hz")) |hz_option| {
+            state.tick_hz_config = std.fmt.parseInt(u64, hz_option, 0) catch |err| {
+                log.err("invalid value --hz '{s}' ({}).", .{ hz_option, err });
+                return err;
+            };
+            if (state.tick_hz_config == 0) {
+                log.err("zero is not a valid value for --hz.", .{});
+                return error.InvalidCommandLine;
+            }
+            state.tick_hz = state.tick_hz_config;
+        }
+
+        if (args.option("--seed")) |seed_str| {
+            state.rng_seed = std.fmt.parseInt(u64, seed_str, 0) catch |err| {
+                log.err("invalid value --seed '{s}' ({}).", .{ seed_str, err });
+                return err;
+            };
+        }
     }
 
     sapp.run(.{
@@ -709,7 +828,6 @@ pub fn main() anyerror!void {
         .cleanup_cb = cleanup,
         .width = 20 * W,
         .height = 20 * H,
-        .window_title = "couscous // CHIP-8 interpreter // written in zig // powered by sokol",
     });
 }
 

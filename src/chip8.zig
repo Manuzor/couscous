@@ -1,7 +1,9 @@
 const std = @import("std");
 const mem = std.mem;
+const math = std.math;
 const log = std.log.scoped(.chip8);
-const root = @import("root");
+
+const Random = std.rand.Random;
 
 pub const charmap_base_address = 0x0000;
 pub const charmap_size = 0x0050;
@@ -68,21 +70,16 @@ pub const Cpu = struct {
 
     i: u16 = 0,
 
-    opcode: u16 = undefined,
-
     waiting_for_input: bool = false,
 
     shift_src: ShiftSrc = .y,
     jump_offset_src: JumpOffsetSrc = .@"0",
     register_dump_behavior: RegisterDumpBehavior = .immutable,
 
-    pub fn setPc(cpu: *Cpu, pc: u16) void {
-        cpu.pc = pc;
-        cpu.pc = wrapAddress(pc, null);
-    }
-
-    pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: std.rand.Random) void {
-        const opcode = cpu.opcode;
+    pub fn tick(cpu: *Cpu, memory: []u8, display: Display, keyboard: *Keyboard, rand: Random) void {
+        const opcode = readOpcode(memory, cpu.pc);
+        var next_pc = cpu.pc + 2;
+        defer cpu.pc = wrapAddress(next_pc, null);
 
         const h = @truncate(u4, opcode >> 12);
         const x = @truncate(u4, opcode >> 8);
@@ -92,80 +89,64 @@ pub const Cpu = struct {
         const nnn = @truncate(u12, opcode);
 
         const opcode_mask = opcode_mask_table[h];
-
         switch (opcode & opcode_mask) {
             0x00E0 => { // 00E0 - CLS
                 mem.set(u1, display.data, 0);
-                cpu.setPc(cpu.pc + 2);
             },
             0x00EE => { // 00EE - RET
                 // #NOTE Handle stack underflow by wrapping.
                 cpu.sp -%= 1;
-                cpu.setPc(cpu.stack[cpu.sp] + 2);
+                next_pc = cpu.stack[cpu.sp];
             },
             0x1000 => { // 1nnn - JP addr
-                cpu.setPc(nnn);
+                next_pc = nnn;
             },
             0x2000 => { // 2nnn - CALL addr
-                cpu.stack[cpu.sp] = cpu.pc;
+                cpu.stack[cpu.sp] = next_pc;
                 // #NOTE Handle stack overflow by wrapping.
                 cpu.sp +%= 1;
-                cpu.setPc(nnn);
+                next_pc = nnn;
             },
             0x3000 => { // 3xkk - SE Vx, byte
                 if (cpu.v[x] == kk) {
-                    cpu.setPc(cpu.pc + 4);
-                } else {
-                    cpu.setPc(cpu.pc + 2);
+                    next_pc += 2;
                 }
             },
             0x4000 => { // 4xkk - SNE Vx, byte
                 if (cpu.v[x] != kk) {
-                    cpu.setPc(cpu.pc + 4);
-                } else {
-                    cpu.setPc(cpu.pc + 2);
+                    next_pc += 2;
                 }
             },
             0x5000 => { // 5xy0 - SE Vx, Vy
                 if (cpu.v[x] == cpu.v[y]) {
-                    cpu.setPc(cpu.pc + 4);
-                } else {
-                    cpu.setPc(cpu.pc + 2);
+                    next_pc += 2;
                 }
             },
             0x6000 => { // 6xkk - LD Vx, byte
                 cpu.v[x] = kk;
-                cpu.setPc(cpu.pc + 2);
             },
             0x7000 => { // 7xkk - ADD Vx, byte
                 cpu.v[x] +%= kk;
-                cpu.setPc(cpu.pc + 2);
             },
             0x8000 => { // 8xy0 - LD Vx, Vy
                 cpu.v[x] = cpu.v[y];
-                cpu.setPc(cpu.pc + 2);
             },
             0x8001 => { // 8xy1 - OR Vx, Vy
                 cpu.v[x] |= cpu.v[y];
-                cpu.setPc(cpu.pc + 2);
             },
             0x8002 => { // 8xy2 - AND Vx, Vy
                 cpu.v[x] &= cpu.v[y];
-                cpu.setPc(cpu.pc + 2);
             },
             0x8003 => { // 8xy3 - XOR Vx, Vy
                 cpu.v[x] ^= cpu.v[y];
-                cpu.setPc(cpu.pc + 2);
             },
             0x8004 => { // 8xy4 - ADD Vx, Vy
                 const carry = @addWithOverflow(u8, cpu.v[x], cpu.v[y], &cpu.v[x]);
                 cpu.v[0xF] = if (carry) 1 else 0;
-                cpu.setPc(cpu.pc + 2);
             },
             0x8005 => { // 8xy5 - SUB Vx, Vy
                 cpu.v[0xF] = if (cpu.v[x] > cpu.v[y]) 1 else 0;
                 cpu.v[x] -%= cpu.v[y];
-                cpu.setPc(cpu.pc + 2);
             },
             0x8006 => { // 8xy6 - SHR Vx {, Vy}
                 const src = switch (cpu.shift_src) {
@@ -174,12 +155,10 @@ pub const Cpu = struct {
                 };
                 cpu.v[0xF] = @truncate(u1, cpu.v[src]);
                 cpu.v[x] = cpu.v[src] >> 1;
-                cpu.setPc(cpu.pc + 2);
             },
             0x8007 => { // 8xy7 - SUBN Vx, Vy
                 cpu.v[0xF] = if (cpu.v[y] > cpu.v[x]) 1 else 0;
                 cpu.v[x] = cpu.v[y] -% cpu.v[x];
-                cpu.setPc(cpu.pc + 2);
             },
             0x800E => { // 8xyE - SHL Vx {, Vy}
                 const src = switch (cpu.shift_src) {
@@ -188,36 +167,30 @@ pub const Cpu = struct {
                 };
                 cpu.v[0xF] = @truncate(u1, cpu.v[src] >> 7);
                 cpu.v[x] = cpu.v[src] << 1;
-                cpu.setPc(cpu.pc + 2);
             },
             0x9000 => { // 9xy0 - SNE Vx, Vy
                 if (cpu.v[x] == cpu.v[y]) {
-                    cpu.setPc(cpu.pc + 4);
-                } else {
-                    cpu.setPc(cpu.pc + 2);
+                    next_pc += 2;
                 }
             },
             0xA000 => { // Annn - LD I, addr
                 cpu.i = nnn;
-                cpu.setPc(cpu.pc + 2);
             },
             0xB000 => { // Bnnn - JP V0, addr
-                const src = switch(cpu.jump_offset_src) {
+                const src = switch (cpu.jump_offset_src) {
                     .@"0" => 0,
                     .x => x,
                 };
-                const pc = wrapAddress(@as(u16, nnn) + @as(u16, cpu.v[src]), null);
-                cpu.setPc(pc);
+                next_pc = @as(u16, nnn) + @as(u16, cpu.v[src]);
             },
             0xC000 => { // Cxkk - RND Vx, byte
                 cpu.v[x] = rand.int(u8) & kk;
-                cpu.setPc(cpu.pc + 2);
             },
             0xD000 => { // Dxyn - DRW Vx, Vy, nibble
                 cpu.v[0xF] = 0;
                 var sprite_y: u16 = 0;
                 while (sprite_y < n) : (sprite_y += 1) {
-                    const sprite_value = memory[wrapAddress(cpu.i + sprite_y, null)];
+                    const sprite_value = memory[cpu.i + sprite_y];
                     var sprite_x: u16 = 0;
                     while (sprite_x < 8) : (sprite_x += 1) {
                         const mask = @as(u8, 0b1000_0000) >> @intCast(u3, sprite_x);
@@ -233,16 +206,13 @@ pub const Cpu = struct {
                         }
                     }
                 }
-                cpu.setPc(cpu.pc + 2);
             },
             0xE09E => { // Ex9E - SKP Vx
                 // #NOTE Only consider the lower 4 bits, i.e. values from 0 to 15 (inclusive) because we only have that
                 // many keys to check.
                 const index = cpu.v[x] & 0xF;
                 if (keyboard.state[index]) {
-                    cpu.setPc(cpu.pc + 4);
-                } else {
-                    cpu.setPc(cpu.pc + 2);
+                    next_pc += 2;
                 }
             },
             0xE0A1 => { // ExA1 - SKNP Vx
@@ -250,42 +220,38 @@ pub const Cpu = struct {
                 // many keys to check.
                 const index = cpu.v[x] & 0xF;
                 if (!keyboard.state[index]) {
-                    cpu.setPc(cpu.pc + 4);
-                } else {
-                    cpu.setPc(cpu.pc + 2);
+                    next_pc += 2;
                 }
             },
             0xF007 => { // Fx07 - LD Vx, DT
                 cpu.v[x] = cpu.dt;
-                cpu.setPc(cpu.pc + 2);
             },
             0xF00A => { // Fx0A - LD Vx, K
                 if (!cpu.waiting_for_input) {
                     cpu.waiting_for_input = true;
                     keyboard.block = true;
-                } else if (!keyboard.block) {
-                    cpu.v[x] = keyboard.last;
+                    next_pc = cpu.pc;
+                } else {
+                    if (keyboard.block) {
+                        unreachable;
+                    }
                     cpu.waiting_for_input = false;
-                    cpu.setPc(cpu.pc + 2);
+                    cpu.v[x] = keyboard.last;
                 }
             },
             0xF015 => { // Fx15 - LD DT, Vx
                 cpu.dt = cpu.v[x];
-                cpu.setPc(cpu.pc + 2);
             },
             0xF018 => { // Fx18 - LD ST, Vx
                 cpu.st = cpu.v[x];
-                cpu.setPc(cpu.pc + 2);
             },
             0xF01E => { // Fx1E - ADD I, Vx
                 cpu.i = wrapAddress(cpu.i + cpu.v[x], &cpu.v[0xF]);
-                cpu.setPc(cpu.pc + 2);
             },
             0xF029 => { // Fx29 - LD F, Vx
                 // #NOTE We're only taking the lower 4 bits of VX, so if someone wanted the address of sprite 0xA3,
                 // they'll get the address of sprite 0x03.
                 cpu.i = charmap_base_address + 5 * (cpu.v[x] & 0xF);
-                cpu.setPc(cpu.pc + 2);
             },
             0xF033 => { // Fx33 - LD B, Vx
                 // #NOTE Wrap the address back the beginning of user-addressable memory on overflow.
@@ -297,13 +263,12 @@ pub const Cpu = struct {
                 memory[i[0]] = cpu.v[x] / 100;
                 memory[i[1]] = (cpu.v[x] / 10) % 10;
                 memory[i[2]] = cpu.v[x] % 10;
-                cpu.setPc(cpu.pc + 2);
             },
             0xF055 => { // Fx55 - LD [I], Vx
                 // #NOTE Wrap back around to user addressable memory if attempting to read/write past the end of RAM.
                 if (cpu.i >= memory.len) unreachable;
                 const count = @as(u16, x) + 1;
-                const left = std.math.min(@as(usize, count), memory.len - cpu.i);
+                const left = math.min(@as(usize, count), memory.len - cpu.i);
                 const right = count - left;
                 mem.copy(u8, memory[cpu.i .. cpu.i + left], cpu.v[0..left]);
                 if (right > 0) {
@@ -315,13 +280,12 @@ pub const Cpu = struct {
                         cpu.i = wrapAddress(cpu.i + count, &cpu.v[0xF]);
                     },
                 }
-                cpu.setPc(cpu.pc + 2);
             },
             0xF065 => { // Fx65 - LD Vx, [I]
                 // #NOTE Wrap back around to user addressable memory if attempting to read/write past the end of RAM.
                 if (cpu.i >= memory.len) unreachable;
                 const count = @as(u16, x) + 1;
-                const left = std.math.min(@as(usize, count), memory.len - cpu.i);
+                const left = math.min(@as(usize, count), memory.len - cpu.i);
                 const right = count - left;
                 mem.copy(u8, cpu.v[0..left], memory[cpu.i .. cpu.i + left]);
                 if (right > 0) {
@@ -333,15 +297,41 @@ pub const Cpu = struct {
                         cpu.i = wrapAddress(cpu.i + count, &cpu.v[0xF]);
                     },
                 }
-                cpu.setPc(cpu.pc + 2);
             },
             else => {
                 log.err("unknown opcode '0x{x}' (mask is '0x{x}')", .{ opcode, opcode_mask });
-                cpu.setPc(cpu.pc + 2);
             },
         }
     }
+
+    // check the current opcode and see if we would end up with the same pc after executing it.
+    pub fn isLooping(cpu: Cpu, memory: []const u8) bool {
+        const opcode = readOpcode(memory, cpu.pc);
+        if (opcode & 0xF000 == 0x1000) { // JP dest
+            const dest = opcode & 0x0FFF;
+            if (dest == cpu.pc) {
+                return true;
+            }
+        }
+        if (opcode & 0xF000 == 0xB000) { // JP Vx, addr
+            const x = @truncate(u4, opcode >> 8);
+            const src = switch (cpu.jump_offset_src) {
+                .@"0" => 0,
+                .x => x,
+            };
+            const addr = opcode & 0x0FFF;
+            const dest = @as(u16, addr) + @as(u16, cpu.v[src]);
+            if (dest == cpu.pc) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
+
+pub fn readOpcode(memory: []const u8, pc: u16) u16 {
+    return mem.readIntSliceBig(u16, memory[pc .. pc + 2]);
+}
 
 fn wrapAddress(value: u16, carry_flag: ?*u8) u16 {
     const min = user_base_address;
