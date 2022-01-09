@@ -256,9 +256,35 @@ export fn init() void {
     std.mem.copy(u8, state.memory_buf[chip8.charmap_base_address .. chip8.charmap_base_address + chip8.charmap_size], &chip8_charmap.charmap);
 
     state.rom_size = if (state.rom_path) |rom_path| blk: {
-        const rom = loadRomFromFile(state.memory_buf[chip8.user_base_address..], rom_path) catch {
-            return;
+        const assemble = std.mem.eql(u8, std.fs.path.extension(rom_path), ".asm8");
+        const rom = if (assemble) load_blk: {
+            const asm8_code = std.fs.cwd().readFileAlloc(state.allocator, rom_path, std.math.maxInt(usize)) catch |err| {
+                log.err("{}: Failed to read asm8 file '{s}'", .{ err, rom_path });
+                return;
+            };
+            var dest_stream = std.io.fixedBufferStream(state.memory_buf[chip8.user_base_address..]);
+            const asm_log = struct {
+                pub fn debug(comptime format: []const u8, args: anytype) void {
+                    _ = format;
+                    _ = args;
+                    // no-op
+                }
+                pub const err = log.err;
+            };
+            chip8_asm.assemble(state.allocator, asm8_code, chip8.user_base_address, dest_stream.writer(), .{
+                .file_name = rom_path,
+            }, asm_log) catch |err| {
+                log.err("{}: Failed to assemble asm8 file '{s}'", .{ err, rom_path });
+                return;
+            };
+            break :load_blk dest_stream.getWritten();
+        } else load_blk: {
+            break :load_blk std.fs.cwd().readFile(rom_path, state.memory_buf[chip8.user_base_address..]) catch |err| {
+                log.err("{}: Failed to read ROM file '{s}'", .{ err, rom_path });
+                return;
+            };
         };
+
         log.debug("loaded ROM with {} bytes: '{s}'", .{ rom.len, rom_path });
         break :blk rom.len;
     } else blk: {
@@ -621,19 +647,6 @@ export fn input(ev: ?*const sapp.Event) void {
 
 // }
 
-fn loadRomFromFile(dest: []u8, path: []const u8) ![]u8 {
-    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
-        log.err("{}: Failed to open ROM file '{s}'", .{ err, path });
-        return error.RomLoad;
-    };
-    defer file.close();
-    const bytes_read = file.readAll(dest) catch |err| {
-        log.err("{}: Failed to read ROM file '{s}'", .{ err, path });
-        return error.RomLoad;
-    };
-    return dest[0..bytes_read];
-}
-
 pub fn main() anyerror!void {
     var state = &global_state;
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -710,7 +723,10 @@ pub fn main() anyerror!void {
             };
 
             var rom_buf: [4096]u8 = undefined;
-            const rom = try loadRomFromFile(&rom_buf, rom_path);
+            const rom = std.fs.cwd().readFile(rom_path, &rom_buf) catch |err| {
+                log.err("{}: Failed to read ROM file '{s}'", .{ err, rom_path });
+                return error.RomLoad;
+            };
 
             var out_file = std.fs.cwd().createFile(out_path, .{}) catch |err| {
                 log.err("failed to open output file for writing '{s}'", .{out_path});
