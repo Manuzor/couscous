@@ -1,0 +1,4 @@
+Mainly tests that the Fx29 (i.e. built-in sprite drawing) instruction works. It also uses 2nnn (CALL) and Dxyn(DRAW) and
+finishes with an infinite loop.
+
+Created by Manuzor.

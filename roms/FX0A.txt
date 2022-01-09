@@ -1,0 +1,4 @@
+Press a key on the CHIP-8 keypad and the built-in character for that key will be drawn. Press the same key again to
+erase the character again. Combine different keys to create a beautiful pixel mess. :)
+
+Created by Manuzor.

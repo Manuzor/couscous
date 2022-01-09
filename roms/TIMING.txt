@@ -1,0 +1,7 @@
+This is a ROM to compare raw draw speed with drawing a sprite using the DT timer. A sprite is drawn every 10
+instructions. If DT is 0, then the outer sprite is drawn, otherwise the inner sprite is drawn.
+
+Please NOTE that it takes a couple of instructions to load and compare the DT value, so the effective drawing rate for
+the outer sprite is always greater than 30 seconds.
+
+Created by Manuzor.
