@@ -1,4 +1,1 @@
-@echo off
-pushd %~dp0
-zig build --prominent-compile-errors %*
-popd
+@zig build --build-file "%~dp0build.zig" --prominent-compile-errors %*

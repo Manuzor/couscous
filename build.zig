@@ -15,22 +15,45 @@ pub fn build(b: *std.build.Builder) void {
 
     const sokol = buildSokol(b, target, mode, "lib/sokol-zig/");
 
-    const exe = b.addExecutable("couscous", "src/main.zig");
-    exe.setTarget(target);
-    exe.setBuildMode(mode);
-    exe.linkLibrary(sokol);
-    exe.addPackagePath("sokol", sokol_package_path);
-    exe.addPackagePath("clap", "lib/zig-clap/clap.zig");
-    exe.install();
-
-    const run_cmd = exe.run();
-    run_cmd.step.dependOn(b.getInstallStep());
+    const shdc_exe: []const u8 = switch (@import("builtin").os.tag) {
+        .windows => "lib/sokol-tools-bin/bin/win32/sokol-shdc.exe",
+        else => unreachable, // not implemented yet.
+    };
+    const shdc = b.addSystemCommand(&[_][]const u8{
+        shdc_exe,
+        "--input",
+        "src/shader.glsl",
+        "--output",
+        "src/shader.zig",
+        "--format",
+        "sokol_zig",
+        "--tmpdir",
+        "_out",
+        "--slang",
+        "hlsl5",
+    });
     if (b.args) |args| {
-        run_cmd.addArgs(args);
+        shdc.addArgs(args);
+    }
+    const shdc_run = b.step("shader", "Compile shaders");
+    shdc_run.dependOn(&shdc.step);
+
+    const couscous = b.addExecutable("couscous", "src/main.zig");
+    couscous.setTarget(target);
+    couscous.setBuildMode(mode);
+    couscous.linkLibrary(sokol);
+    couscous.addPackagePath("sokol", sokol_package_path);
+    couscous.addPackagePath("clap", "lib/zig-clap/clap.zig");
+    couscous.install();
+
+    const couscous_run = couscous.run();
+    couscous_run.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        couscous_run.addArgs(args);
     }
 
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    const run_step = b.step("run", "Run the interpreter");
+    run_step.dependOn(&couscous_run.step);
 
     const exe_tests = b.addTest("src/main.zig");
     exe_tests.setBuildMode(mode);
