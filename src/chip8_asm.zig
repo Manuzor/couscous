@@ -16,40 +16,50 @@ pub fn opcodePrint(buffer: []u8, opcode: u16) ![]u8 {
 
 pub const DisassembleOptions = struct {
     print_address: bool = true,
-    print_opcode: bool = true,
+    print_hex: bool = true,
+    print_bin: bool = true,
     newline: []const u8 = "\n",
 };
 
 pub fn disassemble(input: []const u8, base_address: usize, writer: anytype, options: DisassembleOptions) !void {
+    // #TODO Analyze each opcode and determine which bytes are part of an opcode and which are just data. We need this because some ROMs freely mix data and code.
     var index: usize = 0;
-    var line_buffer: [32]u8 = undefined;
-    while (index < input.len - 1) : (index += 2) {
-        var line_stream = io.fixedBufferStream(&line_buffer);
-        var line_writer = line_stream.writer();
-        if (options.print_address) {
-            const addr = base_address + index;
-            try fmt.format(line_writer, "{X:0>4} ", .{addr});
-        }
-        const opcode = mem.readIntSliceBig(u16, input[index .. index + 2]);
-        if (options.print_opcode) {
-            try fmt.format(line_writer, "{X:0>4} ", .{opcode});
-        }
-        if (!try disassembleOpcode(opcode, line_writer)) {
-            break;
-        }
-        try fmt.format(line_writer, "{s}", .{options.newline});
-        try writer.writeAll(line_stream.getWritten());
-    }
-    while (index < input.len) : (index += 1) {
+    while (index < input.len) {
         if (options.print_address) {
             const addr = base_address + index;
             try fmt.format(writer, "{X:0>4} ", .{addr});
         }
-        if (options.print_opcode) {
-            try fmt.format(writer, ".... ", .{});
+        var opcode_printed = false;
+        if (index + 1 < input.len) {
+            var opcode_buf: [128]u8 = undefined;
+            var opcode_stream = io.fixedBufferStream(&opcode_buf);
+            var opcode_writer = opcode_stream.writer();
+            const opcode = mem.readIntSliceBig(u16, input[index .. index + 2]);
+            if (try disassembleOpcode(opcode, opcode_writer)) {
+                if (options.print_hex) {
+                    try fmt.format(writer, "{X:0>4} ", .{opcode});
+                }
+                if (options.print_bin) {
+                    try fmt.format(writer, "{b:0>16} ", .{opcode});
+                }
+                try writer.writeAll(opcode_stream.getWritten());
+                try fmt.format(writer, "{s}", .{options.newline});
+
+                opcode_printed = true;
+                index += 2;
+            }
         }
-        try fmt.format(writer, "0b{b:0>8}", .{input[index]});
-        try fmt.format(writer, "{s}", .{options.newline});
+        if (!opcode_printed) {
+            const byte = input[index];
+            if (options.print_hex) {
+                try fmt.format(writer, "  {X:0>2} ", .{byte});
+            }
+            if (options.print_bin) {
+                try fmt.format(writer, "        {b:0>8} ", .{byte});
+            }
+            try fmt.format(writer, "{s}", .{options.newline});
+            index += 1;
+        }
     }
 }
 
