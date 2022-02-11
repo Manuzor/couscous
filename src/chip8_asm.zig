@@ -24,13 +24,13 @@ pub fn disassembleOpcode(opcode: u16, address: usize, writer: anytype, options: 
     const util = struct {
         fn printWithOptions(writer2: anytype, opcode2: u16, address2: usize, options2: DisassembleOptions, comptime fmt_str: []const u8, fmt_args: anytype) !void {
             if (options2.address) {
-                try fmt.format(writer2, "{X:0>4} ", .{address2});
+                try fmt.format(writer2, "0x{X:0>4} ", .{address2});
             }
             if (options2.raw_hex) {
-                try fmt.format(writer2, "{X:0>4} ", .{opcode2});
+                try fmt.format(writer2, "0x{X:0>4} ", .{opcode2});
             }
             if (options2.raw_bin) {
-                try fmt.format(writer2, "{b:0>16} ", .{opcode2});
+                try fmt.format(writer2, "0b{b:0>16} ", .{opcode2});
             }
             try fmt.format(writer2, fmt_str, fmt_args);
         }
@@ -45,13 +45,13 @@ pub fn disassembleOpcode(opcode: u16, address: usize, writer: anytype, options: 
     switch (opcode & mask) {
         0x00E0 => try util.printWithOptions(writer, opcode, address, options, "CLS", .{}),
         0x00EE => try util.printWithOptions(writer, opcode, address, options, "RET", .{}),
-        0x1000 => try util.printWithOptions(writer, opcode, address, options, "JP {X}", .{nnn}),
-        0x2000 => try util.printWithOptions(writer, opcode, address, options, "CALL {X}", .{nnn}),
-        0x3000 => try util.printWithOptions(writer, opcode, address, options, "SE V{X} {X:0>2}", .{ x, kk }),
-        0x4000 => try util.printWithOptions(writer, opcode, address, options, "SNE V{X} {X:0>2}", .{ x, kk }),
+        0x1000 => try util.printWithOptions(writer, opcode, address, options, "JP 0x{X:0>4}", .{nnn}),
+        0x2000 => try util.printWithOptions(writer, opcode, address, options, "CALL 0x{X:0>4}", .{nnn}),
+        0x3000 => try util.printWithOptions(writer, opcode, address, options, "SE V{X} 0x{X:0>2}", .{ x, kk }),
+        0x4000 => try util.printWithOptions(writer, opcode, address, options, "SNE V{X} 0x{X:0>2}", .{ x, kk }),
         0x5000 => try util.printWithOptions(writer, opcode, address, options, "SE V{X} V{X}", .{ x, y }),
-        0x6000 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} {X:0>2}", .{ x, kk }),
-        0x7000 => try util.printWithOptions(writer, opcode, address, options, "ADD V{X} {X:0>2}", .{ x, kk }),
+        0x6000 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} 0x{X:0>2}", .{ x, kk }),
+        0x7000 => try util.printWithOptions(writer, opcode, address, options, "ADD V{X} 0x{X:0>2}", .{ x, kk }),
         0x8000 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} V{X}", .{ x, y }),
         0x8001 => try util.printWithOptions(writer, opcode, address, options, "OR V{X} V{X}", .{ x, y }),
         0x8002 => try util.printWithOptions(writer, opcode, address, options, "AND V{X} V{X}", .{ x, y }),
@@ -62,10 +62,10 @@ pub fn disassembleOpcode(opcode: u16, address: usize, writer: anytype, options: 
         0x8007 => try util.printWithOptions(writer, opcode, address, options, "SUBN V{X} V{X}", .{ x, y }),
         0x800E => try util.printWithOptions(writer, opcode, address, options, "SHL V{X} V{X}", .{ x, y }),
         0x9000 => try util.printWithOptions(writer, opcode, address, options, "SNE V{X} V{X}", .{ x, y }),
-        0xA000 => try util.printWithOptions(writer, opcode, address, options, "LD I {X}", .{nnn}),
-        0xB000 => try util.printWithOptions(writer, opcode, address, options, "JP V0 {X}", .{nnn}),
+        0xA000 => try util.printWithOptions(writer, opcode, address, options, "LD I 0x{X:0>4}", .{nnn}),
+        0xB000 => try util.printWithOptions(writer, opcode, address, options, "JP V0 0x{X:0>4}", .{nnn}),
         0xC000 => try util.printWithOptions(writer, opcode, address, options, "RND V{X} {X:0>2}", .{ x, kk }),
-        0xD000 => try util.printWithOptions(writer, opcode, address, options, "DRW V{X} V{X} {X}", .{ x, y, n }),
+        0xD000 => try util.printWithOptions(writer, opcode, address, options, "DRW V{X} V{X} 0x{X}", .{ x, y, n }),
         0xE09E => try util.printWithOptions(writer, opcode, address, options, "SKP V{X}", .{x}),
         0xE0A1 => try util.printWithOptions(writer, opcode, address, options, "SKNP V{X}", .{x}),
         0xF007 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} DT", .{x}),
@@ -84,13 +84,13 @@ pub fn disassembleOpcode(opcode: u16, address: usize, writer: anytype, options: 
 
 pub fn disassembleData(byte: u8, address: usize, writer: anytype, options: DisassembleOptions) !void {
     if (options.address) {
-        try fmt.format(writer, "{X:0>4} ", .{address});
+        try fmt.format(writer, "0x{X:0>4} ", .{address});
     }
     if (options.raw_hex) {
-        try fmt.format(writer, "  {X:0>2} ", .{byte});
+        try fmt.format(writer, "0x{X:0>2}   ", .{byte});
     }
     if (options.raw_bin) {
-        try fmt.format(writer, "        {b:0>8} ", .{byte});
+        try fmt.format(writer, "0b{b:0>8}         ", .{byte});
     }
     if (!options.raw_hex and !options.raw_bin) {
         try fmt.format(writer, "{b:0>8}", .{byte});
