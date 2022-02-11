@@ -27,6 +27,7 @@ const cpu_timer_hz = 60;
 const cooldown_tolerance = 0.001;
 const history_len = 32;
 const norom_file_path = "NOROM.ch8";
+const memory_size = 4096;
 
 const W = 64;
 const H = 32;
@@ -46,6 +47,9 @@ var global_state: struct {
     display_test_pattern: bool = false,
     rom_path: ?[]const u8 = null,
     rom_size: usize = undefined,
+
+    rec_file_path: ?[]const u8 = null,
+    is_opcode: [memory_size]bool = [_]bool{false} ** memory_size,
 
     pause: bool = false,
     remaining_steps: u64 = std.math.maxInt(u64),
@@ -69,7 +73,7 @@ var global_state: struct {
     cpu_timer_cooldown: f64 = 0.0,
 
     cpu: chip8.Cpu = .{},
-    memory_buf: [4096]u8 = [_]u8{0} ** 4096,
+    memory_buf: [memory_size]u8 = [_]u8{0} ** memory_size,
     display_buf: [H * W]u1 = [_]u1{0} ** (H * W),
     keyboard: chip8.Keyboard = .{},
     keyboard_layout: u8 = 0,
@@ -392,6 +396,9 @@ export fn frame() void {
                 continue;
             }
 
+            state.is_opcode[cpu.pc] = true;
+            state.is_opcode[cpu.pc + 1] = true;
+
             if (!cpu.isLooping(memory)) { // There's no point in ticking anymore if we're stuck in an endless loop.
                 const snapshot = state.takeSnapshot();
                 var save_snapshot = true;
@@ -433,7 +440,11 @@ export fn frame() void {
                 sdtx.print("\n{:>5} {:>5} {X:0>2} {X:0>4} {X:0>4} - ", .{ snapshot.frame_index, snapshot.tick_index, snapshot.dt, snapshot.pc, snapshot.opcode });
                 var buf: [64]u8 = undefined;
                 var buf_stream = std.io.fixedBufferStream(&buf);
-                if (chip8_asm.disassembleOpcode(snapshot.opcode, buf_stream.writer()) catch unreachable) {
+                if (chip8_asm.disassembleOpcode(snapshot.opcode, 0, buf_stream.writer(), .{
+                    .address = false,
+                    .raw_hex = false,
+                    .raw_bin = false,
+                }) catch unreachable) {
                     sdtx.print("{s}", .{buf_stream.getWritten()});
                 } else {
                     sdtx.print("?", .{});
@@ -546,7 +557,7 @@ export fn input(ev: ?*const sapp.Event) void {
             },
             .T => {
                 if (key_down and !key_repeat) {
-                    var buf: [4096]u8 = undefined;
+                    var buf: [memory_size]u8 = undefined;
                     var buf_index: usize = 0;
                     const sample_count = std.math.min(state.frame_counter, state.delta_time_history.len);
                     var sample_index = state.frame_counter % state.delta_time_history.len;
@@ -559,6 +570,44 @@ export fn input(ev: ?*const sapp.Event) void {
                         buf_index += (std.fmt.bufPrint(buf[buf_index..], "\n  frame {:>5}: {d:>6.3}", .{ state.frame_counter - iter -| 1, state.delta_time_history[sample_index] }) catch unreachable).len;
                     }
                     log.debug("delta time history:{s}", .{buf[0..buf_index]});
+                }
+            },
+            .R => {
+                if (key_down and !key_repeat) {
+                    if (state.rec_file_path) |rec_file_path| blk: {
+                        log.debug("dump recordings to '{s}'", .{rec_file_path});
+                        var rec_file = std.fs.cwd().createFile(rec_file_path, .{}) catch {
+                            log.err("unable to create file '{s}'", .{rec_file_path});
+                            break :blk;
+                        };
+                        defer rec_file.close();
+                        var writer = rec_file.writer();
+
+                        const disOpt: chip8_asm.DisassembleOptions = .{
+                            .address = true,
+                            .raw_hex = true,
+                            .raw_bin = true,
+                        };
+                        const memory = @as([]const u8, &state.memory_buf);
+                        var index = @as(u16, chip8.user_base_address);
+                        while (index < chip8.user_base_address + state.rom_size) {
+                            if (state.is_opcode[index]) {
+                                if (!state.is_opcode[index + 1]) {
+                                    unreachable;
+                                }
+                                const opcode = chip8.readOpcode(&state.memory_buf, index);
+                                if (chip8_asm.disassembleOpcode(opcode, index, writer, disOpt) catch unreachable) {
+                                    index += 2;
+                                } else {
+                                    unreachable;
+                                }
+                            } else {
+                                chip8_asm.disassembleData(memory[index], index, writer, disOpt) catch unreachable;
+                                index += 1;
+                            }
+                            std.fmt.format(writer, "\n", .{}) catch unreachable;
+                        }
+                    }
                 }
             },
             else => {},
@@ -662,6 +711,7 @@ pub fn main() anyerror!void {
             clap.parseParam("--shift-src <SRC>            Behavior of the shift instructions (8xy6/8xy7). Valid values are 'x' or 'y'. Default: 'y'") catch unreachable,
             clap.parseParam("--jump-offset-src <MODE>     Behavior of the jump instructions with register offset (Bnnn). Valid values are '0' or 'x'. Default: '0'") catch unreachable,
             clap.parseParam("--register-dump-mode <MODE>  Behavior of the register load and store instructions (Fx55/Fx65). Valid values are 'immutable' or 'increment'. Default: 'immutable'") catch unreachable,
+            clap.parseParam("--rec <REC_FILE>             Record executed instructions to the given file.") catch unreachable,
             clap.parseParam("--dis <OUT_FILE>             Disassemble the <ROM_FILE> and write to <OUT_FILE>.") catch unreachable,
             clap.parseParam("--asm <IN_FILE>              Assemble <IN_FILE> and write to <ROM_FILE>.") catch unreachable,
             clap.parseParam("--seed <SEED>                Unsigned 64-bit integer seed value used to initialize the PRNG.") catch unreachable,
@@ -716,13 +766,17 @@ pub fn main() anyerror!void {
             state.rom_path = try state.allocator.dupe(u8, rom_path);
         }
 
+        if (args.option("--rec")) |out_path| {
+            state.rec_file_path = try state.allocator.dupe(u8, out_path);
+        }
+
         if (args.option("--dis")) |out_path| {
             const rom_path = state.rom_path orelse {
                 log.err("--dis needs a valid rom to load.", .{});
                 return error.InvalidOperation;
             };
 
-            var rom_buf: [4096]u8 = undefined;
+            var rom_buf: [memory_size]u8 = undefined;
             const rom = std.fs.cwd().readFile(rom_path, &rom_buf) catch |err| {
                 log.err("{}: Failed to read ROM file '{s}'", .{ err, rom_path });
                 return error.RomLoad;
@@ -733,7 +787,28 @@ pub fn main() anyerror!void {
                 return err;
             };
             defer out_file.close();
-            try chip8_asm.disassemble(rom, chip8.user_base_address, out_file.writer(), .{});
+            var writer = out_file.writer();
+            const disOpt: chip8_asm.DisassembleOptions = .{
+                .address = true,
+                .raw_hex = true,
+                .raw_bin = true,
+            };
+            var index: usize = 0;
+            while (index < rom.len) {
+                var opcode_printed = false;
+                if (index + 1 < rom.len) {
+                    const opcode = std.mem.readIntSliceBig(u16, rom[index .. index + 2]);
+                    if (try chip8_asm.disassembleOpcode(opcode, chip8.user_base_address + index, writer, disOpt)) {
+                        opcode_printed = true;
+                        index += 2;
+                    }
+                }
+                if (!opcode_printed) {
+                    try chip8_asm.disassembleData(rom[index], chip8.user_base_address + index, writer, disOpt);
+                    index += 1;
+                }
+                try std.fmt.format(writer, "\n", .{});
+            }
             return;
         }
 
@@ -743,7 +818,7 @@ pub fn main() anyerror!void {
                 return error.InvalidOperation;
             };
 
-            var code_buf: [4096]u8 = undefined;
+            var code_buf: [memory_size]u8 = undefined;
             const code = blk: {
                 const code_file = std.fs.cwd().openFile(code_path, .{}) catch |err| {
                     log.err("{}: Failed to open code file '{s}'", .{ err, code_path });

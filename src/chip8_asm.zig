@@ -15,55 +15,26 @@ pub fn opcodePrint(buffer: []u8, opcode: u16) ![]u8 {
 }
 
 pub const DisassembleOptions = struct {
-    print_address: bool = true,
-    print_hex: bool = true,
-    print_bin: bool = true,
-    newline: []const u8 = "\n",
+    address: bool,
+    raw_hex: bool,
+    raw_bin: bool,
 };
 
-pub fn disassemble(input: []const u8, base_address: usize, writer: anytype, options: DisassembleOptions) !void {
-    // #TODO Analyze each opcode and determine which bytes are part of an opcode and which are just data. We need this because some ROMs freely mix data and code.
-    var index: usize = 0;
-    while (index < input.len) {
-        if (options.print_address) {
-            const addr = base_address + index;
-            try fmt.format(writer, "{X:0>4} ", .{addr});
-        }
-        var opcode_printed = false;
-        if (index + 1 < input.len) {
-            var opcode_buf: [128]u8 = undefined;
-            var opcode_stream = io.fixedBufferStream(&opcode_buf);
-            var opcode_writer = opcode_stream.writer();
-            const opcode = mem.readIntSliceBig(u16, input[index .. index + 2]);
-            if (try disassembleOpcode(opcode, opcode_writer)) {
-                if (options.print_hex) {
-                    try fmt.format(writer, "{X:0>4} ", .{opcode});
-                }
-                if (options.print_bin) {
-                    try fmt.format(writer, "{b:0>16} ", .{opcode});
-                }
-                try writer.writeAll(opcode_stream.getWritten());
-                try fmt.format(writer, "{s}", .{options.newline});
-
-                opcode_printed = true;
-                index += 2;
+pub fn disassembleOpcode(opcode: u16, address: usize, writer: anytype, options: DisassembleOptions) !bool {
+    const util = struct {
+        fn printWithOptions(writer2: anytype, opcode2: u16, address2: usize, options2: DisassembleOptions, comptime fmt_str: []const u8, fmt_args: anytype) !void {
+            if (options2.address) {
+                try fmt.format(writer2, "{X:0>4} ", .{address2});
             }
-        }
-        if (!opcode_printed) {
-            const byte = input[index];
-            if (options.print_hex) {
-                try fmt.format(writer, "  {X:0>2} ", .{byte});
+            if (options2.raw_hex) {
+                try fmt.format(writer2, "{X:0>4} ", .{opcode2});
             }
-            if (options.print_bin) {
-                try fmt.format(writer, "        {b:0>8} ", .{byte});
+            if (options2.raw_bin) {
+                try fmt.format(writer2, "{b:0>16} ", .{opcode2});
             }
-            try fmt.format(writer, "{s}", .{options.newline});
-            index += 1;
+            try fmt.format(writer2, fmt_str, fmt_args);
         }
-    }
-}
-
-pub fn disassembleOpcode(opcode: u16, writer: anytype) !bool {
+    };
     const h = @truncate(u4, opcode >> 12);
     const x = @truncate(u4, opcode >> 8);
     const y = @truncate(u4, opcode >> 4);
@@ -72,43 +43,58 @@ pub fn disassembleOpcode(opcode: u16, writer: anytype) !bool {
     const nnn = @truncate(u12, opcode);
     const mask = chip8.opcode_mask_table[h];
     switch (opcode & mask) {
-        0x00E0 => try fmt.format(writer, "CLS", .{}),
-        0x00EE => try fmt.format(writer, "RET", .{}),
-        0x1000 => try fmt.format(writer, "JP {X}", .{nnn}),
-        0x2000 => try fmt.format(writer, "CALL {X}", .{nnn}),
-        0x3000 => try fmt.format(writer, "SE V{X} {X:0>2}", .{ x, kk }),
-        0x4000 => try fmt.format(writer, "SNE V{X} {X:0>2}", .{ x, kk }),
-        0x5000 => try fmt.format(writer, "SE V{X} V{X}", .{ x, y }),
-        0x6000 => try fmt.format(writer, "LD V{X} {X:0>2}", .{ x, kk }),
-        0x7000 => try fmt.format(writer, "ADD V{X} {X:0>2}", .{ x, kk }),
-        0x8000 => try fmt.format(writer, "LD V{X} V{X}", .{ x, y }),
-        0x8001 => try fmt.format(writer, "OR V{X} V{X}", .{ x, y }),
-        0x8002 => try fmt.format(writer, "AND V{X} V{X}", .{ x, y }),
-        0x8003 => try fmt.format(writer, "XOR V{X} V{X}", .{ x, y }),
-        0x8004 => try fmt.format(writer, "ADD V{X} V{X}", .{ x, y }),
-        0x8005 => try fmt.format(writer, "SUB V{X} V{X}", .{ x, y }),
-        0x8006 => try fmt.format(writer, "SHR V{X} V{X}", .{ x, y }),
-        0x8007 => try fmt.format(writer, "SUBN V{X} V{X}", .{ x, y }),
-        0x800E => try fmt.format(writer, "SHL V{X} V{X}", .{ x, y }),
-        0x9000 => try fmt.format(writer, "SNE V{X} V{X}", .{ x, y }),
-        0xA000 => try fmt.format(writer, "LD I {X}", .{nnn}),
-        0xB000 => try fmt.format(writer, "JP V0 {X}", .{nnn}),
-        0xC000 => try fmt.format(writer, "RND V{X} {X:0>2}", .{ x, kk }),
-        0xD000 => try fmt.format(writer, "DRW V{X} V{X} {X}", .{ x, y, n }),
-        0xE09E => try fmt.format(writer, "SKP V{X}", .{x}),
-        0xE0A1 => try fmt.format(writer, "SKNP V{X}", .{x}),
-        0xF007 => try fmt.format(writer, "LD V{X} DT", .{x}),
-        0xF00A => try fmt.format(writer, "LD V{X} K", .{x}),
-        0xF015 => try fmt.format(writer, "LD DT V{X}", .{x}),
-        0xF018 => try fmt.format(writer, "LD ST V{X}", .{x}),
-        0xF01E => try fmt.format(writer, "ADD I V{X}", .{x}),
-        0xF029 => try fmt.format(writer, "LD F V{X}", .{x}),
-        0xF033 => try fmt.format(writer, "LD B V{X}", .{x}),
-        0xF055 => try fmt.format(writer, "LD [I] V{X}", .{x}),
-        0xF065 => try fmt.format(writer, "LD V{X} [I]", .{x}),
+        0x00E0 => try util.printWithOptions(writer, opcode, address, options, "CLS", .{}),
+        0x00EE => try util.printWithOptions(writer, opcode, address, options, "RET", .{}),
+        0x1000 => try util.printWithOptions(writer, opcode, address, options, "JP {X}", .{nnn}),
+        0x2000 => try util.printWithOptions(writer, opcode, address, options, "CALL {X}", .{nnn}),
+        0x3000 => try util.printWithOptions(writer, opcode, address, options, "SE V{X} {X:0>2}", .{ x, kk }),
+        0x4000 => try util.printWithOptions(writer, opcode, address, options, "SNE V{X} {X:0>2}", .{ x, kk }),
+        0x5000 => try util.printWithOptions(writer, opcode, address, options, "SE V{X} V{X}", .{ x, y }),
+        0x6000 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} {X:0>2}", .{ x, kk }),
+        0x7000 => try util.printWithOptions(writer, opcode, address, options, "ADD V{X} {X:0>2}", .{ x, kk }),
+        0x8000 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} V{X}", .{ x, y }),
+        0x8001 => try util.printWithOptions(writer, opcode, address, options, "OR V{X} V{X}", .{ x, y }),
+        0x8002 => try util.printWithOptions(writer, opcode, address, options, "AND V{X} V{X}", .{ x, y }),
+        0x8003 => try util.printWithOptions(writer, opcode, address, options, "XOR V{X} V{X}", .{ x, y }),
+        0x8004 => try util.printWithOptions(writer, opcode, address, options, "ADD V{X} V{X}", .{ x, y }),
+        0x8005 => try util.printWithOptions(writer, opcode, address, options, "SUB V{X} V{X}", .{ x, y }),
+        0x8006 => try util.printWithOptions(writer, opcode, address, options, "SHR V{X} V{X}", .{ x, y }),
+        0x8007 => try util.printWithOptions(writer, opcode, address, options, "SUBN V{X} V{X}", .{ x, y }),
+        0x800E => try util.printWithOptions(writer, opcode, address, options, "SHL V{X} V{X}", .{ x, y }),
+        0x9000 => try util.printWithOptions(writer, opcode, address, options, "SNE V{X} V{X}", .{ x, y }),
+        0xA000 => try util.printWithOptions(writer, opcode, address, options, "LD I {X}", .{nnn}),
+        0xB000 => try util.printWithOptions(writer, opcode, address, options, "JP V0 {X}", .{nnn}),
+        0xC000 => try util.printWithOptions(writer, opcode, address, options, "RND V{X} {X:0>2}", .{ x, kk }),
+        0xD000 => try util.printWithOptions(writer, opcode, address, options, "DRW V{X} V{X} {X}", .{ x, y, n }),
+        0xE09E => try util.printWithOptions(writer, opcode, address, options, "SKP V{X}", .{x}),
+        0xE0A1 => try util.printWithOptions(writer, opcode, address, options, "SKNP V{X}", .{x}),
+        0xF007 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} DT", .{x}),
+        0xF00A => try util.printWithOptions(writer, opcode, address, options, "LD V{X} K", .{x}),
+        0xF015 => try util.printWithOptions(writer, opcode, address, options, "LD DT V{X}", .{x}),
+        0xF018 => try util.printWithOptions(writer, opcode, address, options, "LD ST V{X}", .{x}),
+        0xF01E => try util.printWithOptions(writer, opcode, address, options, "ADD I V{X}", .{x}),
+        0xF029 => try util.printWithOptions(writer, opcode, address, options, "LD F V{X}", .{x}),
+        0xF033 => try util.printWithOptions(writer, opcode, address, options, "LD B V{X}", .{x}),
+        0xF055 => try util.printWithOptions(writer, opcode, address, options, "LD [I] V{X}", .{x}),
+        0xF065 => try util.printWithOptions(writer, opcode, address, options, "LD V{X} [I]", .{x}),
         else => return false,
     }
     return true;
+}
+
+pub fn disassembleData(byte: u8, address: usize, writer: anytype, options: DisassembleOptions) !void {
+    if (options.address) {
+        try fmt.format(writer, "{X:0>4} ", .{address});
+    }
+    if (options.raw_hex) {
+        try fmt.format(writer, "  {X:0>2} ", .{byte});
+    }
+    if (options.raw_bin) {
+        try fmt.format(writer, "        {b:0>8} ", .{byte});
+    }
+    if (!options.raw_hex and !options.raw_bin) {
+        try fmt.format(writer, "{b:0>8}", .{byte});
+    }
 }
 
 pub const AssembleOptions = struct {
