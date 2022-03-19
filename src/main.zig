@@ -22,7 +22,7 @@ const max_frame_time = 1.0 / 30.0;
 // const default_hz = 700;
 // const default_hz = 120;
 // const default_hz = 60;
-const default_hz = 120;
+const default_hz = 1000;
 const cpu_timer_hz = 60;
 const cooldown_tolerance = 0.001;
 const history_len = 32;
@@ -708,7 +708,7 @@ pub fn main() anyerror!void {
         const params = comptime [_]clap.Param(clap.Help){
             clap.parseParam("-p, --pause                  Start in pause mode") catch unreachable,
             clap.parseParam("--hz <HZ>                    Number of instructions executed per second, i.e. the simulation speed. Default: " ++ std.fmt.comptimePrint("{}", .{default_hz})) catch unreachable,
-            clap.parseParam("--shift-src <SRC>            Behavior of the shift instructions (8xy6/8xy7). Valid values are 'x' or 'y'. Default: 'y'") catch unreachable,
+            clap.parseParam("--shift-src <SRC>            Behavior of the shift instructions (8xy6/8xyE). Valid values are 'x' or 'y'. Default: 'x'") catch unreachable,
             clap.parseParam("--jump-offset-src <MODE>     Behavior of the jump instructions with register offset (Bnnn). Valid values are '0' or 'x'. Default: '0'") catch unreachable,
             clap.parseParam("--register-dump-mode <MODE>  Behavior of the register load and store instructions (Fx55/Fx65). Valid values are 'immutable' or 'increment'. Default: 'immutable'") catch unreachable,
             clap.parseParam("--rec <REC_FILE>             Record executed instructions to the given file.") catch unreachable,

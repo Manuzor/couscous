@@ -72,7 +72,7 @@ pub const Cpu = struct {
 
     waiting_for_input: bool = false,
 
-    shift_src: ShiftSrc = .y,
+    shift_src: ShiftSrc = .x,
     jump_offset_src: JumpOffsetSrc = .@"0",
     register_dump_behavior: RegisterDumpBehavior = .immutable,
 
