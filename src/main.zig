@@ -707,40 +707,40 @@ pub fn main() anyerror!void {
     {
         const params = comptime [_]clap.Param(clap.Help){
             clap.parseParam("-p, --pause                  Start in pause mode") catch unreachable,
-            clap.parseParam("--hz <HZ>                    Number of instructions executed per second, i.e. the simulation speed. Default: " ++ std.fmt.comptimePrint("{}", .{default_hz})) catch unreachable,
-            clap.parseParam("--shift-src <SRC>            Behavior of the shift instructions (8xy6/8xyE). Valid values are 'x' or 'y'. Default: 'x'") catch unreachable,
-            clap.parseParam("--jump-offset-src <MODE>     Behavior of the jump instructions with register offset (Bnnn). Valid values are '0' or 'x'. Default: '0'") catch unreachable,
-            clap.parseParam("--register-dump-mode <MODE>  Behavior of the register load and store instructions (Fx55/Fx65). Valid values are 'immutable' or 'increment'. Default: 'immutable'") catch unreachable,
-            clap.parseParam("--rec <REC_FILE>             Record executed instructions to the given file.") catch unreachable,
-            clap.parseParam("--dis <OUT_FILE>             Disassemble the <ROM_FILE> and write to <OUT_FILE>.") catch unreachable,
-            clap.parseParam("--asm <IN_FILE>              Assemble <IN_FILE> and write to <ROM_FILE>.") catch unreachable,
-            clap.parseParam("--seed <SEED>                Unsigned 64-bit integer seed value used to initialize the PRNG.") catch unreachable,
+            clap.parseParam("--hz <u64>                   Number of instructions executed per second, i.e. the simulation speed. Default: " ++ std.fmt.comptimePrint("{}", .{default_hz})) catch unreachable,
+            clap.parseParam("--shift-src <str>            Behavior of the shift instructions (8xy6/8xyE). Valid values are 'x' or 'y'. Default: 'x'") catch unreachable,
+            clap.parseParam("--jump-offset-src <str>      Behavior of the jump instructions with register offset (Bnnn). Valid values are '0' or 'x'. Default: '0'") catch unreachable,
+            clap.parseParam("--register-dump-mode <str>   Behavior of the register load and store instructions (Fx55/Fx65). Valid values are 'immutable' or 'increment'. Default: 'immutable'") catch unreachable,
+            clap.parseParam("--rec <str>                  Record executed instructions to the given file.") catch unreachable,
+            clap.parseParam("--dis <str>                  Disassemble the <ROM_FILE> and write to <OUT_FILE>.") catch unreachable,
+            clap.parseParam("--asm <str>                  Assemble <IN_FILE> and write to <ROM_FILE>.") catch unreachable,
+            clap.parseParam("--seed <u64>                 Unsigned 64-bit integer seed value used to initialize the PRNG.") catch unreachable,
             clap.parseParam("--nocls                      Do not start with a cleared display.") catch unreachable,
             clap.parseParam("-h, --help                   Display this help and exit") catch unreachable,
-            clap.parseParam("<ROM_FILE>                Path to a ROM file to load") catch unreachable,
+            clap.parseParam("<str>                        Path to a ROM file to load") catch unreachable,
         };
         var diag = clap.Diagnostic{};
-        var args = clap.parse(clap.Help, &params, .{ .diagnostic = &diag }) catch |err| {
+        var cli = clap.parse(clap.Help, &params, clap.parsers.default, .{ .diagnostic = &diag }) catch |err| {
             diag.report(std.io.getStdErr().writer(), err) catch {};
             log.err("error parsing command line.", .{});
             return;
         };
-        defer args.deinit();
+        defer cli.deinit();
 
-        if (args.flag("--help")) {
+        if (cli.args.help) {
             var writer = std.io.getStdErr().writer();
             writer.print("usage: couscous ", .{}) catch {};
-            clap.usage(writer, &params) catch {};
+            clap.usage(writer, clap.Help, &params) catch {};
             writer.print("\noptions:\n", .{}) catch {};
-            clap.help(writer, &params) catch {};
+            clap.help(writer, clap.Help, &params, .{}) catch {};
             return;
         }
 
-        if (args.flag("--pause")) {
+        if (cli.args.pause) {
             state.setPause(true);
         }
 
-        if (args.flag("--nocls")) {
+        if (cli.args.nocls) {
             state.display_test_pattern = true;
         }
 
@@ -758,7 +758,7 @@ pub fn main() anyerror!void {
             }
         }
 
-        for (args.positionals()) |rom_path| {
+        for (cli.positionals) |rom_path| {
             if (state.rom_path != null) {
                 log.warn("ignore loading of additional ROMs.", .{});
                 break;
@@ -766,11 +766,11 @@ pub fn main() anyerror!void {
             state.rom_path = try state.allocator.dupe(u8, rom_path);
         }
 
-        if (args.option("--rec")) |out_path| {
+        if (cli.args.rec) |out_path| {
             state.rec_file_path = try state.allocator.dupe(u8, out_path);
         }
 
-        if (args.option("--dis")) |out_path| {
+        if (cli.args.dis) |out_path| {
             const rom_path = state.rom_path orelse {
                 log.err("--dis needs a valid rom to load.", .{});
                 return error.InvalidOperation;
@@ -812,7 +812,7 @@ pub fn main() anyerror!void {
             return;
         }
 
-        if (args.option("--asm")) |code_path| {
+        if (cli.args.@"asm") |code_path| {
             const out_path = state.rom_path orelse {
                 log.err("--asm needs a rom path to write to.", .{});
                 return error.InvalidOperation;
@@ -844,7 +844,7 @@ pub fn main() anyerror!void {
             return;
         }
 
-        if (args.option("--shift-src")) |shift_src| {
+        if (cli.args.@"shift-src") |shift_src| {
             var found = false;
             inline for (@typeInfo(chip8.ShiftSrc).Enum.fields) |enum_field| {
                 if (std.mem.eql(u8, enum_field.name, shift_src)) {
@@ -860,7 +860,7 @@ pub fn main() anyerror!void {
             }
         }
 
-        if (args.option("--jump-offset-src")) |jump_offset_src| {
+        if (cli.args.@"jump-offset-src") |jump_offset_src| {
             var found = false;
             inline for (@typeInfo(chip8.JumpOffsetSrc).Enum.fields) |enum_field| {
                 if (std.mem.eql(u8, enum_field.name, jump_offset_src)) {
@@ -876,7 +876,7 @@ pub fn main() anyerror!void {
             }
         }
 
-        if (args.option("--register-dump-mode")) |register_dump_behavior| {
+        if (cli.args.@"register-dump-mode") |register_dump_behavior| {
             var found = false;
             inline for (@typeInfo(chip8.RegisterDumpBehavior).Enum.fields) |enum_field| {
                 if (std.mem.eql(u8, enum_field.name, register_dump_behavior)) {
@@ -892,11 +892,8 @@ pub fn main() anyerror!void {
             }
         }
 
-        if (args.option("--hz")) |hz_option| {
-            state.tick_hz_config = std.fmt.parseInt(u64, hz_option, 0) catch |err| {
-                log.err("invalid value --hz '{s}' ({}).", .{ hz_option, err });
-                return err;
-            };
+        if (cli.args.hz) |hz| {
+            state.tick_hz_config = hz;
             if (state.tick_hz_config == 0) {
                 log.err("zero is not a valid value for --hz.", .{});
                 return error.InvalidCommandLine;
@@ -904,11 +901,8 @@ pub fn main() anyerror!void {
             state.tick_hz = state.tick_hz_config;
         }
 
-        if (args.option("--seed")) |seed_str| {
-            state.rng_seed = std.fmt.parseInt(u64, seed_str, 0) catch |err| {
-                log.err("invalid value --seed '{s}' ({}).", .{ seed_str, err });
-                return err;
-            };
+        if (cli.args.seed) |seed| {
+            state.rng_seed = seed;
         }
     }
 

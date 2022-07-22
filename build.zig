@@ -13,7 +13,7 @@ pub fn build(b: *std.build.Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    const sokol = buildSokol(b, target, mode, "lib/sokol-zig/");
+    const sokol = buildSokol(b, target, mode, .auto, "lib/sokol-zig/");
 
     const shdc_exe: []const u8 = switch (@import("builtin").os.tag) {
         .windows => "lib/sokol-tools-bin/bin/win32/sokol-shdc.exe",
