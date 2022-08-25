@@ -2,23 +2,23 @@
 #include <stddef.h>
 
 #define MTB_IMPLEMENTATION
-#include "mtb.h"
+#include "couscous_mtb.h"
 
 #include <stdio.h>
 
 #define COUSCOUSC 1
 
-using u8 = mtb_u08;
-using u16 = mtb_u16;
-using u32 = mtb_u32;
-using u64 = mtb_u64;
-using s8 = mtb_s08;
-using s16 = mtb_s16;
-using s32 = mtb_s32;
-using s64 = mtb_s64;
+using u8 = uint8_t;
+using u16 = uint16_t;
+using u32 = uint32_t;
+using u64 = uint64_t;
+using s8 = int8_t;
+using s16 = int16_t;
+using s32 = int32_t;
+using s64 = int64_t;
 
-using f32 = mtb_f32;
-using f64 = mtb_f64;
+using f32 = float;
+using f64 = double;
 
 using uint = unsigned int;
 using bool32 = int;
@@ -85,7 +85,7 @@ PrintSignature(FILE* File, instruction_signature* Signature)
 
             default:
             {
-                MTB_INVALID_CODE_PATH;
+                MTB_ASSERT(!"invalid code path");
             } break;
 
         }
@@ -97,8 +97,8 @@ PrintSignature(FILE* File, instruction_signature* Signature)
 static void
 OnError(parser_context* BaseContext, parser_error_info* ErrorInfo)
 {
-    MTB_AssertDebug(ErrorInfo->Type != ERR_NONE);
-    MTB_AssertDebug(ErrorInfo->Type != ERR_COUNT);
+    MTB_ASSERT(ErrorInfo->Type != ERR_NONE);
+    MTB_ASSERT(ErrorInfo->Type != ERR_COUNT);
 
     my_parser_context* Context = (my_parser_context*)BaseContext;
     Context->LastErrorType = ErrorInfo->Type;
@@ -175,7 +175,7 @@ int main(int NumArgs, char const* Args[])
     for (int ArgIndex = 1; ArgIndex < NumArgs; ++ArgIndex)
     {
         char const* Arg = Args[ArgIndex];
-        size_t ArgSize = mtb_StringLengthOf(Arg);
+        size_t ArgSize = mtb::string::StringLengthZ(Arg);
         if (ArgSize > 0)
         {
             if (Arg[0] == '-' && ArgSize > 1)
@@ -184,19 +184,19 @@ int main(int NumArgs, char const* Args[])
                 while (*ArgContent == '-')
                     ++ArgContent;
 
-                if (mtb_StringsAreEqual(ArgContent, "assemble"))
+                if (mtb::string::StringEquals(mtb::string::ConstZ(ArgContent), mtb::string::ConstZ("assemble")))
                 {
                     Mode = commandline_mode::Assemble;
                 }
-                else if (mtb_StringsAreEqual(ArgContent, "disassemble"))
+                else if (mtb::string::StringEquals(mtb::string::ConstZ(ArgContent), mtb::string::ConstZ("disassemble")))
                 {
                     Mode = commandline_mode::Disassemble;
                 }
-                else if(mtb_StringsAreEqual(ArgContent, "chd"))
+                else if(mtb::string::StringEquals(mtb::string::ConstZ(ArgContent), mtb::string::ConstZ("chd")))
                 {
                     GenerateDebugInfos = true;
                 }
-                else if (mtb_StringsAreEqual(ArgContent, "help"))
+                else if (mtb::string::StringEquals(mtb::string::ConstZ(ArgContent), mtb::string::ConstZ("help")))
                 {
                     PrintHelp(stderr);
                     goto end;
@@ -210,7 +210,7 @@ int main(int NumArgs, char const* Args[])
             }
             else
             {
-                if (FileIndex < mtb_ArrayLengthOf(Files))
+                if (FileIndex < MTB_ARRAY_COUNT(Files))
                     Files[FileIndex++] = Arg;
             }
         }
@@ -232,13 +232,12 @@ int main(int NumArgs, char const* Args[])
     if (Mode == commandline_mode::NONE)
     {
         // Try to determine the mode from the file extension.
-        char const* InputFileName = Files[0];
-        size_t InputFileNameLength = mtb_StringLengthOf(InputFileName);
-        if (InputFileNameLength > 3 && mtb_StringsAreEqual(InputFileName + (InputFileNameLength - 4), ".ch8"))
+        mtb::tSlice<char const> InputFileName = mtb::string::ConstZ(Files[0]);
+        if (mtb::string::StringEndsWith(InputFileName, mtb::string::ConstZ(".ch8")))
         {
             Mode = commandline_mode::Disassemble;
         }
-        else if (InputFileNameLength > 9 && mtb_StringsAreEqual(InputFileName + (InputFileNameLength - 9), ".couscous"))
+        else if (mtb::string::StringEndsWith(InputFileName, mtb::string::ConstZ(".couscous")))
         {
             Mode = commandline_mode::Assemble;
         }
@@ -271,7 +270,7 @@ int main(int NumArgs, char const* Args[])
 
         {
             FILE* OutFile = nullptr;
-            if (mtb_StringsAreEqual(Files[1], "-"))
+            if (mtb::string::StringEquals(mtb::string::ConstZ(Files[1]), mtb::string::ConstZ("-")))
             {
                 OutFile = stdout;
                 GenerateDebugInfos = false;
@@ -291,7 +290,7 @@ int main(int NumArgs, char const* Args[])
                 Context.CurrentFileName = Str(Files[0]);
                 Context.ErrorFile = stderr;
                 assemble_code_result Assembled = AssembleCode((parser_context*)&Context, ContentsBegin, ContentsEnd);
-                MTB_DEFER[&]{ Deallocate(&Assembled); };
+                MTB_DEFER{ Deallocate(&Assembled); };
 
                 Result = (int)Context.LastErrorType;
 
@@ -360,7 +359,7 @@ int main(int NumArgs, char const* Args[])
                     Current += sizeof(u16);
 
                     // Can only trigger if Current and ContentsEnd are not aligned to 2 bytes relative to each other!
-                    MTB_AssertDebug(Current <= ContentsEnd);
+                    MTB_ASSERT(Current <= ContentsEnd);
 
                     instruction Instruction = DecodeInstruction(Decoder);
                     text Code = DisassembleInstruction(Instruction);
@@ -371,7 +370,7 @@ int main(int NumArgs, char const* Args[])
             }
             else
             {
-                MTB_INVALID_CODE_PATH;
+                MTB_ASSERT(!"invalid code path");
             }
 
             if (OutFile != stdout)

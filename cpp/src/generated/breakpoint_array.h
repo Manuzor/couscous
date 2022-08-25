@@ -1,18 +1,18 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 
 #if !defined(GUARD_GENERATED_breakpoint_array)
 #define GUARD_GENERATED_breakpoint_array
 
 struct breakpoint_array
 {
-  int NumElements;
-  int Capacity;
-  breakpoint* _Data;
+    int NumElements;
+    int Capacity;
+    breakpoint* _Data;
 
-enum { FixedCapacity = 32 };
-  breakpoint _Fixed[FixedCapacity];
+    enum { FixedCapacity = 32 };
+    breakpoint _Fixed[FixedCapacity];
 
-  breakpoint* Data() { return _Data ? _Data : _Fixed; }
+    breakpoint* Data() { return _Data ? _Data : _Fixed; }
 };
 
 static void

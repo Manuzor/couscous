@@ -1,18 +1,18 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 
 #if !defined(GUARD_GENERATED_u8_array)
 #define GUARD_GENERATED_u8_array
 
 struct u8_array
 {
-  int NumElements;
-  int Capacity;
-  u8* _Data;
+    int NumElements;
+    int Capacity;
+    u8* _Data;
 
-enum { FixedCapacity = 32 };
-  u8 _Fixed[FixedCapacity];
+    enum { FixedCapacity = 32 };
+    u8 _Fixed[FixedCapacity];
 
-  u8* Data() { return _Data ? _Data : _Fixed; }
+    u8* Data() { return _Data ? _Data : _Fixed; }
 };
 
 static void

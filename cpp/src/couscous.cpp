@@ -22,7 +22,7 @@ GetArgumentTypeAsString(argument_type Value)
         case argument_type::ATI:      Result = "ATI"; break;
         case argument_type::CONSTANT: Result = "CONSTANT"; break;
         default:
-            MTB_INVALID_CODE_PATH;
+            MTB_ASSERT(false);
             break;
     }
 
@@ -34,12 +34,13 @@ argument_type
 MakeArgumentTypeFromString(size_t CodeLen, char const* Code)
 {
 #define MAKE_ARGUMENT_TYPE_FROM_STRING_CASE(EXPECTED) \
-    if(mtb_StringsAreEqual(CodeLen, Code, sizeof(#EXPECTED) - 1, #EXPECTED)) \
+    if(mtb::string::StringEquals(CodeSlice, mtb::string::ConstZ(#EXPECTED))) \
     { \
       Result = argument_type::EXPECTED; \
       break; \
     }
 
+    mtb::tSlice<char const> CodeSlice = mtb::PtrSlice(Code, CodeLen);
     argument_type Result = {};
     if (CodeLen > 0)
     {
@@ -69,7 +70,7 @@ MakeArgumentTypeFromString(size_t CodeLen, char const* Code)
 char
 ToHexChar(u16 Value)
 {
-    MTB_AssertDebug(Value <= 0xF);
+    MTB_ASSERT(Value <= 0xF);
 
     char Result;
     if (Value < 10)
@@ -85,7 +86,7 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
 {
     // Note(Manuzor): Use with care, this function is not tested...
 
-    MTB_AssertDebug(BufferSize >= 5);
+    MTB_ASSERT(BufferSize >= 5);
     size_t Result = 0;
 
     if (BufferSize > 0) switch (Argument.Type)
@@ -95,7 +96,7 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
             if (BufferSize > 1)
             {
                 Buffer[0] = 'V';
-                Buffer[1] = '0' + mtb_SafeConvert_u08(Argument.Value);
+                Buffer[1] = '0' + mtb::IntCast<u8>(Argument.Value);
                 Result = 2;
             }
         } break;
@@ -173,12 +174,12 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
             }
             else
             {
-                MTB_INVALID_CODE_PATH;
+                MTB_ASSERT(false);
             }
         } break;
 
         default:
-            MTB_INVALID_CODE_PATH;
+            MTB_ASSERT(false);
             break;
     }
 
@@ -188,6 +189,9 @@ GetArgumentAsString(argument Argument, size_t BufferSize, u8* Buffer)
 argument
 MakeArgumentFromString(size_t CodeLen, char const* CodeInput)
 {
+    using mtb::PtrSlice;
+    using mtb::string::ConstZ;
+
     argument Result{};
 
     if (CodeLen > 0)
@@ -224,7 +228,7 @@ MakeArgumentFromString(size_t CodeLen, char const* CodeInput)
                             case 'D': Result.Value = 0xD; break;
                             case 'E': Result.Value = 0xE; break;
                             case 'F': Result.Value = 0xF; break;
-                            default: MTB_INVALID_CODE_PATH; break;
+                            default: MTB_ASSERT(false); break;
                         }
                     }
                     break;
@@ -239,14 +243,14 @@ MakeArgumentFromString(size_t CodeLen, char const* CodeInput)
 
                 case 'D':
                 {
-                    if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "DT", Code))
+                    if (CodeLen == 2 && mtb::string::StringEquals(PtrSlice(Code, CodeLen), ConstZ("DT")))
                         Result.Type = argument_type::DT;
                     break;
                 }
 
                 case 'S':
                 {
-                    if (CodeLen == 2 && mtb_StringsAreEqual(CodeLen, "ST", Code))
+                    if (CodeLen == 2 && mtb::string::StringEquals(PtrSlice(Code, CodeLen), ConstZ("ST")))
                         Result.Type = argument_type::ST;
                     break;
                 }
@@ -276,7 +280,7 @@ MakeArgumentFromString(size_t CodeLen, char const* CodeInput)
                 {
                     if (CodeLen == 3)
                     {
-                        if (mtb_StringsAreEqual(3, "[I]", 3, Code))
+                        if (mtb::string::StringEquals(PtrSlice(Code, 3), ConstZ("[I]")))
                             Result.Type = argument_type::ATI;
                     }
                     break;
@@ -296,7 +300,7 @@ MakeArgumentFromString(size_t CodeLen, char const* CodeInput)
                 switch (CodeInput[1])
                 {
                     case 'X': case 'x': sscanf(CodeInput + 2, "%X", &Value); break;
-                    case 'B': case 'b': MTB_NOT_IMPLEMENTED; break;
+                    case 'B': case 'b': MTB_ASSERT(!"not implemented"); break;
                     case 'D': case 'd': sscanf(CodeInput + 2, "%d", &Value); break;
                     default: sscanf(CodeInput + 1, "%d", &Value); break;
                 }
@@ -346,7 +350,7 @@ GetInstructionTypeAsString(instruction_type Value)
         case instruction_type::SKP:     Result = "SKP"; break;
         case instruction_type::SKNP:    Result = "SKNP"; break;
         default:
-            MTB_INVALID_CODE_PATH;
+            MTB_ASSERT(false);
             break;
     }
 
@@ -359,12 +363,13 @@ instruction_type
 MakeInstructionTypeFromString(size_t CodeLen, char const* CodeInput)
 {
 #define MAKE_INSTRUCTION_TYPE_FROM_STRING_CASE(EXPECTED) \
-    if(mtb_StringsAreEqual(CodeLen, Code, sizeof(#EXPECTED) - 1, #EXPECTED)) \
+    if(mtb::string::StringEquals(CodeSlice, mtb::string::ConstZ(#EXPECTED))) \
     { \
       Result = instruction_type::EXPECTED; \
       break; \
     }
 
+    mtb::tSlice<char const> CodeSlice = mtb::PtrSlice(CodeInput, CodeLen);
     instruction_type Result{};
     if (CodeLen > 0 && CodeLen <= 4)
     {
@@ -446,7 +451,7 @@ GetDigitSpriteAddress(machine* M, u8 Digit)
 void
 DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
 {
-    MTB_AssertDebug(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
+    MTB_ASSERT(Sprite.Length <= 15); // As per 2.4 "Chip-8 sprites may be up to 15 bytes, [...]"
 
     int SpriteWidth = 8; // Always 1 byte.
     int SpriteHeight = Sprite.Length;
@@ -463,7 +468,7 @@ DrawSprite(machine* M, int StartX, int StartY, sprite Sprite)
             int ScreenOffset = (ScreenY * SCREEN_WIDTH) + ScreenX;
             bool32* ScreenPixel = M->Screen + ScreenOffset;
 
-            bool32 SpriteColor = mtb_IsBitSet((u32)*SpritePixel, 7 - SpriteX);
+            bool32 SpriteColor = IsBitSet((u32)*SpritePixel, 7 - SpriteX);
             bool32 ScreenColor = *ScreenPixel;
             HasCollision |= ScreenColor & SpriteColor;
             *ScreenPixel = ScreenColor ^ SpriteColor;
@@ -480,13 +485,20 @@ ReadByte(void* Ptr)
     return Result;
 }
 
+bool
+IsLittleEndian()
+{
+    uint16_t Test = 0x0001;
+    return ((uint8_t const*)&Test)[0] == 0x01;
+}
+
 u16
 ReadWord(void* Ptr)
 {
     u16 Result = *(u16*)Ptr;
-#if MTB_FLAG(LITTLE_ENDIAN)
-    Result = (u16)((Result << 8) | (Result >> 8));
-#endif
+    if(IsLittleEndian()) {
+        Result = (u16)((Result << 8) | (Result >> 8));
+    }
     return Result;
 }
 
@@ -499,9 +511,9 @@ WriteByte(void* Ptr, u8 Value)
 void
 WriteWord(void* Ptr, u16 Value)
 {
-#if MTB_FLAG(LITTLE_ENDIAN)
-    Value = (u16)((Value << 8) | (Value >> 8));
-#endif
+    if(IsLittleEndian()) {
+        Value = (u16)((Value << 8) | (Value >> 8));
+    }
     *(u16*)Ptr = Value;
 }
 
@@ -885,7 +897,7 @@ EncodeInstruction(instruction Instruction)
 
         case instruction_type::SNE:
         {
-            MTB_AssertDebug(Instruction.Args[0].Type == argument_type::V);
+            MTB_ASSERT(Instruction.Args[0].Type == argument_type::V);
             Decoder.X = Instruction.Args[0].Value;
             switch (Instruction.Args[1].Type)
             {
@@ -1324,7 +1336,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
     {
         case instruction_type::CLS:
         {
-            mtb_SetBytes(mtb_ArrayByteSizeOf(M->Screen), M->Screen, 0);
+            mtb::SliceSetZero(mtb::ArraySlice(M->Screen));
         } return;
 
         case instruction_type::RET:
@@ -1337,7 +1349,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
 
         case instruction_type::SYS:
         {
-            MTB_NOT_IMPLEMENTED;
+            MTB_ASSERT(!"not implemented");
         } return;
 
         case instruction_type::JP:
@@ -1437,7 +1449,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
                             u16 Range = Instruction.Args[1].Value;
                             u8* Dest = M->Memory + M->I;
                             u8* Source = M->V + 0;
-                            mtb_CopyBytes(Range, Dest, Source);
+                            mtb::CopyBytes(Dest, Source, Range);
                         } return;
                     }
                 } break;
@@ -1516,7 +1528,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
                             u8 Num = (u8)Instruction.Args[0].Value;
                             u8* Dest = M->V + 0;
                             u8* Source = M->Memory + M->I;
-                            mtb_CopyBytes(Num, Dest, Source);
+                            mtb::CopyBytes(Dest, Source, Num);
                         } return;
 
                         case argument_type::CONSTANT:
@@ -1535,7 +1547,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
                         {
                             // Note(Manuzor): All execution stops until a key is pressed, then the
                             // value of that key is stored in Reg.
-                            M->RequiredInputRegisterIndexPlusOne = mtb_SafeConvert_u08(Instruction.Args[0].Value + 1);
+                            M->RequiredInputRegisterIndexPlusOne = mtb::IntCast<u8>(Instruction.Args[0].Value + 1);
                         } return;
 
                         case argument_type::V:
@@ -1726,7 +1738,7 @@ ExecuteInstruction(machine* M, instruction Instruction)
                         {
                             u8* Reg = M->V + Instruction.Args[0].Value;
                             u8 Byte = (u8)Instruction.Args[1].Value;
-                            u8 Rand = (u8)mtb_RandomBetween_u32(&M->RNG, 0, 255);
+                            u8 Rand = (u8)M->RNG.RandomBetween_u32(0, 255);
                             *Reg = Byte & Rand;
                         } return;
                     }
@@ -1793,16 +1805,16 @@ ExecuteInstruction(machine* M, instruction Instruction)
         } break;
     }
 
-    MTB_INTERNAL_CODE({
-        text Disassembly = DisassembleInstruction(Instruction);
-        printf(STR_FMT ": Invalid instruction to execute.\n", STR_FMTARG(Disassembly));
-    });
+    #if COUSCOUSC
+    text Disassembly = DisassembleInstruction(Instruction);
+    printf(STR_FMT ": Invalid instruction to execute.\n", STR_FMTARG(Disassembly));
+    #endif
 }
 
 bool
 IsKeyDown(u16 InputState, u16 KeyIndex)
 {
-    bool Result = mtb_IsBitSet(InputState, KeyIndex);
+    bool Result = IsBitSet(InputState, KeyIndex);
 
     return Result;
 }
@@ -1811,8 +1823,8 @@ u16
 SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown)
 {
     u16 Result;
-    if (IsDown) Result = mtb_SetBit(InputState, KeyIndex);
-    else        Result = mtb_UnsetBit(InputState, KeyIndex);
+    if (IsDown) Result = SetBit(InputState, KeyIndex);
+    else        Result = UnsetBit(InputState, KeyIndex);
 
     return Result;
 }
@@ -1822,7 +1834,7 @@ int GetNumArguments(instruction Instruction)
 {
     int Result = 0;
     for (int ArgIndex = 0;
-        ArgIndex < mtb_ArrayLengthOf(Instruction.Args);
+        ArgIndex < MTB_ARRAY_COUNT(Instruction.Args);
         ++ArgIndex)
     {
         if (Instruction.Args[ArgIndex].Type == argument_type::NONE)
@@ -1915,7 +1927,7 @@ FindSignature(instruction instruction)
     instruction_signature* Result = nullptr;
 
     for (int SignatureIndex = 0;
-        SignatureIndex < mtb_ArrayLengthOf(InstructionSignatures);
+        SignatureIndex < MTB_ARRAY_COUNT(InstructionSignatures);
         ++SignatureIndex)
     {
         instruction_signature* Signature = InstructionSignatures + SignatureIndex;
@@ -1937,14 +1949,14 @@ FindMostCompatibleSignature(instruction Instruction)
         int SignatureIndex;
         int Score;
     };
-    signature_compatibility_score Scores[mtb_ArrayLengthOf(InstructionSignatures)]{};
+    signature_compatibility_score Scores[MTB_ARRAY_COUNT(InstructionSignatures)]{};
 
     int NumArgs = GetNumArguments(Instruction);
     if (NumArgs > 3)
         NumArgs = 3;
 
     for (int SignatureIndex = 0;
-        SignatureIndex < mtb_ArrayLengthOf(InstructionSignatures);
+        SignatureIndex < MTB_ARRAY_COUNT(InstructionSignatures);
         ++SignatureIndex)
     {
         instruction_signature* Signature = InstructionSignatures + SignatureIndex;
@@ -1961,7 +1973,7 @@ FindMostCompatibleSignature(instruction Instruction)
             ++ParamIndex)
         {
             for (int ArgIndex = 0;
-                ArgIndex < mtb_ArrayLengthOf(Instruction.Args) && Instruction.Args[ArgIndex].Type != argument_type::NONE;
+                ArgIndex < MTB_ARRAY_COUNT(Instruction.Args) && Instruction.Args[ArgIndex].Type != argument_type::NONE;
                 ++ArgIndex)
             {
                 if (Signature->Params[ParamIndex] == Instruction.Args[ArgIndex].Type)
@@ -1989,7 +2001,7 @@ FindMostCompatibleSignature(instruction Instruction)
             Score->Score += ParamScoreTotal / Signature->NumParams;
     }
 
-    qsort(Scores, mtb_ArrayLengthOf(Scores), sizeof(signature_compatibility_score), [](void const* A_, void const* B_)
+    qsort(Scores, MTB_ARRAY_COUNT(Scores), sizeof(signature_compatibility_score), [](void const* A_, void const* B_)
     {
         signature_compatibility_score const* A = (signature_compatibility_score const*)A_;
         signature_compatibility_score const* B = (signature_compatibility_score const*)B_;
@@ -2005,7 +2017,7 @@ FindMostCompatibleSignature(instruction Instruction)
 
 #if 0
     for (int ScoreIndex = 0;
-        ScoreIndex < mtb_ArrayLengthOf(Scores) && Scores[ScoreIndex].Score > 0;
+        ScoreIndex < MTB_ARRAY_COUNT(Scores) && Scores[ScoreIndex].Score > 0;
         ++ScoreIndex)
     {
         signature_compatibility_score* Score = Scores + ScoreIndex;
@@ -2017,41 +2029,42 @@ FindMostCompatibleSignature(instruction Instruction)
     return Result;
 }
 
-str Trim(str Text)
+strc Trim(strc Text)
 {
-    str Result = Text;
+    int Size = Text.Size;
+    char const* Data = Text.Data;
 
-    while (Result.Size > 0)
+    while (Size > 0)
     {
-        if (!mtb_IsWhitespace(Result.Data[0]))
+        if (!mtb::string::IsWhiteChar(Data[0]))
             break;
 
-        ++Result.Data;
-        --Result.Size;
+        ++Data;
+        --Size;
     }
 
-    while (Result.Size > 0)
+    while (Size > 0)
     {
-        if (!mtb_IsWhitespace(Result.Data[Result.Size - 1]))
+        if (!mtb::string::IsWhiteChar(Data[Size - 1]))
             break;
 
-        --Result.Size;
+        --Size;
     }
 
-    return Result;
+    return {Size, Data};
 }
 
 str Str(char* Stringz)
 {
 
-    str Result{ (int)mtb_SafeConvert_s32(mtb_StringLengthOf(Stringz)), Stringz };
+    str Result{ (int)mtb::IntCast<s32>(mtb::string::StringLengthZ(Stringz)), Stringz };
 
     return Result;
 }
 
 strc Str(char const* Stringz)
 {
-    strc Result{ (int)mtb_SafeConvert_s32(mtb_StringLengthOf(Stringz)), Stringz };
+    strc Result{ (int)mtb::IntCast<s32>(mtb::string::StringLengthZ(Stringz)), Stringz };
 
     return Result;
 }
@@ -2075,7 +2088,7 @@ str StrNoConst(char const* Stringz)
 
 int Compare(strc A, strc B)
 {
-    int Result = mtb_StringCompare((size_t)A.Size, A.Data, (size_t)B.Size, B.Data);
+    int Result = mtb::SliceCompareBytes(mtb::PtrSlice(A.Data, A.Size), mtb::PtrSlice(B.Data, B.Size));
 
     return Result;
 }
@@ -2092,7 +2105,7 @@ bool StartsWith(strc String, strc Start)
     bool Result = false;
     if (Start.Size <= String.Size)
     {
-        int Size = mtb_Min(String.Size, Start.Size);
+        int Size = String.Size < Start.Size ? String.Size : Start.Size;
         strc A{ Size, String.Data };
         strc B{ Size, Start.Data };
         Result = AreEqual(A, B);
@@ -2238,10 +2251,10 @@ text
 DisassembleInstruction(instruction Instruction)
 {
     token_array Tokens = DisassembleInstructionTokens(Instruction);
-    MTB_DEFER[&]{ Deallocate(&Tokens); };
+    MTB_DEFER{ Deallocate(&Tokens); };
 
     str_array TokenStrings{};
-    MTB_DEFER[&]{ Deallocate(&TokenStrings); };
+    MTB_DEFER{ Deallocate(&TokenStrings); };
 
     for (int TokenIndex = 0;
         TokenIndex < Tokens.NumElements;
@@ -2267,7 +2280,7 @@ DisassembleInstructionTokens(instruction Instruction)
         }
 
         for (int ArgIndex = 0;
-            ArgIndex < mtb_ArrayLengthOf(Instruction.Args) && Instruction.Args[ArgIndex].Type != argument_type::NONE;
+            ArgIndex < MTB_ARRAY_COUNT(Instruction.Args) && Instruction.Args[ArgIndex].Type != argument_type::NONE;
             ++ArgIndex)
         {
             token* Token = Add(&Result);
@@ -2279,7 +2292,7 @@ DisassembleInstructionTokens(instruction Instruction)
         u16 RawInstruction = Instruction.Args[0].Value;
         token* Token = Add(&Result);
         int NumCharsWritten = snprintf(Token->Data, Token->Capacity, "<0x%04X>", RawInstruction);
-        MTB_AssertDebug(NumCharsWritten == 3 + 4 + 1);
+        MTB_ASSERT(NumCharsWritten == 3 + 4 + 1);
         Token->Size = NumCharsWritten;
     }
 
@@ -2301,7 +2314,7 @@ IsValid(parser_cursor Cursor)
 parser_cursor
 Advance(parser_cursor Cursor, int NumToAdvance)
 {
-    MTB_AssertDebug(NumToAdvance > 0);
+    MTB_ASSERT(NumToAdvance > 0);
 
     while (IsValid(Cursor) && NumToAdvance > 0)
     {
@@ -2327,7 +2340,7 @@ Eat(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToEat)
 
         if ((Flags & eat_flags::Whitespace) == eat_flags::Whitespace)
         {
-            while (IsValid(Cursor) && mtb_IsWhitespace(Cursor.Begin[0]))
+            while (IsValid(Cursor) && mtb::string::IsWhiteChar(Cursor.Begin[0]))
                 Cursor = Advance(Cursor);
         }
 
@@ -2374,7 +2387,7 @@ EatExcept(parser_cursor Cursor, eat_flags Flags, char const* AdditionalCharsToSt
     {
         char Char = Cursor.Begin[0];
 
-        if (StopAtWhitespace && mtb_IsWhitespace(Char))
+        if (StopAtWhitespace && mtb::string::IsWhiteChar(Char))
         {
             return Cursor;
         }
@@ -2480,7 +2493,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
     u16 CurrentMemoryOffset = Context->BaseMemoryOffset;
 
     patch_array Patches{};
-    MTB_DEFER[&]{ Deallocate(&Patches); };
+    MTB_DEFER{ Deallocate(&Patches); };
 
     while (true)
     {
@@ -2493,7 +2506,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
 
         LineCursor.End = Cursor.Begin;
 
-        str Text = Trim(Str(LineCursor.Begin, Cursor.Begin));
+        strc Text = Trim(Str(LineCursor.Begin, Cursor.Begin));
 
         if (Text.Data[Text.Size - 1] == ':')
         {
@@ -2528,7 +2541,7 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
             // Ignore the closing bracket.
             --DataCursor.End;
 
-            MTB_AssertDebug(DataCursor.End - DataCursor.Begin > 0);
+            MTB_ASSERT(DataCursor.End - DataCursor.Begin > 0);
 
             char DataType = DataCursor.Begin[0];
             DataCursor = Eat(DataCursor, eat_flags::Whitespace | eat_flags::Comments);
@@ -2606,19 +2619,19 @@ AssembleCode(parser_context* Context, char* ContentsBegin, char* ContentsEnd)
                         // TODO: Debug info
                         ++CurrentMemoryOffset;
                     }
-                    MTB_NOT_IMPLEMENTED;
+                    MTB_ASSERT(!"not implemented");
                 } break;
 
                 default:
                 {
-                    MTB_AssertDebug("Unsupported data type in data section. Must be either of [b] or [x] (case insensitive).");
+                    MTB_ASSERT("Unsupported data type in data section. Must be either of [b] or [x] (case insensitive).");
                 } break;
             }
         }
         else
         {
             cursor_array Tokens = Tokenize(LineCursor, eat_flags::Whitespace, ",");
-            MTB_DEFER[&]{ Deallocate(&Tokens); };
+            MTB_DEFER{ Deallocate(&Tokens); };
 
             instruction Instruction = AssembleInstruction(Tokens.NumElements, Tokens.Data());
 
@@ -2720,7 +2733,7 @@ EndOfContentParsing:
             str PatchLabelName = Str(Patch->LabelNameCursor);
             if (AreEqual(LabelName, PatchLabelName))
             {
-                MTB_AssertDebug(Patch->InstructionMemoryOffset >= Context->BaseMemoryOffset);
+                MTB_ASSERT(Patch->InstructionMemoryOffset >= Context->BaseMemoryOffset);
                 u16 MemoryIndex = Patch->InstructionMemoryOffset - Context->BaseMemoryOffset;
                 u16* InstructionLocation = (u16*)At(ByteCode, MemoryIndex);
                 u16 EncodedInstruction = ReadWord(InstructionLocation);

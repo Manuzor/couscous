@@ -1,4 +1,4 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 
 #include "text1024.h"
 
@@ -13,70 +13,80 @@ CreateText1024(strc String)
 static str
 Str(text1024 Text)
 {
-  str Result{ Text.Size, Text.Data };
+    str Result{ Text.Size, Text.Data };
 
-  return Result;
+    return Result;
+}
+
+static strc
+StrConst(text1024 Text)
+{
+    strc Result{ Text.Size, Text.Data };
+
+    return Result;
 }
 
 void
 EnsureZeroTerminated(text1024* Text)
 {
-  if(Text->Size < Text->FullCapacity)
-    Text->Data[Text->Size] = 0;
+    if (Text->Size < Text->FullCapacity)
+    {
+        Text->Data[Text->Size] = 0;
+    }
 }
 
 void
 Clear(text1024* Text)
 {
-  Text->Size = 0;
-  EnsureZeroTerminated(Text);
+    Text->Size = 0;
+    EnsureZeroTerminated(Text);
 }
 
 text1024
 Trim(text1024 Text)
 {
-  str Trimmed = Trim(Str(Text));
-  text1024 Result = CreateText1024(Trimmed);
+    strc Trimmed = Trim(StrConst(Text));
+    text1024 Result = CreateText1024(Trimmed);
 
-  return Result;
+    return Result;
 }
 
 static int
 Append(text1024* Text, strc String)
 {
-  int NewSize = Text->Size + String.Size;
-  MTB_AssertDebug(NewSize < Text->Capacity, "Result would be too long to append");
-  if (NewSize > Text->Capacity)
-  {
-    NewSize = Text->Capacity;
-  }
+    int NewSize = Text->Size + String.Size;
+    MTB_ASSERT(NewSize < Text->Capacity);
+    if (NewSize > Text->Capacity)
+    {
+        NewSize = Text->Capacity;
+    }
 
-  int NumCopies = NewSize - Text->Size;
-  mtb_CopyBytes(NumCopies, Text->Data + Text->Size, String.Data);
-  Text->Size = NewSize;
+    int NumCopies = NewSize - Text->Size;
+    ::mtb::CopyBytes(Text->Data + Text->Size, String.Data, NumCopies);
+    Text->Size = NewSize;
 
-  return NumCopies;
+    return NumCopies;
 }
 
 static int
 Append(text1024* Text, char Char)
 {
-  int Result = Append(Text, str{ 1, &Char });
+    int Result = Append(Text, str{ 1, &Char });
 
-  return Result;
+    return Result;
 }
 
 static int Compare(text1024* A, text1024* B)
 {
-  int Result = mtb_StringCompare(A->Size, A->Data, B->Size, B->Data);
+    int Result = mtb::SliceCompareBytes(mtb::PtrSlice(A->Data, A->Size), mtb::PtrSlice(B->Data, B->Size));
 
-  return Result;
+    return Result;
 }
 
 static bool AreEqual(text1024* A, text1024* B)
 {
-  int ComparisonResult = Compare(A, B);
+    int ComparisonResult = Compare(A, B);
 
-  return ComparisonResult == 0;
+    return ComparisonResult == 0;
 }
 

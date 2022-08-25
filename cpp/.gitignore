@@ -1,11 +1,12 @@
 # Generated stuff
 out/
 sln.bat
-build.bat
 
 # FASTBuild database
 *.fdb
 
-# Visual Studio stuff.
+# IDE stuff.
 .vs/
 *.sln
+.idea/
+*.user

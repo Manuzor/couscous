@@ -1,3 +1,11 @@
+#if !defined(COUSCOUS_DEBUG)
+#if (defined(_DEBUG) || defined(DEBUG)) && !defined(NDEBUG)
+#define COUSCOUS_DEBUG 1
+#else
+#define COUSCOUS_DEBUG 0
+#endif
+#endif
+
 enum
 {
     CHAR_MEMORY_OFFSET = 0,
@@ -42,7 +50,7 @@ struct machine
 
     bool32 Screen[SCREEN_HEIGHT * SCREEN_WIDTH];
 
-    mtb_rng RNG;
+    mtb::tRNG RNG;
     u64 CurrentCycle;
 };
 
@@ -181,6 +189,23 @@ WriteByte(void* Ptr, u8 Value);
 static void
 WriteWord(void* Ptr, u16 Value);
 
+// clang-format off
+inline constexpr  u8 SetBit( u8 Bits,  u8 Position)   { return Bits | ( u8(1) << Position); }
+inline constexpr u16 SetBit(u16 Bits, u16 Position)   { return Bits | (u16(1) << Position); }
+inline constexpr u32 SetBit(u32 Bits, u32 Position)   { return Bits | (u32(1) << Position); }
+inline constexpr u64 SetBit(u64 Bits, u64 Position)   { return Bits | (u64(1) << Position); }
+
+inline constexpr  u8 UnsetBit( u8 Bits,  u8 Position) { return Bits & ~( u8(1) << Position); }
+inline constexpr u16 UnsetBit(u16 Bits, u16 Position) { return Bits & ~(u16(1) << Position); }
+inline constexpr u32 UnsetBit(u32 Bits, u32 Position) { return Bits & ~(u32(1) << Position); }
+inline constexpr u64 UnsetBit(u64 Bits, u64 Position) { return Bits & ~(u64(1) << Position); }
+
+inline constexpr bool IsBitSet( u8 Bits,  u8 Position) { return !!(Bits & ( u8(1) << Position)); }
+inline constexpr bool IsBitSet(u16 Bits, u16 Position) { return !!(Bits & (u16(1) << Position)); }
+inline constexpr bool IsBitSet(u32 Bits, u32 Position) { return !!(Bits & (u32(1) << Position)); }
+inline constexpr bool IsBitSet(u64 Bits, u64 Position) { return !!(Bits & (u64(1) << Position)); }
+// clang-format on
+
 struct tick_result
 {
     bool Continue;
@@ -207,7 +232,7 @@ SetKeyDown(u16 InputState, u16 KeyIndex, bool32 IsDown);
 
 #if COUSCOUSC
 
-#define COUSCOUS_DISPOSE_LATER(Disposable) MTB_DEFER[&]{ Deallocate(&Disposable); }
+#define COUSCOUS_DISPOSE_LATER(Disposable) MTB_DEFER{ Deallocate(&Disposable); }
 
 static int
 GetNumArguments(instruction Instruction);
@@ -252,8 +277,8 @@ struct str
 #include "generated/token.h"
 #include "generated/token_array.h"
 
-static str
-Trim(str Text);
+static strc
+Trim(strc Text);
 
 static str
 Str(char* Stringz);

@@ -1,27 +1,27 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #define MTB_IMPLEMENTATION
-#include "mtb.h"
+#include "couscous_mtb.h"
 
 #if !defined(COUSCOUSC)
     #define COUSCOUSC 1
 #endif
 
-using u8 = mtb_u08;
-using u16 = mtb_u16;
-using u32 = mtb_u32;
-using u64 = mtb_u64;
-using s8 = mtb_s08;
-using s16 = mtb_s16;
-using s32 = mtb_s32;
-using s64 = mtb_s64;
+using u8 = uint8_t;
+using u16 = uint16_t;
+using u32 = uint32_t;
+using u64 = uint64_t;
+using s8 = int8_t;
+using s16 = int16_t;
+using s32 = int32_t;
+using s64 = int64_t;
 
-using f32 = mtb_f32;
-using f64 = mtb_f64;
+using f32 = float;
+using f64 = double;
 
-using uint = unsigned int;
 using bool32 = int;
 
 #include "couscous.h"
@@ -30,16 +30,12 @@ using bool32 = int;
 
 #include "charmap.cpp"
 
-#if defined(COUSCOUS_TESTS)
-    #include "couscous_tests.cpp"
-#endif
-
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-
 #if !defined(COUSCOUS_TESTS)
     #define COUSCOUS_TESTS 0
+#endif
+
+#if defined(COUSCOUS_TESTS)
+    #include "couscous_tests.cpp"
 #endif
 
 #if !defined(USE_TEST_PROGRAM)
@@ -51,20 +47,21 @@ using bool32 = int;
     #include "testprogram.cpp"
 #endif
 
-struct colorRGBA8
-{
-    union
-    {
-        struct
-        {
-            u8 R;
-            u8 G;
-            u8 B;
-            u8 A;
-        };
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 
-        u8 Data[4];
+union colorRGBA8
+{
+    struct
+    {
+        u8 R;
+        u8 G;
+        u8 B;
+        u8 A;
     };
+
+    u8 Data[4];
 };
 
 struct mem_stack
@@ -86,7 +83,6 @@ PushBytes(mem_stack* Memory, size_t NumBytes)
 }
 
 #define PushStruct(Memory, Struct) ((Struct*)PushBytes((Memory), sizeof(Struct)))
-#define PushArray(Memory, Length, Struct) ((Struct*)PushBytes((Memory), (Length) * sizeof(Struct)))
 
 
 struct win32_loaded_rom
@@ -129,7 +125,7 @@ Win32LoadFileContents(char const* FileName)
             if (NumBytesRead != (DWORD)Result.NumElements)
             {
                 // TODO: Diagnostics?
-                MTB_Fail("Error reading file.");
+                MTB_ASSERT(!"Error reading file.");
             }
         }
         else
@@ -151,9 +147,9 @@ LoadRom(machine* M, size_t RomSize, u8* RomPtr)
 {
     bool Result = false;
 
-    if (RomSize <= mtb_ArrayLengthOf(M->ProgramMemory))
+    if (RomSize <= MTB_ARRAY_SIZE(M->ProgramMemory))
     {
-        mtb_CopyBytes(RomSize, M->ProgramMemory, RomPtr);
+        mtb::CopyBytes(M->ProgramMemory, RomPtr, RomSize);
         Result = true;
     }
 
@@ -186,7 +182,7 @@ Win32SwapBuffers(bool32* ScreenPixels, win32_front_buffer* Front)
         {
             colorRGBA8 NewColor;
             if (*ScreenPixel) NewColor = Front->PixelColorOn;
-            else             NewColor = Front->PixelColorOff;
+            else              NewColor = Front->PixelColorOff;
             *FrontPixel = NewColor;
         }
     }
@@ -201,11 +197,11 @@ Win32GetWindowClientArea(HWND WindowHandle, int* ClientWidth, int* ClientHeight)
     *ClientHeight = (int)(ClientRect.bottom - ClientRect.top);
 }
 
-struct rect_s32
+typedef struct
 {
     s32 X, Y;
     s32 Width, Height;
-};
+} rect_s32;
 
 inline RECT
 Win32ToWinRect(rect_s32 Rect)
@@ -294,7 +290,7 @@ Win32Present(win32_window* Window)
     float const Aspect = (float)SCREEN_WIDTH / (float)SCREEN_HEIGHT;
     DestRect.Height = (s32)((float)DestRect.Width / Aspect + 0.5f);
 
-    MTB_INTERNAL_CODE(int Result = ) StretchDIBits(
+    StretchDIBits(
         DC,                       // _In_       HDC        hdc
         DestRect.X,               // _In_       int        XDest
         DestRect.Y,               // _In_       int        YDest
@@ -381,29 +377,29 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM L
         if (Message == WM_KEYDOWN || Message == WM_KEYUP)
         {
             u32 VKCode = (u32)WParam;
-            bool KeyWasDown = mtb_IsBitSet((u64)LParam, 30);
-            bool KeyIsDown = !mtb_IsBitSet((u64)LParam, 31);
+            bool KeyWasDown = IsBitSet((u64)LParam, 30);
+            bool KeyIsDown = !IsBitSet((u64)LParam, 31);
             bool KeyWasReleased = KeyWasDown && !KeyIsDown;
             bool KeyWasPressed = !KeyWasDown && KeyIsDown;
 
             bool AltKeyModifier = false;
             {
                 SHORT KeyState = GetKeyState(VK_MENU);
-                if (mtb_IsBitSet((u32)KeyState, 15))
+                if (IsBitSet((u32)KeyState, 15))
                     AltKeyModifier = true;
             }
 
             bool CtrlKeyModifier = false;
             {
                 SHORT KeyState = GetKeyState(VK_CONTROL);
-                if (mtb_IsBitSet((u32)KeyState, 15))
+                if (IsBitSet((u32)KeyState, 15))
                     CtrlKeyModifier = true;
             }
 
             bool ShiftKeyModifier = false;
             {
                 SHORT KeyState = GetKeyState(VK_SHIFT);
-                if (mtb_IsBitSet((u32)KeyState, 15))
+                if (IsBitSet((u32)KeyState, 15))
                     ShiftKeyModifier = true;
             }
 
@@ -413,7 +409,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM L
                 {
                     if (KeyWasReleased)
                     {
-                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::Exit };
+                        *Add(&Window->Events) = { win32_window_event_type::Action, { win32_window_event_action_type::Exit } };
                     }
                 } break;
 
@@ -421,7 +417,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM L
                 {
                     if (KeyWasReleased && AltKeyModifier)
                     {
-                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::Exit };
+                        *Add(&Window->Events) = { win32_window_event_type::Action, { win32_window_event_action_type::Exit } };
                     }
                 } break;
 
@@ -430,7 +426,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM L
                 {
                     if (KeyWasReleased)
                     {
-                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::SingleStep };
+                        *Add(&Window->Events) = { win32_window_event_type::Action, { win32_window_event_action_type::SingleStep } };
                     }
                 } break;
 
@@ -438,7 +434,7 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM L
                 {
                     if (KeyWasReleased)
                     {
-                        *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::TogglePause };
+                        *Add(&Window->Events) = { win32_window_event_type::Action, { win32_window_event_action_type::TogglePause } };
                     }
                 } break;
 
@@ -466,11 +462,11 @@ Win32MainWindowCallback(HWND WindowHandle, UINT Message, WPARAM WParam, LPARAM L
                     {
                         if (AltKeyModifier)
                         {
-                            *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::ToggleFullscreen };
+                            *Add(&Window->Events) = { win32_window_event_type::Action, { win32_window_event_action_type::ToggleFullscreen } };
                         }
                         else
                         {
-                            *Add(&Window->Events) = { win32_window_event_type::Action, win32_window_event_action_type::AcceptText };
+                            *Add(&Window->Events) = { win32_window_event_type::Action, { win32_window_event_action_type::AcceptText } };
                         }
                     }
                 } break;
@@ -638,12 +634,12 @@ Win32CreateWindow(HINSTANCE ProcessHandle,
         }
         else
         {
-            MTB_Fail("Failed to create window.");
+            MTB_ASSERT(!"Failed to create window.");
         }
     }
     else
     {
-        MTB_Fail("Failed to register window class: %s", WindowClass.lpszClassName);
+        MTB_ASSERT(!"Failed to register window class");
     }
 
     return Result;
@@ -698,10 +694,10 @@ Win32CanTick(machine* M, u16 OldInputState, u16 NewInputState)
         CanTick = false;
         for (u16 KeyIndex = 0; KeyIndex < 16; ++KeyIndex)
         {
-            if (!mtb_IsBitSet(OldInputState, KeyIndex) && mtb_IsBitSet(NewInputState, KeyIndex))
+            if (!IsBitSet(OldInputState, KeyIndex) && IsBitSet(NewInputState, KeyIndex))
             {
                 u8* Reg = M->V + (M->RequiredInputRegisterIndexPlusOne - 1);
-                MTB_AssertDebug((u16)(u8)KeyIndex == KeyIndex);
+                MTB_ASSERT((u16)(u8)KeyIndex == KeyIndex);
                 *Reg = (u8)KeyIndex;
                 M->RequiredInputRegisterIndexPlusOne = 0;
                 CanTick = true;
@@ -715,20 +711,14 @@ Win32CanTick(machine* M, u16 OldInputState, u16 NewInputState)
 static bool
 StringEndsWith(size_t StringLength, char const* String, size_t EndLength, char const* End)
 {
-    bool Result = false;
-    if (StringLength >= EndLength)
-    {
-        Result = mtb_StringsAreEqual(EndLength, String + StringLength - EndLength, End);
-    }
-
-    return Result;
+    return mtb::string::StringEndsWith(mtb::PtrSlice(String, StringLength), mtb::PtrSlice(End, EndLength));
 }
 
 static bool
 StringEndsWith(char const* String, char const* End)
 {
-    size_t StringLength = mtb_StringLengthOf(String);
-    size_t EndLength = mtb_StringLengthOf(End);
+    size_t StringLength = mtb::string::StringLengthZ(String);
+    size_t EndLength = mtb::string::StringLengthZ(End);
 
     return StringEndsWith(StringLength, String, EndLength, End);
 }
@@ -736,7 +726,7 @@ StringEndsWith(char const* String, char const* End)
 static bool
 StringEndsWith(char const* String, size_t EndLength, char const* End)
 {
-    size_t StringLength = mtb_StringLengthOf(String);
+    size_t StringLength = mtb::string::StringLengthZ(String);
 
     return StringEndsWith(StringLength, String, EndLength, End);
 }
@@ -744,7 +734,7 @@ StringEndsWith(char const* String, size_t EndLength, char const* End)
 static bool
 StringEndsWith(size_t StringLength, char const* String, char const* End)
 {
-    size_t EndLength = mtb_StringLengthOf(End);
+    size_t EndLength = mtb::string::StringLengthZ(End);
 
     return StringEndsWith(StringLength, String, EndLength, End);
 }
@@ -756,7 +746,7 @@ Win32MakeWindowTitle(text1024* Text, char const* FileName, double CyclesPerSecon
     Append(Text, Str("Couscous CHIP-8 | "));
     Append(Text, Str(FileName));
     Append(Text, Str(" | "));
-    snprintf(Text->Data + Text->Size, mtb_ArrayLengthOf(Text->Data) - Text->Size, "%f c/s", CyclesPerSecond);
+    snprintf(Text->Data + Text->Size, MTB_ARRAY_COUNT(Text->Data) - Text->Size, "%f c/s", CyclesPerSecond);
 }
 
 float
@@ -825,7 +815,7 @@ void
 Win32AppendDebugText(win32_window* Window, strc Text)
 {
     u8* Ptr = AddN(&Window->DebugText, Text.Size);
-    mtb_CopyBytes((size_t)Text.Size, Ptr, Text.Data);
+    mtb::CopyBytes(Ptr, Text.Data, (size_t)Text.Size);
 }
 
 enum struct pause_state
@@ -841,16 +831,164 @@ struct breakpoint
 };
 #include "generated/breakpoint_array.h"
 
-int
-WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
-    LPSTR CommandLine, int ShowCode)
+struct to_string_result
 {
-#if MTB_FLAG(INTERNAL)
-    AllocConsole();
-    AttachConsole(GetCurrentProcessId());
-    freopen("CON", "w", stdout);
-    SetConsoleTitleA("Couscous CHIP-8 Debug Console");
-#endif
+    bool Success;
+    size_t StrLen;
+    char* StrPtr;
+};
+
+/// If a '+' was consumed, `1` is returned and \a SourcePtr is advanced by 1,
+/// else, if a '-' was consumed, `-1` is returned and \a SourcePtr is advanced by 1,
+/// otherwise 0 is returned and \a SourcePtr will not be modified.
+static int
+ParseConsumeSign(size_t* SourceLen, char const** SourcePtr)
+{
+  int Result{};
+  size_t Len = *SourceLen;
+  char const* Ptr = *SourcePtr;
+
+  if(Len)
+  {
+    if(Ptr[0] == '+')
+    {
+      ++Ptr;
+      --Len;
+      Result = 1;
+    }
+    else if(Ptr[0] == '-')
+    {
+      ++Ptr;
+      --Len;
+      Result = -1;
+    }
+  }
+
+  *SourceLen = Len;
+  *SourcePtr = Ptr;
+  return Result;
+}
+
+to_string_result
+ToString(int64_t Value, size_t BufferSize, char* BufferPtr)
+{
+    to_string_result Result{};
+    Result.StrPtr = BufferPtr;
+
+    if(BufferSize)
+    {
+        ptrdiff_t BufferIndex = (ptrdiff_t)BufferSize - 1;
+        bool Sign = false;
+        if(Value < 0)
+        {
+            Sign = true;
+            Value = -Value;
+        }
+
+        while(Value > 0 && BufferIndex >= 0)
+        {
+            char Digit = (char)(Value % 10);
+            BufferPtr[BufferIndex--] = '0' + Digit;
+            Value /= 10;
+        }
+
+        if(Sign && BufferIndex >= 0)
+        {
+            BufferPtr[BufferIndex--] = '-';
+        }
+
+        BufferIndex += 1;
+        Result.StrPtr = BufferPtr + BufferIndex;
+        Result.StrLen = BufferSize - BufferIndex;
+        Result.Success = true;
+    }
+
+    return Result;
+}
+
+struct parse_string_result_s64
+{
+    bool Success;
+    size_t RemainingSourceLen;
+    char const* RemainingSourcePtr;
+    int64_t Value;
+};
+
+static parse_string_result_s64
+ParseString_s64(size_t SourceLen, char const* SourcePtr, int64_t Fallback)
+{
+    parse_string_result_s64 Result{};
+    Result.Value = Fallback;
+    Result.RemainingSourceLen = SourceLen;
+    Result.RemainingSourcePtr = SourcePtr;
+
+    size_t Len = SourceLen;
+    char const* Ptr = SourcePtr;
+
+    if(Len)
+    {
+        mtb::string::StringTrimStart(mtb::PtrSlice(Ptr, Len));
+        bool HasSign = ParseConsumeSign(&Len, &Ptr) < 0;
+
+        uint64_t NumericalPart = 0;
+        bool HasNumericalPart = false;
+
+        while(Len && mtb::string::IsDigitChar(Ptr[0]))
+        {
+            NumericalPart = (10 * NumericalPart) + (*Ptr - '0');
+            HasNumericalPart = true;
+            --Len;
+            ++Ptr;
+        }
+
+        if(HasNumericalPart)
+        {
+            if(HasSign)
+            {
+                if(NumericalPart <= (uint64_t)0x7FFFFFFFFFFFFFFF + 1)
+                {
+                    if(NumericalPart == (uint64_t)0x7FFFFFFFFFFFFFFF + 1)
+                    {
+                        Result.Value = (uint64_t)0x8000000000000000;
+                    }
+                    else
+                    {
+                        Result.Value = -(int64_t)NumericalPart;
+                    }
+
+                    Result.Success = true;
+                }
+            }
+            else
+            {
+                if(NumericalPart <= (uint64_t)0x7FFFFFFFFFFFFFFF)
+                {
+                    Result.Value = NumericalPart;
+                    Result.Success = true;
+                }
+            }
+        }
+    }
+
+    if(Result.Success)
+    {
+        Result.RemainingSourceLen = Len;
+        Result.RemainingSourcePtr = Ptr;
+    }
+
+    return Result;
+}
+
+int
+WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle, LPSTR CommandLine, int ShowCode)
+{
+    if (COUSCOUS_DEBUG)
+    {
+        AllocConsole();
+        AttachConsole(GetCurrentProcessId());
+        freopen("CON", "w", stdout);
+        SetConsoleTitleA("Couscous CHIP-8 Debug Console");
+    }
 
 #if COUSCOUS_TESTS
     RunTests();
@@ -861,29 +999,34 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
     char const* FileName = CommandLine;
 
     mem_stack MemStack{};
-    MemStack.Length = (size_t)mtb_MiB(1);
+    MemStack.Length = 1 * mtb::mebibytes_to_bytes;
 
     LPVOID BaseAddress = nullptr;
-    MTB_INTERNAL_CODE(BaseAddress = (LPVOID)(size_t)0x2'000'000);
+    if (COUSCOUS_DEBUG)
+    {
+        BaseAddress = (LPVOID)(size_t)0x2'000'000;
+    }
     MemStack.Ptr = (u8*)VirtualAlloc(BaseAddress, MemStack.Length,
         MEM_RESERVE | MEM_COMMIT,
         PAGE_READWRITE);
 
     machine* M = (machine*)PushStruct(&MemStack, machine);
-    mtb_SetBytes(sizeof(machine), M, 0);
+    mtb::ItemSetZero(*M);
+
 #if defined(COUSCOUS_RANDOM_SEED)
-    M->RNG = mtb_RandomSeed(COUSCOUS_RANDOM_SEED);
-#elif MTB_FLAG(DEBUG)
-    M->RNG = mtb_RandomSeed(0);
+    M->RNG = mtb::tRNG::Seed(COUSCOUS_RANDOM_SEED);
 #else
+    #if !COUSCOUS_DEBUG
     // TODO: Find a way to properly initialize the RNG.
-#error Random number generator is not initialized and has no seed!
+    #error Random number generator is not initialized and has no seed!
+    #endif
+    M->RNG = mtb::tRNG::Seed(1337);
 #endif
 
     bool RomLoaded = false;
     {
 #if USE_TEST_PROGRAM
-        win32_loaded_rom Rom{ mtb_ArrayLengthOf(GlobalTestProgram), GlobalTestProgram };
+        win32_loaded_rom Rom{ MTB_ARRAY_COUNT(GlobalTestProgram), GlobalTestProgram };
         RomLoaded = LoadRom(M, Rom.Length, Rom.Ptr);
 #else
         u8_array FileContents = Win32LoadFileContents(FileName);
@@ -917,7 +1060,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 // BaseMemoryOffset
                 u32 BaseMemoryOffset_;
                 sscanf(At(&Tokens, 0)->Begin, "%X", &BaseMemoryOffset_);
-                BaseMemoryOffset = mtb_SafeConvert_u16(BaseMemoryOffset_);
+                BaseMemoryOffset = mtb::IntCast<u16>(BaseMemoryOffset_);
 
                 int PendingSourceFiles = 0;
                 sscanf(At(&Tokens, 1)->Begin, "%d", &PendingSourceFiles);
@@ -977,10 +1120,10 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                         u32 Value;
                         sscanf(At(&Tokens, TokenIndex + 3)->Begin, "%X", &Value);
 
-                        Info.MemoryOffset = mtb_SafeConvert_u16(Value);
+                        Info.MemoryOffset = mtb::IntCast<u16>(Value);
                         sscanf(At(&Tokens, TokenIndex + 4)->Begin, "%X", &Value);
 
-                        Info.GeneratedInstruction = mtb_SafeConvert_u16(Value);
+                        Info.GeneratedInstruction = mtb::IntCast<u16>(Value);
 
                         Info.SourceLine = Str(*At(&Tokens, TokenIndex + 5));
 
@@ -1025,7 +1168,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             FrontBuffer->BitmapInfo.bmiHeader.biPlanes = 1;
             FrontBuffer->BitmapInfo.bmiHeader.biBitCount = (WORD)(FrontBuffer->BytesPerPixel * 8);
             FrontBuffer->BitmapInfo.bmiHeader.biCompression = BI_RGB;
-            FrontBuffer->Pixels = (decltype(FrontBuffer->Pixels))PushBytes(&MemStack, FrontBuffer->Width * FrontBuffer->Height * FrontBuffer->BytesPerPixel);
+            FrontBuffer->Pixels = (decltype(FrontBuffer->Pixels))PushBytes(&MemStack, (size_t)FrontBuffer->Width * FrontBuffer->Height * FrontBuffer->BytesPerPixel);
             FrontBuffer->PixelColorOff = { 16, 64, 16, 255 };
             FrontBuffer->PixelColorOn = { 8, 16, 8, 255 };
 
@@ -1038,9 +1181,8 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             //
             // Initialize the machine
             //
-            // TODO: Ensure charmap size is ok.
-            u8* CharMemory = (u8*)M->Memory + CHAR_MEMORY_OFFSET;
-            mtb_CopyBytes(mtb_ArrayByteSizeOf(GlobalCharMap), CharMemory, (u8*)GlobalCharMap);
+            mtb::tSlice<u8> CharMemory = mtb::SliceOffset(mtb::ArraySlice(M->Memory), CHAR_MEMORY_OFFSET);
+            mtb::SliceCopyBytes(CharMemory, mtb::ArraySlice(GlobalCharMap));
 
             u16 InitialProgramCounter = BaseMemoryOffset;
             M->ProgramCounter = InitialProgramCounter;
@@ -1113,7 +1255,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                         if (StartsWith(Str(TextInputBuffer), BreakCommand))
                                         {
                                             strc BreakTarget = Trim(str{ TextInputBuffer.Size - BreakCommand.Size, TextInputBuffer.Data + BreakCommand.Size });
-                                            mtb_parse_string_result_s32 ParseResult = mtb_ParseString_s32(BreakTarget.Size, BreakTarget.Data, 0);
+                                            parse_string_result_s64 ParseResult = ParseString_s64(BreakTarget.Size, BreakTarget.Data, 0);
                                             if (ParseResult.Success)
                                             {
                                                 BreakTarget.Size -= (int)ParseResult.RemainingSourceLen;
@@ -1121,7 +1263,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                                 // TODO: Toggle breakpoint here.
                                                 breakpoint Breakpoint{};
                                                 Breakpoint.FileId = 1;
-                                                Breakpoint.Line = ParseResult.Value;
+                                                Breakpoint.Line = (int32_t)ParseResult.Value;
                                                 int RemoveIndex = -1;
                                                 for (int BreakpointIndex = 0;
                                                      BreakpointIndex < Breakpoints.NumElements;
@@ -1150,7 +1292,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                                     }
                                                     else
                                                     {
-                                                        MTB_Fail("Unable to remove breakpoint that we found earlier?!");
+                                                        MTB_ASSERT(!"Unable to remove breakpoint that we found earlier?!");
                                                     }
                                                 }
                                             }
@@ -1172,7 +1314,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                                     ++BreakpointIndex)
                                                 {
                                                     breakpoint* Breakpoint = Breakpoints.Data() + BreakpointIndex;
-                                                    mtb_to_string_result ToStringResult = mtb_ToString(Breakpoint->Line, mtb_ArrayByteSizeOf(Buffer), Buffer);
+                                                    to_string_result ToStringResult = ToString(Breakpoint->Line, MTB_ARRAY_SIZE(Buffer), Buffer);
                                                     if (ToStringResult.Success)
                                                     {
                                                         Append(&DebugMessage, Sep);
@@ -1236,7 +1378,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                         char* Data = TextInputBuffer.Data;
                                         int End = TextInputBuffer.Size;
 
-                                        while (End >= 0 && mtb_IsWhitespace(Data[End - 1]))
+                                        while (End >= 0 && mtb::string::IsWhiteChar(Data[End - 1]))
                                         {
                                             --End;
                                         }
@@ -1259,7 +1401,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                                     }
                                 } break;
 
-                                default: MTB_INVALID_CODE_PATH;
+                                default: MTB_ASSERT(!"invalid code path");
                             }
                         } break;
 
@@ -1275,7 +1417,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                             }
                         } break;
 
-                        default: MTB_INVALID_CODE_PATH;
+                        default: MTB_ASSERT(!"invalid code path");
                     }
                 }
                 Clear(&Window.Events);
@@ -1418,7 +1560,7 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
                 f64 SecondsSinceBigBang = Win32DeltaSeconds(&Clock, Win32Now(), BigBang);
                 if (SecondsSinceBigBang > 0)
                 {
-                    f64 CyclesPerSecond = M->CurrentCycle / SecondsSinceBigBang;
+                    f64 CyclesPerSecond = (f64)M->CurrentCycle / SecondsSinceBigBang;
                     Win32MakeWindowTitle(&WindowTitle, FileName, CyclesPerSecond);
                     SetWindowText(Window.Handle, WindowTitle.Data);
                 }
@@ -1427,19 +1569,19 @@ WinMain(HINSTANCE ProcessHandle, HINSTANCE PreviousProcessHandle,
             }
 
             // The loop above is supposed to loop forever.
-            MTB_INVALID_CODE_PATH;
+            MTB_ASSERT(!"invalid code path");
         }
         else
         {
             // TODO: Logging?
-            MTB_Fail("Unable to open window.");
+            MTB_ASSERT(!"Unable to open window.");
             return 2;
         }
     }
     else
     {
         // TODO: Logging?
-        MTB_Fail("Unable to load ROM.");
+        MTB_ASSERT(!"Unable to load ROM.");
         return 1;
     }
 

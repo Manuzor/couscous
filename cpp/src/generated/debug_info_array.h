@@ -1,15 +1,15 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 
 #if !defined(GUARD_GENERATED_debug_info_array)
 #define GUARD_GENERATED_debug_info_array
 
 struct debug_info_array
 {
-  int NumElements;
-  int Capacity;
-  debug_info* _Data;
+    int NumElements;
+    int Capacity;
+    debug_info* _Data;
 
-  debug_info* Data() { return _Data; }
+    debug_info* Data() { return _Data; }
 };
 
 static void

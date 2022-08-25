@@ -1,18 +1,18 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 
 #if !defined(GUARD_GENERATED_cursor_array)
 #define GUARD_GENERATED_cursor_array
 
 struct cursor_array
 {
-  int NumElements;
-  int Capacity;
-  parser_cursor* _Data;
+    int NumElements;
+    int Capacity;
+    parser_cursor* _Data;
 
-enum { FixedCapacity = 8 };
-  parser_cursor _Fixed[FixedCapacity];
+    enum { FixedCapacity = 8 };
+    parser_cursor _Fixed[FixedCapacity];
 
-  parser_cursor* Data() { return _Data ? _Data : _Fixed; }
+    parser_cursor* Data() { return _Data ? _Data : _Fixed; }
 };
 
 static void

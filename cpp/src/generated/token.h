@@ -1,16 +1,16 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 #pragma once
 
 struct token
 {
-  enum
-  {
-    FullCapacity = 32,
-    Capacity = FullCapacity - 1, // We reserve one character for the null terminator.
-  };
+    enum
+    {
+        FullCapacity = 32,
+        Capacity = FullCapacity - 1, // We reserve one character for the null terminator.
+    };
 
-  int Size;
-  char Data[FullCapacity];
+    int Size;
+    char Data[FullCapacity];
 };
 
 // "Constructor"

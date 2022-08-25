@@ -1,18 +1,18 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 
 #if !defined(GUARD_GENERATED_win32_window_event_array)
 #define GUARD_GENERATED_win32_window_event_array
 
 struct win32_window_event_array
 {
-  int NumElements;
-  int Capacity;
-  win32_window_event* _Data;
+    int NumElements;
+    int Capacity;
+    win32_window_event* _Data;
 
-enum { FixedCapacity = 32 };
-  win32_window_event _Fixed[FixedCapacity];
+    enum { FixedCapacity = 32 };
+    win32_window_event _Fixed[FixedCapacity];
 
-  win32_window_event* Data() { return _Data ? _Data : _Fixed; }
+    win32_window_event* Data() { return _Data ? _Data : _Fixed; }
 };
 
 static void

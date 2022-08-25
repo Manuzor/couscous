@@ -2,7 +2,7 @@
 static bool
 operator==(machine const& A, machine const& B)
 {
-  return mtb_AreBytesEqual(sizeof(machine), &A, &B);
+  return mtb::CompareBytes(&A, &B, sizeof(machine)) == 0;
 }
 
 static bool
@@ -38,22 +38,22 @@ RunTests()
 
     A->Screen[0] = 1;
 
-    MTB_Require( *A != *B );
+    MTB_ASSERT( *A != *B );
 
     instruction Inst{ instruction_type::CLS };
     ExecuteInstruction(A, Inst);
-    MTB_Require( *A == *B );
+    MTB_ASSERT( *A == *B );
 
     Inst = INST2(LD, V, 0, CONSTANT, 42);
     ExecuteInstruction(A, Inst);
-    MTB_Require( *A != *B );
+    MTB_ASSERT( *A != *B );
     B->V[0x0] = 42;
-    MTB_Require( *A == *B );
+    MTB_ASSERT( *A == *B );
 
     Inst = INST2(LD, I,, CONSTANT, 512);
     ExecuteInstruction(A, Inst);
     B->I = 512;
-    MTB_Require( *A == *B );
+    MTB_ASSERT( *A == *B );
   }
 }
 

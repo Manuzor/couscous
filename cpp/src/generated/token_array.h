@@ -1,18 +1,18 @@
-// Generated on 2021-12-31 12:16:59
+// Generated on 2022-08-21 23:27:38
 
 #if !defined(GUARD_GENERATED_token_array)
 #define GUARD_GENERATED_token_array
 
 struct token_array
 {
-  int NumElements;
-  int Capacity;
-  token* _Data;
+    int NumElements;
+    int Capacity;
+    token* _Data;
 
-enum { FixedCapacity = 8 };
-  token _Fixed[FixedCapacity];
+    enum { FixedCapacity = 8 };
+    token _Fixed[FixedCapacity];
 
-  token* Data() { return _Data ? _Data : _Fixed; }
+    token* Data() { return _Data ? _Data : _Fixed; }
 };
 
 static void
